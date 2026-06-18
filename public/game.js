@@ -26,6 +26,7 @@ let localAnim = null;
 let debugHitbox = false;
 let dmgNumbers = [];
 let mergeSmokes = [];
+let serverLevel = 0;
 
 const swordImg = new Image();
 swordImg.src = '/images/woodensword.png';
@@ -33,11 +34,23 @@ swordImg.src = '/images/woodensword.png';
 const zombieHeadImg = new Image();
 zombieHeadImg.src = '/images/zombiehead.png';
 
+const zombieT2HeadImg = new Image();
+zombieT2HeadImg.src = '/images/T2zombiehead.png';
+
+const serverLevelImg = new Image();
+serverLevelImg.src = '/images/ServerLevel.png';
+
 const zombieLeftHandImg = new Image();
 zombieLeftHandImg.src = '/images/zombielefthand.png';
 
 const zombieRightHandImg = new Image();
 zombieRightHandImg.src = '/images/zombierighthand.png';
+
+const zombieT2LeftHandImg = new Image();
+zombieT2LeftHandImg.src = '/images/T2zombielefthand.png';
+
+const zombieT2RightHandImg = new Image();
+zombieT2RightHandImg.src = '/images/T2zombierighthand.png';
 
 const menu = document.getElementById('menu');
 const eliminated = document.getElementById('eliminated');
@@ -129,6 +142,7 @@ socket.on('state', (data) => {
   zombies = data.zombies || [];
   worldW = data.arenaWidth;
   worldH = data.arenaHeight;
+  serverLevel = data.serverLevel || 0;
   updateLeaderboard();
   updateHotbar();
 });
@@ -392,16 +406,20 @@ function getBladeSegment(p, sx, sy) {
   return { hiltX, hiltY, tipX, tipY };
 }
 
-function drawZombieHand(ctx, z, szx, szy, angle, handKey) {
+function drawZombieHand(ctx, z, szx, szy, angle, handKey, lvl) {
   const vis = window.ZOMBIE_VISUALS && window.ZOMBIE_VISUALS[handKey];
   if (!vis) return;
-  const img = handKey === 'left_hand' ? zombieLeftHandImg : zombieRightHandImg;
+  const isT2 = lvl >= 6;
+  const img = handKey === 'left_hand'
+    ? (isT2 ? zombieT2LeftHandImg : zombieLeftHandImg)
+    : (isT2 ? zombieT2RightHandImg : zombieRightHandImg);
   if (!img.complete || img.naturalWidth === 0) return;
   const cos = Math.cos(angle), sin = Math.sin(angle);
   const rx = vis.offsetX * cos - vis.offsetY * sin;
   const ry = vis.offsetX * sin + vis.offsetY * cos;
-  const sw = img.naturalWidth * vis.scale;
-  const sh = img.naturalHeight * vis.scale;
+  const handScale = isT2 ? 1.1 : 1.0;
+  const sw = img.naturalWidth * vis.scale * handScale;
+  const sh = img.naturalHeight * vis.scale * handScale;
   ctx.save();
   ctx.translate(szx + rx, szy + ry);
   ctx.rotate(angle + (vis.rotation || 0));
@@ -510,19 +528,21 @@ function render() {
     // facing angle from server (computed from target direction)
     const zombieAngle = z.headingAngle || 0;
 
-    if (zombieHeadImg.complete && zombieHeadImg.naturalWidth > 0) {
+    const headImg = (z.lvl >= 6 && zombieT2HeadImg.complete && zombieT2HeadImg.naturalWidth > 0) ? zombieT2HeadImg : zombieHeadImg;
+    if (headImg.complete && headImg.naturalWidth > 0) {
       ctx.save();
-      const sz = 40 / Math.max(zombieHeadImg.naturalWidth, zombieHeadImg.naturalHeight);
-      const w = zombieHeadImg.naturalWidth * sz;
-      const h = zombieHeadImg.naturalHeight * sz;
+      const headScale = (z.lvl >= 6 ? 1.1 : 1.0);
+      const sz = (40 * headScale) / Math.max(headImg.naturalWidth, headImg.naturalHeight);
+      const w = headImg.naturalWidth * sz;
+      const h = headImg.naturalHeight * sz;
       ctx.translate(szx, szy);
       ctx.rotate(zombieAngle - Math.PI / 2);
-      ctx.drawImage(zombieHeadImg, -w / 2, -h / 2, w, h);
+      ctx.drawImage(headImg, -w / 2, -h / 2, w, h);
       ctx.restore();
     }
 
-    drawZombieHand(ctx, z, szx, szy, zombieAngle, 'left_hand');
-    drawZombieHand(ctx, z, szx, szy, zombieAngle, 'right_hand');
+    drawZombieHand(ctx, z, szx, szy, zombieAngle, 'left_hand', z.lvl);
+    drawZombieHand(ctx, z, szx, szy, zombieAngle, 'right_hand', z.lvl);
 
     ctx.fillStyle = '#ff6666';
     ctx.font = '11px "Segoe UI", system-ui, sans-serif';
@@ -595,6 +615,49 @@ function render() {
     ctx.font = '12px "Segoe UI", system-ui, sans-serif';
     ctx.fillText(`X: ${Math.round(me.x)}  Y: ${Math.round(me.y)}`, VW - 10, VH - 10);
     ctx.textBaseline = 'alphabetic';
+  }
+
+  // server level
+  if (serverLevelImg.complete && serverLevelImg.naturalWidth > 0) {
+    const ui = window.SCREEN_UI && window.SCREEN_UI.serverLevel;
+    if (ui) {
+      const sw = serverLevelImg.naturalWidth * ui.scale;
+      const sh = serverLevelImg.naturalHeight * ui.scale;
+      ctx.save();
+      ctx.translate(ui.x, ui.y);
+      ctx.drawImage(serverLevelImg, -sw / 2, -sh / 2, sw, sh);
+      ctx.restore();
+      // draw level number with game-style text
+      const textX = ui.x;
+      const textY = ui.y + (ui.ty || 0);
+      const text = String(serverLevel);
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.font = '32px "Lilita One", "Segoe UI", sans-serif';
+      const grad = ctx.createLinearGradient(textX, textY - 14, textX, textY + 14);
+      grad.addColorStop(0, '#ffffff');
+      grad.addColorStop(1, '#b0b0b0');
+      ctx.lineJoin = 'round';
+      ctx.miterLimit = 2;
+      // shadow
+      ctx.save();
+      ctx.translate(2, 3);
+      ctx.fillStyle = 'rgba(0,0,0,0.4)';
+      ctx.fillText(text, textX, textY);
+      ctx.restore();
+      // thick black outline
+      ctx.strokeStyle = '#000';
+      ctx.lineWidth = 10;
+      ctx.strokeText(text, textX, textY);
+      // inner white highlight (thinner, offset up-left)
+      ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+      ctx.lineWidth = 2;
+      ctx.strokeText(text, textX - 1, textY - 1);
+      // gradient fill on top
+      ctx.fillStyle = grad;
+      ctx.fillText(text, textX, textY);
+      ctx.textBaseline = 'alphabetic';
+    }
   }
 
   if (hitFlash > 0) {

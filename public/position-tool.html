@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Zombie Hand Positioner</title>
+<title>Positioner</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body {
@@ -43,32 +43,45 @@ button {
 button:hover { background: #45b8b0; }
 button:active { background: #3ca39c; }
 </style>
+<link href="https://fonts.googleapis.com/css2?family=Lilita+One&display=swap" rel="stylesheet">
 </head>
 <body>
 <div class="container">
-  <canvas id="c" width="400" height="400"></canvas>
+  <canvas id="c" width="800" height="600"></canvas>
   <div class="controls">
-    <h2>Zombie Hand Positioner</h2>
-    <p class="note">The zombie faces right (→). Drag each hand to position it around the zombie body.</p>
-
     <div class="slot-row">
-      <button class="slot-btn active" data-slot="left_hand">Left Hand</button>
-      <button class="slot-btn" data-slot="right_hand">Right Hand</button>
+      <button class="slot-btn active" data-mode="hands">Zombie Hands</button>
+      <button class="slot-btn" data-mode="screen">Server Level</button>
+    </div>
+    <h2 id="modeTitle">Zombie Hand Positioner</h2>
+    <p class="note" id="modeNote">The zombie faces right (→). Drag each hand to position it around the zombie body.</p>
+
+    <div id="handsUI">
+      <div class="slot-row">
+        <button class="slot-btn active" data-slot="left_hand">Left Hand</button>
+        <button class="slot-btn" data-slot="right_hand">Right Hand</button>
+      </div>
+      <button id="symBtn" style="width:100%;padding:8px 12px;border-radius:6px;border:1px solid #4ECDC4;background:transparent;color:#4ECDC4;font-size:0.85rem;cursor:pointer;font-weight:600;transition:all 0.15s;">Mirror Other Hand</button>
     </div>
 
-    <button id="symBtn" style="width:100%;padding:8px 12px;border-radius:6px;border:1px solid #4ECDC4;background:transparent;color:#4ECDC4;font-size:0.85rem;cursor:pointer;font-weight:600;transition:all 0.15s;">Mirror Other Hand</button>
-
-    <div class="ctrl-group">
+    <div class="ctrl-group" id="scaleGroup">
       <label>Scale: <span class="val" id="scaleVal">0.05</span></label>
       <input type="range" id="scale" min="0.005" max="0.3" step="0.001" value="0.05">
     </div>
 
-    <div class="ctrl-group">
+    <div class="ctrl-group" id="rotGroup">
       <label>Rotation: <span class="val" id="rotVal">0.00</span> rad</label>
       <input type="range" id="rotation" min="-3.14" max="3.14" step="0.01" value="0">
     </div>
 
-    <div class="output" id="output">Position a hand to begin</div>
+    <div id="textOffsetGroup" style="display:none">
+      <div class="ctrl-group">
+        <label>Text Y offset: <span class="val" id="tyVal">0</span></label>
+        <input type="range" id="tySlider" min="-100" max="100" step="1" value="0">
+      </div>
+    </div>
+
+    <div class="output" id="output">Select a mode to begin</div>
 
     <button id="copyBtn">Copy Config</button>
   </div>
@@ -77,39 +90,50 @@ button:active { background: #3ca39c; }
 <script>
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const W = 400, H = 400;
-const CX = W / 2, CY = H / 2;
+let W = 800, H = 600;
+let CX = W / 2, CY = H / 2;
+let mode = 'hands';
 
+// hands state
 const hands = {
-  left_hand:  { offsetX: -15, offsetY: 10, scale: 0.05, rotation: 0 },
-  right_hand: { offsetX: 15,  offsetY: 10, scale: 0.05, rotation: 0 }
+  left_hand:  { offsetX: 16, offsetY: -20, scale: 0.05, rotation: -1.55 },
+  right_hand: { offsetX: 16, offsetY: 20, scale: 0.05, rotation: -1.55 }
 };
 let activeHand = 'left_hand';
+
+// screen ui state
+const screenUI = { x: 53, y: 56, scale: 0.4, ty: 0 };
 
 let dragging = false;
 let dragOffX = 0, dragOffY = 0;
 
-const headImg = new Image();
-headImg.src = '/images/zombiehead.png';
-const leftImg = new Image();
-leftImg.src = '/images/zombielefthand.png';
-const rightImg = new Image();
-rightImg.src = '/images/zombierighthand.png';
+const headImg = new Image(); headImg.src = '/images/zombiehead.png';
+const leftImg = new Image(); leftImg.src = '/images/zombielefthand.png';
+const rightImg = new Image(); rightImg.src = '/images/zombierighthand.png';
+const serverLevelImg = new Image(); serverLevelImg.src = '/images/ServerLevel.png';
+
 let imagesLoaded = 0;
 function onImgLoad() {
   imagesLoaded++;
-  if (imagesLoaded >= 3) draw();
+  if (imagesLoaded >= 4) document.fonts.load('32px "Lilita One"').then(() => draw());
 }
 headImg.onload = onImgLoad;
 leftImg.onload = onImgLoad;
 rightImg.onload = onImgLoad;
+serverLevelImg.onload = onImgLoad;
 
 const scaleSlider = document.getElementById('scale');
 const rotSlider = document.getElementById('rotation');
 const scaleVal = document.getElementById('scaleVal');
 const rotVal = document.getElementById('rotVal');
+const tySlider = document.getElementById('tySlider');
+const tyVal = document.getElementById('tyVal');
+const textOffsetGroup = document.getElementById('textOffsetGroup');
 const output = document.getElementById('output');
 const copyBtn = document.getElementById('copyBtn');
+const modeTitle = document.getElementById('modeTitle');
+const modeNote = document.getElementById('modeNote');
+const handsUI = document.getElementById('handsUI');
 
 document.getElementById('symBtn').addEventListener('click', () => {
   const otherKey = activeHand === 'left_hand' ? 'right_hand' : 'left_hand';
@@ -124,12 +148,11 @@ document.getElementById('symBtn').addEventListener('click', () => {
   draw();
 });
 
-document.querySelectorAll('.slot-btn').forEach(btn => {
+document.querySelectorAll('[data-slot]').forEach(btn => {
   btn.addEventListener('click', () => {
-    document.querySelectorAll('.slot-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('[data-slot]').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     activeHand = btn.dataset.slot;
-
     const nh = hands[activeHand];
     scaleSlider.value = nh.scale;
     rotSlider.value = nh.rotation;
@@ -137,55 +160,87 @@ document.querySelectorAll('.slot-btn').forEach(btn => {
   });
 });
 
+document.querySelectorAll('[data-mode]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('[data-mode]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    mode = btn.dataset.mode;
+
+    if (mode === 'screen') {
+      W = 800; H = 600; CX = W / 2; CY = H / 2;
+      canvas.width = W; canvas.height = H;
+      modeTitle.textContent = 'Server Level Positioner';
+      modeNote.textContent = 'Drag the icon. Use X/Y sliders to position the text relative to the icon center.';
+      handsUI.style.display = 'none';
+      document.getElementById('rotGroup').style.display = 'none';
+      textOffsetGroup.style.display = '';
+      scaleSlider.min = '0.1'; scaleSlider.max = '3'; scaleSlider.step = '0.1';
+      scaleSlider.value = screenUI.scale;
+      tySlider.value = screenUI.ty;
+    } else {
+      W = 400; H = 400; CX = W / 2; CY = H / 2;
+      canvas.width = W; canvas.height = H;
+      modeTitle.textContent = 'Zombie Hand Positioner';
+      modeNote.textContent = 'The zombie faces right (→). Drag each hand to position it around the zombie body.';
+      handsUI.style.display = '';
+      document.getElementById('rotGroup').style.display = '';
+      scaleSlider.min = '0.005'; scaleSlider.max = '0.3'; scaleSlider.step = '0.001';
+      const ah = hands[activeHand];
+      scaleSlider.value = ah.scale;
+      rotSlider.value = ah.rotation;
+    }
+    draw();
+  });
+});
+
 function draw() {
   ctx.clearRect(0, 0, W, H);
 
-  // grid
+  if (mode === 'hands') {
+    drawHandsMode();
+  } else {
+    drawScreenMode();
+  }
+}
+
+function drawHandsMode() {
+  const CX = W / 2, CY = H / 2;
+
   ctx.strokeStyle = 'rgba(0,0,0,0.04)'; ctx.lineWidth = 1;
   for (let x = 0; x <= W; x += 40) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
   for (let y = 0; y <= H; y += 40) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
 
-  // direction arrow
   ctx.strokeStyle = 'rgba(0,0,0,0.12)'; ctx.lineWidth = 1.5;
   ctx.setLineDash([6, 6]);
   ctx.beginPath(); ctx.moveTo(CX + 10, CY); ctx.lineTo(CX + 80, CY); ctx.stroke();
   ctx.setLineDash([]);
   ctx.beginPath(); ctx.moveTo(CX + 80, CY); ctx.lineTo(CX + 73, CY - 4); ctx.moveTo(CX + 80, CY); ctx.lineTo(CX + 73, CY + 4); ctx.stroke();
 
-  // crosshairs
   ctx.strokeStyle = 'rgba(0,0,0,0.08)'; ctx.lineWidth = 1;
   ctx.beginPath(); ctx.moveTo(CX - 28, CY); ctx.lineTo(CX + 28, CY); ctx.moveTo(CX, CY - 28); ctx.lineTo(CX, CY + 28); ctx.stroke();
 
-  // zombie body circle (faint)
   ctx.beginPath(); ctx.arc(CX, CY, 20, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(200,60,60,0.15)';
-  ctx.fill();
-  ctx.strokeStyle = 'rgba(200,60,60,0.3)';
-  ctx.lineWidth = 1.5;
-  ctx.stroke();
+  ctx.fillStyle = 'rgba(200,60,60,0.15)'; ctx.fill();
+  ctx.strokeStyle = 'rgba(200,60,60,0.3)'; ctx.lineWidth = 1.5; ctx.stroke();
 
-    // zombie head — rotate to face right (matching the direction arrow)
-    if (headImg.complete && headImg.naturalWidth > 0) {
-      const hsz = 40 / Math.max(headImg.naturalWidth, headImg.naturalHeight);
-      const hw = headImg.naturalWidth * hsz;
-      const hh = headImg.naturalHeight * hsz;
-      ctx.save();
-      ctx.translate(CX, CY);
-      ctx.rotate(-Math.PI / 2);
-      ctx.drawImage(headImg, -hw / 2, -hh / 2, hw, hh);
-      ctx.restore();
-    }
+  if (headImg.complete && headImg.naturalWidth > 0) {
+    const hsz = 40 / Math.max(headImg.naturalWidth, headImg.naturalHeight);
+    const hw = headImg.naturalWidth * hsz;
+    const hh = headImg.naturalHeight * hsz;
+    ctx.save();
+    ctx.translate(CX, CY);
+    ctx.rotate(-Math.PI / 2);
+    ctx.drawImage(headImg, -hw / 2, -hh / 2, hw, hh);
+    ctx.restore();
+  }
 
-  // draw BOTH hands (the active one highlighted, inactive dimmed)
   for (const key of ['left_hand', 'right_hand']) {
     const h = hands[key];
     const img = key === 'left_hand' ? leftImg : rightImg;
     const isActive = key === activeHand;
-
     if (img.complete && img.naturalWidth > 0) {
       const sw = img.naturalWidth * h.scale;
       const sh = img.naturalHeight * h.scale;
-
       ctx.save();
       ctx.globalAlpha = isActive ? 1 : 0.25;
       ctx.translate(CX + h.offsetX, CY + h.offsetY);
@@ -193,34 +248,90 @@ function draw() {
       ctx.drawImage(img, -sw / 2, -sh / 2, sw, sh);
       ctx.restore();
     }
-
-    // label
     ctx.fillStyle = isActive ? 'rgba(78,205,196,0.8)' : 'rgba(255,255,255,0.2)';
     ctx.font = '10px monospace';
     ctx.textAlign = 'center';
     ctx.fillText(key.replace('_', ' '), CX + h.offsetX, CY + h.offsetY + 30);
   }
 
-  // update readouts from active hand
   const ah = hands[activeHand];
   scaleVal.textContent = ah.scale.toFixed(3);
   rotVal.textContent = ah.rotation.toFixed(2);
 
-  // output
   output.textContent =
     `// Paste into shared/data.js → ZOMBIE_VISUALS\n` +
-    `left_hand: {\n` +
-    `  offsetX: ${hands.left_hand.offsetX},\n` +
-    `  offsetY: ${hands.left_hand.offsetY},\n` +
-    `  scale: ${hands.left_hand.scale.toFixed(3)},\n` +
-    `  rotation: ${hands.left_hand.rotation.toFixed(2)}\n` +
-    `},\n` +
-    `right_hand: {\n` +
-    `  offsetX: ${hands.right_hand.offsetX},\n` +
-    `  offsetY: ${hands.right_hand.offsetY},\n` +
-    `  scale: ${hands.right_hand.scale.toFixed(3)},\n` +
-    `  rotation: ${hands.right_hand.rotation.toFixed(2)}\n` +
-    `}`;
+    `left_hand: {\n  offsetX: ${hands.left_hand.offsetX},\n  offsetY: ${hands.left_hand.offsetY},\n  scale: ${hands.left_hand.scale.toFixed(3)},\n  rotation: ${hands.left_hand.rotation.toFixed(2)}\n},\n` +
+    `right_hand: {\n  offsetX: ${hands.right_hand.offsetX},\n  offsetY: ${hands.right_hand.offsetY},\n  scale: ${hands.right_hand.scale.toFixed(3)},\n  rotation: ${hands.right_hand.rotation.toFixed(2)}\n}`;
+}
+
+function drawScreenMode() {
+  // grid
+  ctx.strokeStyle = 'rgba(0,0,0,0.04)'; ctx.lineWidth = 1;
+  for (let x = 0; x <= W; x += 80) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
+  for (let y = 0; y <= H; y += 80) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+
+  // viewport border
+  ctx.strokeStyle = 'rgba(0,0,0,0.15)'; ctx.lineWidth = 2;
+  ctx.strokeRect(0, 0, W, H);
+
+  // labels
+  ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.font = '11px monospace'; ctx.textAlign = 'left';
+  ctx.fillText('800×600 viewport', 10, 20);
+
+  // server level image
+  const ui = screenUI;
+  if (serverLevelImg.complete && serverLevelImg.naturalWidth > 0) {
+    const sw = serverLevelImg.naturalWidth * ui.scale;
+    const sh = serverLevelImg.naturalHeight * ui.scale;
+    ctx.save();
+    ctx.translate(ui.x, ui.y);
+    ctx.drawImage(serverLevelImg, -sw / 2, -sh / 2, sw, sh);
+    ctx.restore();
+
+    // drag handle indicator
+    ctx.strokeStyle = 'rgba(78,205,196,0.4)'; ctx.lineWidth = 1; ctx.setLineDash([4, 4]);
+    ctx.strokeRect(ui.x - sw / 2, ui.y - sh / 2, sw, sh);
+    ctx.setLineDash([]);
+  }
+
+  // server level text preview (centered on image x, y offset only)
+  const tx = ui.x, ty = ui.y + ui.ty;
+  ctx.font = '32px "Lilita One", "Segoe UI", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.lineJoin = 'round';
+  ctx.miterLimit = 2;
+  // shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.4)';
+  ctx.fillText('12', tx + 2, ty + 3);
+  // thick black outline
+  ctx.strokeStyle = '#000';
+  ctx.lineWidth = 10;
+  ctx.strokeText('12', tx, ty);
+  // thin white highlight
+  ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+  ctx.lineWidth = 2;
+  ctx.strokeText('12', tx - 1, ty - 1);
+  // gradient fill
+  const grad = ctx.createLinearGradient(tx, ty - 16, tx, ty + 16);
+  grad.addColorStop(0, '#ffffff');
+  grad.addColorStop(1, '#b0b0b0');
+  ctx.fillStyle = grad;
+  ctx.fillText('12', tx, ty);
+  // vertical guide line
+  ctx.strokeStyle = 'rgba(78,205,196,0.2)';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([4, 4]);
+  ctx.beginPath(); ctx.moveTo(ui.x, 0); ctx.lineTo(ui.x, H); ctx.stroke();
+  ctx.setLineDash([]);
+
+  scaleVal.textContent = ui.scale.toFixed(1);
+  rotVal.textContent = '—';
+  tyVal.textContent = ui.ty;
+
+  output.textContent =
+    `// Paste into shared/data.js → SCREEN_UI\n` +
+    `serverLevel: {\n  x: ${ui.x},\n  y: ${ui.y},\n  scale: ${ui.scale.toFixed(1)},\n  ty: ${ui.ty}\n}`;
 }
 
 function getPos(e) {
@@ -230,33 +341,59 @@ function getPos(e) {
 
 canvas.addEventListener('mousedown', (e) => {
   const p = getPos(e);
-  const h = hands[activeHand];
-  const img = activeHand === 'left_hand' ? leftImg : rightImg;
-  const size = Math.max(img.naturalWidth, img.naturalHeight) * h.scale;
-  const dx = p.x - (CX + h.offsetX);
-  const dy = p.y - (CY + h.offsetY);
-  if (Math.sqrt(dx * dx + dy * dy) < size / 2 + 20) {
-    dragging = true;
-    dragOffX = dx;
-    dragOffY = dy;
-    canvas.style.cursor = 'grabbing';
-  }
-});
-
-canvas.addEventListener('mousemove', (e) => {
-  const p = getPos(e);
-  if (dragging) {
-    const h = hands[activeHand];
-    h.offsetX = Math.round(p.x - CX - dragOffX);
-    h.offsetY = Math.round(p.y - CY - dragOffY);
-    draw();
+  if (mode === 'screen') {
+    const ui = screenUI;
+    const sz = serverLevelImg.complete ? Math.max(serverLevelImg.naturalWidth, serverLevelImg.naturalHeight) * ui.scale : 60;
+    const dx = p.x - ui.x;
+    const dy = p.y - ui.y;
+    if (Math.sqrt(dx * dx + dy * dy) < sz / 2 + 15) {
+      dragging = true;
+      dragOffX = dx;
+      dragOffY = dy;
+      canvas.style.cursor = 'grabbing';
+    }
   } else {
     const h = hands[activeHand];
     const img = activeHand === 'left_hand' ? leftImg : rightImg;
     const size = Math.max(img.naturalWidth, img.naturalHeight) * h.scale;
     const dx = p.x - (CX + h.offsetX);
     const dy = p.y - (CY + h.offsetY);
-    canvas.style.cursor = Math.sqrt(dx * dx + dy * dy) < size / 2 + 20 ? 'grab' : 'default';
+    if (Math.sqrt(dx * dx + dy * dy) < size / 2 + 20) {
+      dragging = true;
+      dragOffX = dx;
+      dragOffY = dy;
+      canvas.style.cursor = 'grabbing';
+    }
+  }
+});
+
+canvas.addEventListener('mousemove', (e) => {
+  const p = getPos(e);
+  if (dragging) {
+    if (mode === 'screen') {
+      screenUI.x = Math.round(p.x - dragOffX);
+      screenUI.y = Math.round(p.y - dragOffY);
+    } else {
+      const h = hands[activeHand];
+      h.offsetX = Math.round(p.x - W / 2 - dragOffX);
+      h.offsetY = Math.round(p.y - H / 2 - dragOffY);
+    }
+    draw();
+  } else {
+    if (mode === 'screen') {
+      const ui = screenUI;
+      const sz = serverLevelImg.complete ? Math.max(serverLevelImg.naturalWidth, serverLevelImg.naturalHeight) * ui.scale : 60;
+      const dx = p.x - ui.x;
+      const dy = p.y - ui.y;
+      canvas.style.cursor = Math.sqrt(dx * dx + dy * dy) < sz / 2 + 15 ? 'grab' : 'default';
+    } else {
+      const h = hands[activeHand];
+      const img = activeHand === 'left_hand' ? leftImg : rightImg;
+      const size = Math.max(img.naturalWidth, img.naturalHeight) * h.scale;
+      const dx = p.x - (W / 2 + h.offsetX);
+      const dy = p.y - (H / 2 + h.offsetY);
+      canvas.style.cursor = Math.sqrt(dx * dx + dy * dy) < size / 2 + 20 ? 'grab' : 'default';
+    }
   }
 });
 
@@ -264,16 +401,29 @@ canvas.addEventListener('mouseup', () => { dragging = false; canvas.style.cursor
 canvas.addEventListener('mouseleave', () => { dragging = false; canvas.style.cursor = 'default'; });
 
 scaleSlider.addEventListener('input', () => {
-  hands[activeHand].scale = parseFloat(scaleSlider.value);
+  if (mode === 'screen') {
+    screenUI.scale = parseFloat(scaleSlider.value);
+  } else {
+    hands[activeHand].scale = parseFloat(scaleSlider.value);
+  }
   draw();
 });
 rotSlider.addEventListener('input', () => {
-  hands[activeHand].rotation = parseFloat(rotSlider.value);
+  if (mode === 'hands') hands[activeHand].rotation = parseFloat(rotSlider.value);
+  draw();
+});
+tySlider.addEventListener('input', () => {
+  if (mode === 'screen') { screenUI.ty = parseInt(tySlider.value); tyVal.textContent = screenUI.ty; }
   draw();
 });
 
 copyBtn.addEventListener('click', () => {
-  const text = `// ZOMBIE_VISUALS\nleft_hand: {\n  offsetX: ${hands.left_hand.offsetX},\n  offsetY: ${hands.left_hand.offsetY},\n  scale: ${hands.left_hand.scale.toFixed(3)},\n  rotation: ${hands.left_hand.rotation.toFixed(2)}\n},\nright_hand: {\n  offsetX: ${hands.right_hand.offsetX},\n  offsetY: ${hands.right_hand.offsetY},\n  scale: ${hands.right_hand.scale.toFixed(3)},\n  rotation: ${hands.right_hand.rotation.toFixed(2)}\n}`;
+  let text;
+  if (mode === 'screen') {
+    text = `// SCREEN_UI\nserverLevel: {\n  x: ${screenUI.x},\n  y: ${screenUI.y},\n  scale: ${screenUI.scale.toFixed(1)},\n  ty: ${screenUI.ty}\n}`;
+  } else {
+    text = `// ZOMBIE_VISUALS\nleft_hand: {\n  offsetX: ${hands.left_hand.offsetX},\n  offsetY: ${hands.left_hand.offsetY},\n  scale: ${hands.left_hand.scale.toFixed(3)},\n  rotation: ${hands.left_hand.rotation.toFixed(2)}\n},\nright_hand: {\n  offsetX: ${hands.right_hand.offsetX},\n  offsetY: ${hands.right_hand.offsetY},\n  scale: ${hands.right_hand.scale.toFixed(3)},\n  rotation: ${hands.right_hand.rotation.toFixed(2)}\n}`;
+  }
   navigator.clipboard.writeText(text);
   copyBtn.textContent = 'Copied!';
   setTimeout(() => { copyBtn.textContent = 'Copy Config'; }, 2000);

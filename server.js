@@ -118,7 +118,8 @@ function addPlayer(id, name) {
     attackHitIds: [],
     attackLockedAngle: 0,
     attackStartTime: 0,
-    prevCf: -1
+    prevCf: -1,
+    lvl: 1
   };
   recalcStats(players[id]);
 }
@@ -138,6 +139,7 @@ function respawnPlayer(id) {
   p.attackAnim = null;
   p.attackHitIds = [];
   p.prevCf = -1;
+  p.lvl = 1;
   io.to(id).emit('respawned');
 }
 
@@ -312,6 +314,8 @@ function gameTick() {
 
     p.x += p.velX;
     p.y += p.velY;
+    p.x = Math.max(PLAYER_RADIUS, Math.min(WORLD_W - PLAYER_RADIUS, p.x));
+    p.y = Math.max(PLAYER_RADIUS, Math.min(WORLD_H - PLAYER_RADIUS, p.y));
   }
 
   // zombie AI: move toward target (player, stray, or called)
@@ -511,7 +515,8 @@ function gameTick() {
       attackStartTime: p.attackStartTime,
       attackLockedAngle: p.attackLockedAngle,
       currentItem: p.currentItem,
-      inventory: p.inventory
+      inventory: p.inventory,
+      lvl: p.lvl || 1
     })),
     zombies: zombies.map(z => ({
       id: z.id,
@@ -525,6 +530,7 @@ function gameTick() {
       strayCalled: !!z.strayCalled,
       lvl: z.lvl || 1
     })),
+    serverLevel: Object.values(players).reduce((sum, p) => sum + (p.lvl || 1), 0),
     arenaWidth: WORLD_W,
     arenaHeight: WORLD_H
   };

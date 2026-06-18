@@ -61,8 +61,12 @@
     }
   };
 
+  const SCREEN_UI = {
+    serverLevel: { x: 53, y: 56, scale: 0.4, ty: -6 }
+  };
+
   if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { BASE_STATS, ITEMS, ITEM_VISUALS, ANIMATIONS, SWORD_IMG_SIZE, BLADE_TIP_X, BLADE_TIP_Y, BLADE_HILT_X, BLADE_HILT_Y, ZOMBIE_VISUALS };
+    module.exports = { BASE_STATS, ITEMS, ITEM_VISUALS, ANIMATIONS, SWORD_IMG_SIZE, BLADE_TIP_X, BLADE_TIP_Y, BLADE_HILT_X, BLADE_HILT_Y, ZOMBIE_VISUALS, SCREEN_UI };
   } else {
     window.BASE_STATS = BASE_STATS;
     window.ITEMS = ITEMS;
@@ -74,5 +78,6 @@
     window.BLADE_HILT_X = BLADE_HILT_X;
     window.BLADE_HILT_Y = BLADE_HILT_Y;
     window.ZOMBIE_VISUALS = ZOMBIE_VISUALS;
+    window.SCREEN_UI = SCREEN_UI;
   }
 })();
