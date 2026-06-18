@@ -298,6 +298,8 @@ function checkSwordHit(p) {
   console.log(`  closest=${closestTarget} dist=${closestDist.toFixed(1)}`);
 }
 
+let zombieAIStep = 0;
+
 function gameTick() {
   const ids = Object.keys(players);
   if (ids.length === 0) return;
@@ -325,13 +327,16 @@ function gameTick() {
     p.y = Math.max(PLAYER_RADIUS, Math.min(WORLD_H - PLAYER_RADIUS, p.y));
   }
 
-  // zombie AI: move toward target (player, stray, or called)
-  for (const z of zombies) {
+  // staggered zombie target search (groups of 20, each group searches every 5th tick)
+  const AI_GROUP_SIZE = 20;
+  const searchStart = (zombieAIStep % 5) * AI_GROUP_SIZE;
+  const searchEnd = Math.min(searchStart + AI_GROUP_SIZE, zombies.length);
+  for (let i = searchStart; i < searchEnd; i++) {
+    const z = zombies[i];
     if (!z.alive) continue;
     let target = null;
 
     if (z.isStray) {
-      // find nearest OTHER alive zombie (any)
       let closestD2 = Infinity;
       for (const other of zombies) {
         if (other.id === z.id || !other.alive) continue;
@@ -340,7 +345,6 @@ function gameTick() {
         if (d2 < closestD2) { closestD2 = d2; target = other; }
       }
     } else if (z.strayCalled) {
-      // find nearest stray zombie
       let closestD2 = Infinity;
       for (const other of zombies) {
         if (other.id === z.id || !other.alive || !other.isStray) continue;
@@ -350,7 +354,6 @@ function gameTick() {
       }
     }
 
-    // if no stray/zombie target found, fall back to nearest player
     if (!target) {
       let closestD2 = Infinity;
       for (const id in players) {
@@ -363,25 +366,39 @@ function gameTick() {
     }
 
     if (target) {
-      const dx = target.x - z.x, dy = target.y - z.y;
-      const dist = Math.sqrt(dx * dx + dy * dy) || 1;
       z.headingtoward = target.name || target.id || '';
-      z.headingAngle = Math.atan2(dy, dx);
-      const mx = (dx / dist) * z.speed, my = (dy / dist) * z.speed;
-      z.x += mx;
-      z.y += my;
-      z.x = Math.max(z.radius, Math.min(WORLD_W - z.radius, z.x));
-      z.y = Math.max(z.radius, Math.min(WORLD_H - z.radius, z.y));
-
-      // mark zombie target as called
+      z.headingAngle = Math.atan2(target.y - z.y, target.x - z.x);
       if (z.isStray && target.isStray !== undefined) target.strayCalled = true;
+    }
+  }
+  zombieAIStep++;
 
-      // contact damage against players
-      if (target.name !== undefined && dist < z.radius + target.radius && target.alive) {
-        target.health -= ZOMBIE_DAMAGE;
-        if (target.health <= 0 && target.alive) {
-          target.alive = false;
-          io.to(target.id).emit('eliminated', { kills: target.kills });
+  // movement + contact damage for ALL zombies every tick
+  for (const z of zombies) {
+    if (!z.alive || z.headingAngle === undefined) continue;
+    const mx = Math.cos(z.headingAngle) * z.speed;
+    const my = Math.sin(z.headingAngle) * z.speed;
+    z.x += mx;
+    z.y += my;
+    z.x = Math.max(z.radius, Math.min(WORLD_W - z.radius, z.x));
+    z.y = Math.max(z.radius, Math.min(WORLD_H - z.radius, z.y));
+
+    // contact damage against nearest player
+    let closestP = null, closestPD2 = Infinity;
+    for (const id in players) {
+      const p = players[id];
+      if (!p.alive) continue;
+      const dx = p.x - z.x, dy = p.y - z.y;
+      const d2 = dx * dx + dy * dy;
+      if (d2 < closestPD2) { closestPD2 = d2; closestP = p; }
+    }
+    if (closestP) {
+      const dist = Math.sqrt(closestPD2);
+      if (dist < z.radius + closestP.radius && closestP.alive) {
+        closestP.health -= ZOMBIE_DAMAGE;
+        if (closestP.health <= 0 && closestP.alive) {
+          closestP.alive = false;
+          io.to(closestP.id).emit('eliminated', { kills: closestP.kills });
         }
       }
     }
