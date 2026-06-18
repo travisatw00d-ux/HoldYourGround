@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Zombie Hand Positioner</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: #0a0a0f; color: #eee;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  display: flex; justify-content: center; align-items: center;
+  min-height: 100vh;
+}
+.container { display: flex; gap: 32px; align-items: flex-start; padding: 20px; }
+canvas { border: 1px solid #333; border-radius: 8px; cursor: grab; background: #fff; }
+.controls { display: flex; flex-direction: column; gap: 14px; width: 300px; }
+.controls h2 { font-size: 1.2rem; font-weight: 600; }
+.note { font-size: 0.75rem; color: #666; line-height: 1.4; }
+.slot-row { display: flex; gap: 8px; }
+.slot-btn {
+  flex: 1; padding: 8px 12px; border-radius: 6px; border: 1px solid #333;
+  background: transparent; color: #999; font-size: 0.85rem; cursor: pointer; font-weight: 600;
+  transition: all 0.15s;
+}
+.slot-btn.active { border-color: #4ECDC4; color: #4ECDC4; background: rgba(78,205,196,0.1); }
+.slot-btn:hover { border-color: #45b8b0; color: #45b8b0; }
+.ctrl-group { display: flex; flex-direction: column; gap: 4px; }
+.ctrl-group label { font-size: 0.8rem; color: #999; }
+.ctrl-group input[type="range"] { width: 100%; accent-color: #4ECDC4; }
+.val { color: #4ECDC4; font-family: monospace; font-size: 0.9rem; }
+.output {
+  background: #0d0d14; border: 1px solid #333; border-radius: 6px;
+  padding: 12px; font-family: monospace; font-size: 0.8rem; line-height: 1.5;
+  white-space: pre;
+}
+.output .num { color: #4ECDC4; }
+button {
+  background: #4ECDC4; border: none; border-radius: 6px; padding: 10px 20px;
+  color: #0a0a0f; font-size: 0.9rem; font-weight: 600; cursor: pointer;
+  transition: background 0.15s;
+}
+button:hover { background: #45b8b0; }
+button:active { background: #3ca39c; }
+</style>
+</head>
+<body>
+<div class="container">
+  <canvas id="c" width="400" height="400"></canvas>
+  <div class="controls">
+    <h2>Zombie Hand Positioner</h2>
+    <p class="note">The zombie faces right (→). Drag each hand to position it around the zombie body.</p>
+
+    <div class="slot-row">
+      <button class="slot-btn active" data-slot="left_hand">Left Hand</button>
+      <button class="slot-btn" data-slot="right_hand">Right Hand</button>
+    </div>
+
+    <button id="symBtn" style="width:100%;padding:8px 12px;border-radius:6px;border:1px solid #4ECDC4;background:transparent;color:#4ECDC4;font-size:0.85rem;cursor:pointer;font-weight:600;transition:all 0.15s;">Mirror Other Hand</button>
+
+    <div class="ctrl-group">
+      <label>Scale: <span class="val" id="scaleVal">0.05</span></label>
+      <input type="range" id="scale" min="0.005" max="0.3" step="0.001" value="0.05">
+    </div>
+
+    <div class="ctrl-group">
+      <label>Rotation: <span class="val" id="rotVal">0.00</span> rad</label>
+      <input type="range" id="rotation" min="-3.14" max="3.14" step="0.01" value="0">
+    </div>
+
+    <div class="output" id="output">Position a hand to begin</div>
+
+    <button id="copyBtn">Copy Config</button>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const W = 400, H = 400;
+const CX = W / 2, CY = H / 2;
+
+const hands = {
+  left_hand:  { offsetX: -15, offsetY: 10, scale: 0.05, rotation: 0 },
+  right_hand: { offsetX: 15,  offsetY: 10, scale: 0.05, rotation: 0 }
+};
+let activeHand = 'left_hand';
+
+let dragging = false;
+let dragOffX = 0, dragOffY = 0;
+
+const headImg = new Image();
+headImg.src = '/images/zombiehead.png';
+const leftImg = new Image();
+leftImg.src = '/images/zombielefthand.png';
+const rightImg = new Image();
+rightImg.src = '/images/zombierighthand.png';
+let imagesLoaded = 0;
+function onImgLoad() {
+  imagesLoaded++;
+  if (imagesLoaded >= 3) draw();
+}
+headImg.onload = onImgLoad;
+leftImg.onload = onImgLoad;
+rightImg.onload = onImgLoad;
+
+const scaleSlider = document.getElementById('scale');
+const rotSlider = document.getElementById('rotation');
+const scaleVal = document.getElementById('scaleVal');
+const rotVal = document.getElementById('rotVal');
+const output = document.getElementById('output');
+const copyBtn = document.getElementById('copyBtn');
+
+document.getElementById('symBtn').addEventListener('click', () => {
+  const otherKey = activeHand === 'left_hand' ? 'right_hand' : 'left_hand';
+  const other = hands[otherKey];
+  const current = hands[activeHand];
+  current.offsetX = other.offsetX;
+  current.offsetY = -other.offsetY;
+  current.scale = other.scale;
+  current.rotation = other.rotation;
+  scaleSlider.value = current.scale;
+  rotSlider.value = current.rotation;
+  draw();
+});
+
+document.querySelectorAll('.slot-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.slot-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    activeHand = btn.dataset.slot;
+
+    const nh = hands[activeHand];
+    scaleSlider.value = nh.scale;
+    rotSlider.value = nh.rotation;
+    draw();
+  });
+});
+
+function draw() {
+  ctx.clearRect(0, 0, W, H);
+
+  // grid
+  ctx.strokeStyle = 'rgba(0,0,0,0.04)'; ctx.lineWidth = 1;
+  for (let x = 0; x <= W; x += 40) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
+  for (let y = 0; y <= H; y += 40) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+
+  // direction arrow
+  ctx.strokeStyle = 'rgba(0,0,0,0.12)'; ctx.lineWidth = 1.5;
+  ctx.setLineDash([6, 6]);
+  ctx.beginPath(); ctx.moveTo(CX + 10, CY); ctx.lineTo(CX + 80, CY); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.beginPath(); ctx.moveTo(CX + 80, CY); ctx.lineTo(CX + 73, CY - 4); ctx.moveTo(CX + 80, CY); ctx.lineTo(CX + 73, CY + 4); ctx.stroke();
+
+  // crosshairs
+  ctx.strokeStyle = 'rgba(0,0,0,0.08)'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(CX - 28, CY); ctx.lineTo(CX + 28, CY); ctx.moveTo(CX, CY - 28); ctx.lineTo(CX, CY + 28); ctx.stroke();
+
+  // zombie body circle (faint)
+  ctx.beginPath(); ctx.arc(CX, CY, 20, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(200,60,60,0.15)';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(200,60,60,0.3)';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+    // zombie head — rotate to face right (matching the direction arrow)
+    if (headImg.complete && headImg.naturalWidth > 0) {
+      const hsz = 40 / Math.max(headImg.naturalWidth, headImg.naturalHeight);
+      const hw = headImg.naturalWidth * hsz;
+      const hh = headImg.naturalHeight * hsz;
+      ctx.save();
+      ctx.translate(CX, CY);
+      ctx.rotate(-Math.PI / 2);
+      ctx.drawImage(headImg, -hw / 2, -hh / 2, hw, hh);
+      ctx.restore();
+    }
+
+  // draw BOTH hands (the active one highlighted, inactive dimmed)
+  for (const key of ['left_hand', 'right_hand']) {
+    const h = hands[key];
+    const img = key === 'left_hand' ? leftImg : rightImg;
+    const isActive = key === activeHand;
+
+    if (img.complete && img.naturalWidth > 0) {
+      const sw = img.naturalWidth * h.scale;
+      const sh = img.naturalHeight * h.scale;
+
+      ctx.save();
+      ctx.globalAlpha = isActive ? 1 : 0.25;
+      ctx.translate(CX + h.offsetX, CY + h.offsetY);
+      ctx.rotate(h.rotation);
+      ctx.drawImage(img, -sw / 2, -sh / 2, sw, sh);
+      ctx.restore();
+    }
+
+    // label
+    ctx.fillStyle = isActive ? 'rgba(78,205,196,0.8)' : 'rgba(255,255,255,0.2)';
+    ctx.font = '10px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(key.replace('_', ' '), CX + h.offsetX, CY + h.offsetY + 30);
+  }
+
+  // update readouts from active hand
+  const ah = hands[activeHand];
+  scaleVal.textContent = ah.scale.toFixed(3);
+  rotVal.textContent = ah.rotation.toFixed(2);
+
+  // output
+  output.textContent =
+    `// Paste into shared/data.js → ZOMBIE_VISUALS\n` +
+    `left_hand: {\n` +
+    `  offsetX: ${hands.left_hand.offsetX},\n` +
+    `  offsetY: ${hands.left_hand.offsetY},\n` +
+    `  scale: ${hands.left_hand.scale.toFixed(3)},\n` +
+    `  rotation: ${hands.left_hand.rotation.toFixed(2)}\n` +
+    `},\n` +
+    `right_hand: {\n` +
+    `  offsetX: ${hands.right_hand.offsetX},\n` +
+    `  offsetY: ${hands.right_hand.offsetY},\n` +
+    `  scale: ${hands.right_hand.scale.toFixed(3)},\n` +
+    `  rotation: ${hands.right_hand.rotation.toFixed(2)}\n` +
+    `}`;
+}
+
+function getPos(e) {
+  const r = canvas.getBoundingClientRect();
+  return { x: (e.clientX - r.left) * (W / r.width), y: (e.clientY - r.top) * (H / r.height) };
+}
+
+canvas.addEventListener('mousedown', (e) => {
+  const p = getPos(e);
+  const h = hands[activeHand];
+  const img = activeHand === 'left_hand' ? leftImg : rightImg;
+  const size = Math.max(img.naturalWidth, img.naturalHeight) * h.scale;
+  const dx = p.x - (CX + h.offsetX);
+  const dy = p.y - (CY + h.offsetY);
+  if (Math.sqrt(dx * dx + dy * dy) < size / 2 + 20) {
+    dragging = true;
+    dragOffX = dx;
+    dragOffY = dy;
+    canvas.style.cursor = 'grabbing';
+  }
+});
+
+canvas.addEventListener('mousemove', (e) => {
+  const p = getPos(e);
+  if (dragging) {
+    const h = hands[activeHand];
+    h.offsetX = Math.round(p.x - CX - dragOffX);
+    h.offsetY = Math.round(p.y - CY - dragOffY);
+    draw();
+  } else {
+    const h = hands[activeHand];
+    const img = activeHand === 'left_hand' ? leftImg : rightImg;
+    const size = Math.max(img.naturalWidth, img.naturalHeight) * h.scale;
+    const dx = p.x - (CX + h.offsetX);
+    const dy = p.y - (CY + h.offsetY);
+    canvas.style.cursor = Math.sqrt(dx * dx + dy * dy) < size / 2 + 20 ? 'grab' : 'default';
+  }
+});
+
+canvas.addEventListener('mouseup', () => { dragging = false; canvas.style.cursor = 'default'; });
+canvas.addEventListener('mouseleave', () => { dragging = false; canvas.style.cursor = 'default'; });
+
+scaleSlider.addEventListener('input', () => {
+  hands[activeHand].scale = parseFloat(scaleSlider.value);
+  draw();
+});
+rotSlider.addEventListener('input', () => {
+  hands[activeHand].rotation = parseFloat(rotSlider.value);
+  draw();
+});
+
+copyBtn.addEventListener('click', () => {
+  const text = `// ZOMBIE_VISUALS\nleft_hand: {\n  offsetX: ${hands.left_hand.offsetX},\n  offsetY: ${hands.left_hand.offsetY},\n  scale: ${hands.left_hand.scale.toFixed(3)},\n  rotation: ${hands.left_hand.rotation.toFixed(2)}\n},\nright_hand: {\n  offsetX: ${hands.right_hand.offsetX},\n  offsetY: ${hands.right_hand.offsetY},\n  scale: ${hands.right_hand.scale.toFixed(3)},\n  rotation: ${hands.right_hand.rotation.toFixed(2)}\n}`;
+  navigator.clipboard.writeText(text);
+  copyBtn.textContent = 'Copied!';
+  setTimeout(() => { copyBtn.textContent = 'Copy Config'; }, 2000);
+});
+
+draw();
+</script>
+</body>
+</html>

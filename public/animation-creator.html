@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Animation Creator</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: #0a0a0f; color: #eee;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  display: flex; justify-content: center; align-items: center;
+  min-height: 100vh;
+}
+.container { display: flex; gap: 32px; align-items: flex-start; padding: 20px; }
+canvas { border: 1px solid #333; border-radius: 8px; cursor: grab; background: #fff; }
+.panel { display: flex; flex-direction: column; gap: 14px; width: 300px; }
+.panel h2 { font-size: 1.1rem; font-weight: 600; }
+.note { font-size: 0.75rem; color: #666; line-height: 1.4; }
+.ctrl-group { display: flex; flex-direction: column; gap: 3px; }
+.ctrl-group label { font-size: 0.78rem; color: #999; display: flex; justify-content: space-between; }
+.ctrl-group input[type="range"] { width: 100%; accent-color: #4ECDC4; }
+.val { color: #4ECDC4; font-family: monospace; font-size: 0.85rem; }
+.kf-list { display: flex; flex-wrap: wrap; gap: 4px; }
+.kf-btn {
+  background: #1a1a28; border: 1px solid #333; border-radius: 4px;
+  color: #ccc; font-size: 0.75rem; padding: 4px 10px; cursor: pointer;
+  font-family: monospace; position: relative;
+}
+.kf-btn.selected { border-color: #4ECDC4; color: #4ECDC4; }
+.kf-del {
+  margin-left: 4px; color: #e55; cursor: pointer; font-weight: bold;
+}
+.kf-del:hover { color: #f77; }
+.seg-row { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; color: #999; }
+.seg-row input { width: 60px; background: #1a1a28; border: 1px solid #333; color: #eee; border-radius: 4px; padding: 3px 6px; font-size: 0.8rem; font-family: monospace; }
+.btn {
+  background: #4ECDC4; border: none; border-radius: 6px; padding: 8px 14px;
+  color: #0a0a0f; font-size: 0.85rem; font-weight: 600; cursor: pointer;
+  transition: background 0.15s;
+}
+.btn:hover { background: #45b8b0; }
+.btn:active { background: #3ca39c; }
+.btn-outline {
+  background: transparent; border: 1px solid #4ECDC4; color: #4ECDC4;
+}
+.btn-outline:hover { background: rgba(78, 205, 196, 0.1); }
+.btn-danger {
+  background: transparent; border: 1px solid #e55; color: #e55;
+}
+.btn-danger:hover { background: rgba(238, 85, 85, 0.1); }
+.output {
+  background: #0d0d14; border: 1px solid #333; border-radius: 6px;
+  padding: 10px; font-family: monospace; font-size: 0.75rem; line-height: 1.5;
+  max-height: 160px; overflow: auto; white-space: pre;
+}
+.output .num { color: #4ECDC4; }
+.section-title { font-size: 0.78rem; color: #666; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 4px; }
+.row { display: flex; gap: 8px; }
+.row .btn { flex: 1; text-align: center; }
+#playFrame { font-size: 0.8rem; color: #4ECDC4; font-family: monospace; }
+.status { font-size: 0.78rem; color: #888; }
+</style>
+</head>
+<body>
+<div class="container">
+  <canvas id="c" width="400" height="400"></canvas>
+  <div class="panel">
+    <h2>Animation Creator</h2>
+    <p class="note">KF #0 is the idle pose (initial position). Drag the sword, then click <b>Set Keyframe</b> to add each new pose.</p>
+
+    <div class="ctrl-group">
+      <label>Scale <span class="val" id="scaleVal">0.047</span></label>
+      <input type="range" id="scale" min="0.005" max="0.1" step="0.001" value="0.047">
+    </div>
+    <div class="ctrl-group">
+      <label>Rotation <span class="val" id="rotVal">0.59</span> rad</label>
+      <input type="range" id="rotation" min="-3.14" max="3.14" step="0.01" value="0.59">
+    </div>
+
+    <button class="btn" id="setKfBtn">Set Keyframe</button>
+
+    <div class="section-title">Keyframes</div>
+    <div class="kf-list" id="kfList"></div>
+
+    <div class="section-title">Timing</div>
+    <div id="segContainer"></div>
+
+    <div class="section-title">Preview</div>
+    <div class="row">
+      <button class="btn" id="playBtn">Play</button>
+      <button class="btn btn-outline" id="stopBtn">Stop</button>
+    </div>
+    <div class="status">Frame: <span id="playFrame">0</span> / <span id="totalFrame">0</span></div>
+
+    <div class="section-title">Export</div>
+    <div class="ctrl-group" style="flex-direction:row;gap:6px;">
+      <input type="text" id="animName" value="attack" style="flex:1;background:#1a1a28;border:1px solid #333;color:#eee;border-radius:4px;padding:6px 8px;font-size:0.85rem;font-family:monospace;">
+      <button class="btn" id="saveBtn">Save Animation</button>
+    </div>
+
+    <div class="output" id="output"></div>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const W = 400, H = 400;
+const CX = W / 2, CY = H / 2;
+const IMG_SIZE = 1254;
+
+let offsetX = 23, offsetY = 24;
+let scale = 0.047;
+let rotation = 0.59;
+let dragging = false;
+let dragOffX = 0, dragOffY = 0;
+
+const INITIAL_POSE = { offsetX: 23, offsetY: 24, scale: 0.047, rotation: 0.59 };
+
+let keyframes = [{ ...INITIAL_POSE }];
+let segments = [];
+let selectedKF = 0;
+let playing = false;
+let playFrame = 0;
+let animRAF = null;
+let lastSavedPose = { ...INITIAL_POSE };
+
+const img = new Image();
+img.src = '/images/woodensword.png';
+let imgLoaded = false;
+img.onload = () => { imgLoaded = true; draw(); };
+
+const scaleSlider = document.getElementById('scale');
+const rotSlider = document.getElementById('rotation');
+const scaleVal = document.getElementById('scaleVal');
+const rotVal = document.getElementById('rotVal');
+const kfList = document.getElementById('kfList');
+const segContainer = document.getElementById('segContainer');
+const playBtn = document.getElementById('playBtn');
+const stopBtn = document.getElementById('stopBtn');
+const playFrameEl = document.getElementById('playFrame');
+const totalFrameEl = document.getElementById('totalFrame');
+const animName = document.getElementById('animName');
+const output = document.getElementById('output');
+
+// ─── Drawing ───
+
+function draw() {
+  ctx.clearRect(0, 0, W, H);
+
+  // grid
+  ctx.strokeStyle = 'rgba(0,0,0,0.04)'; ctx.lineWidth = 1;
+  for (let x = 0; x <= W; x += 40) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
+  for (let y = 0; y <= H; y += 40) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+
+  // direction arrow
+  ctx.strokeStyle = 'rgba(0,0,0,0.12)'; ctx.lineWidth = 1.5;
+  ctx.setLineDash([6, 6]);
+  ctx.beginPath(); ctx.moveTo(CX + 10, CY); ctx.lineTo(CX + 80, CY); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.beginPath(); ctx.moveTo(CX + 80, CY); ctx.lineTo(CX + 73, CY - 4); ctx.moveTo(CX + 80, CY); ctx.lineTo(CX + 73, CY + 4); ctx.stroke();
+
+  // crosshairs
+  ctx.strokeStyle = 'rgba(0,0,0,0.08)'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(CX - 28, CY); ctx.lineTo(CX + 28, CY); ctx.moveTo(CX, CY - 28); ctx.lineTo(CX, CY + 28); ctx.stroke();
+
+  // player circle
+  ctx.beginPath(); ctx.arc(CX, CY, 20, 0, Math.PI * 2);
+  const grad = ctx.createRadialGradient(CX - 6, CY - 6, 2, CX, CY, 20);
+  grad.addColorStop(0, '#5ee0d8'); grad.addColorStop(1, '#4ECDC4');
+  ctx.fillStyle = grad; ctx.fill();
+  ctx.strokeStyle = '#222'; ctx.lineWidth = 2; ctx.stroke();
+
+  // ghost (last saved pose) — hidden during preview
+  if (!playing && imgLoaded && lastSavedPose) {
+    const ghW = IMG_SIZE * lastSavedPose.scale;
+    const ghH = IMG_SIZE * lastSavedPose.scale;
+    ctx.save();
+    ctx.globalAlpha = 0.2;
+    ctx.translate(CX + lastSavedPose.offsetX, CY + lastSavedPose.offsetY);
+    ctx.rotate(lastSavedPose.rotation);
+    ctx.drawImage(img, -ghW / 2, -ghH / 2, ghW, ghH);
+    ctx.restore();
+  }
+
+  // sword
+  const sw = IMG_SIZE * scale;
+  const sh = IMG_SIZE * scale;
+  if (imgLoaded) {
+    ctx.save();
+    ctx.translate(CX + offsetX, CY + offsetY);
+    ctx.rotate(rotation);
+    ctx.drawImage(img, -sw / 2, -sh / 2, sw, sh);
+    ctx.restore();
+  }
+
+  // drag hint
+  ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  ctx.font = '11px system-ui'; ctx.textAlign = 'center';
+  ctx.fillText('drag the sword', CX + offsetX, CY + offsetY + sh / 2 + 18);
+
+  updateOutput();
+}
+
+// ─── Input ───
+
+function getPos(e) {
+  const r = canvas.getBoundingClientRect();
+  return { x: (e.clientX - r.left) * (W / r.width), y: (e.clientY - r.top) * (H / r.height) };
+}
+
+canvas.addEventListener('mousedown', (e) => {
+  const p = getPos(e);
+  const dx = p.x - (CX + offsetX);
+  const dy = p.y - (CY + offsetY);
+  const size = IMG_SIZE * scale;
+  if (Math.sqrt(dx * dx + dy * dy) < size / 2 + 15) {
+    dragging = true;
+    dragOffX = dx;
+    dragOffY = dy;
+    canvas.style.cursor = 'grabbing';
+  }
+});
+
+canvas.addEventListener('mousemove', (e) => {
+  const p = getPos(e);
+  if (dragging) {
+    offsetX = Math.round(p.x - CX - dragOffX);
+    offsetY = Math.round(p.y - CY - dragOffY);
+    draw();
+  } else {
+    const dx = p.x - (CX + offsetX);
+    const dy = p.y - (CY + offsetY);
+    const size = IMG_SIZE * scale;
+    canvas.style.cursor = Math.sqrt(dx * dx + dy * dy) < size / 2 + 15 ? 'grab' : 'default';
+  }
+});
+
+canvas.addEventListener('mouseup', () => { dragging = false; canvas.style.cursor = 'default'; });
+canvas.addEventListener('mouseleave', () => { dragging = false; canvas.style.cursor = 'default'; });
+
+scaleSlider.addEventListener('input', () => { scale = parseFloat(scaleSlider.value); draw(); });
+rotSlider.addEventListener('input', () => { rotation = parseFloat(rotSlider.value); draw(); });
+
+// ─── Keyframe data helpers ───
+
+function currentPose() {
+  return { offsetX, offsetY, scale: +scale.toFixed(3), rotation: +rotation.toFixed(2) };
+}
+
+function rebuildSegments() {
+  const n = keyframes.length;
+  segments = [];
+  for (let i = 0; i < n - 1; i++) {
+    segments[i] = segments[i] || 10;
+  }
+}
+
+function totalFrames() {
+  return segments.reduce((a, b) => a + b, 0);
+}
+
+function lerpVal(a, b, t) {
+  return a + (b - a) * t;
+}
+
+function getInterpolatedPose(frame) {
+  if (keyframes.length < 2) return keyframes[0] || currentPose();
+  const total = totalFrames();
+  if (total === 0) return keyframes[0];
+  const f = Math.min(frame, total - 1);
+  let accum = 0;
+  for (let i = 0; i < segments.length; i++) {
+    const segLen = segments[i];
+    if (f < accum + segLen) {
+      const t = (f - accum) / segLen;
+      const a = keyframes[i];
+      const b = keyframes[i + 1];
+      return {
+        offsetX: Math.round(lerpVal(a.offsetX, b.offsetX, t)),
+        offsetY: Math.round(lerpVal(a.offsetY, b.offsetY, t)),
+        scale: +lerpVal(a.scale, b.scale, t).toFixed(3),
+        rotation: +lerpVal(a.rotation, b.rotation, t).toFixed(2)
+      };
+    }
+    accum += segLen;
+  }
+  return keyframes[keyframes.length - 1];
+}
+
+// ─── UI updates ───
+
+function updateKfList() {
+  let html = '';
+  for (let i = 0; i < keyframes.length; i++) {
+    const kf = keyframes[i];
+    const sel = i === selectedKF ? ' selected' : '';
+    html += `<div class="kf-btn${sel}" data-idx="${i}">KF #${i} (${kf.offsetX},${kf.offsetY})<span class="kf-del" data-del="${i}">×</span></div>`;
+  }
+  kfList.innerHTML = html;
+}
+
+function updateSegments() {
+  if (keyframes.length < 2) {
+    segContainer.innerHTML = '<div class="status" style="color:#555">Add at least 2 keyframes</div>';
+    return;
+  }
+  let html = '';
+  for (let i = 0; i < keyframes.length - 1; i++) {
+    html += `<div class="seg-row">Frames KF #${i} → #${i+1}: <input type="number" class="seg-input" data-idx="${i}" min="1" max="120" value="${segments[i] || 10}"></div>`;
+  }
+  segContainer.innerHTML = html;
+  document.querySelectorAll('.seg-input').forEach(inp => {
+    inp.addEventListener('change', onSegChange);
+    inp.addEventListener('input', onSegChange);
+  });
+  updateFrameCount();
+}
+
+function onSegChange(e) {
+  const idx = parseInt(e.target.dataset.idx);
+  segments[idx] = Math.max(1, parseInt(e.target.value) || 1);
+  updateFrameCount();
+}
+
+function updateFrameCount() {
+  const total = totalFrames();
+  totalFrameEl.textContent = total;
+}
+
+function updateOutput() {
+  const pose = currentPose();
+  let text = '// Set a keyframe to begin\n';
+  if (keyframes.length > 0) {
+    text = `// Animation: "${animName.value}"\n`;
+    text += '{\n';
+    text += '  keyframes: [\n';
+    for (const kf of keyframes) {
+      text += `    { offsetX: ${kf.offsetX}, offsetY: ${kf.offsetY}, scale: ${kf.scale}, rotation: ${kf.rotation} },\n`;
+    }
+    text += '  ],\n';
+    text += '  segments: [';
+    text += segments.join(', ');
+    text += ']\n';
+    text += '}';
+  }
+  output.textContent = text;
+}
+
+function loadPose(kf) {
+  offsetX = kf.offsetX;
+  offsetY = kf.offsetY;
+  scale = kf.scale;
+  rotation = kf.rotation;
+  scaleSlider.value = scale;
+  rotSlider.value = rotation;
+  scaleVal.textContent = scale.toFixed(3);
+  rotVal.textContent = rotation.toFixed(2);
+}
+
+// ─── Keyframe actions ───
+
+document.getElementById('setKfBtn').addEventListener('click', () => {
+  const pose = currentPose();
+  keyframes.push(pose);
+  lastSavedPose = pose;
+  selectedKF = keyframes.length - 1;
+  rebuildSegments();
+  updateKfList();
+  updateSegments();
+  draw();
+});
+
+kfList.addEventListener('click', (e) => {
+  const delBtn = e.target.closest('.kf-del');
+  if (delBtn) {
+    const idx = parseInt(delBtn.dataset.del);
+    keyframes.splice(idx, 1);
+    if (selectedKF >= keyframes.length) selectedKF = keyframes.length - 1;
+    rebuildSegments();
+    updateKfList();
+    updateSegments();
+    if (keyframes.length > 0 && selectedKF >= 0) {
+      loadPose(keyframes[selectedKF]);
+    }
+    draw();
+    return;
+  }
+  const btn = e.target.closest('.kf-btn');
+  if (btn && !e.target.classList.contains('kf-del')) {
+    const idx = parseInt(btn.dataset.idx);
+    selectedKF = idx;
+    loadPose(keyframes[idx]);
+    updateKfList();
+    draw();
+  }
+});
+
+// ─── Preview ───
+
+function previewLoop() {
+  if (!playing) return;
+  if (keyframes.length < 2) { stopPreview(); return; }
+  const total = totalFrames();
+  if (total === 0) { stopPreview(); return; }
+  const pose = getInterpolatedPose(playFrame);
+  offsetX = pose.offsetX;
+  offsetY = pose.offsetY;
+  scale = pose.scale;
+  rotation = pose.rotation;
+  scaleSlider.value = scale;
+  rotSlider.value = rotation;
+  scaleVal.textContent = scale.toFixed(3);
+  rotVal.textContent = rotation.toFixed(2);
+  playFrameEl.textContent = playFrame + 1;
+  draw();
+  playFrame++;
+  if (playFrame >= total) playFrame = 0;
+  animRAF = requestAnimationFrame(previewLoop);
+}
+
+function startPreview() {
+  if (playing) return;
+  if (keyframes.length < 2) return;
+  playing = true;
+  playFrame = 0;
+  playBtn.textContent = 'Playing...';
+  previewLoop();
+}
+
+function stopPreview() {
+  playing = false;
+  if (animRAF) { cancelAnimationFrame(animRAF); animRAF = null; }
+  playBtn.textContent = 'Play';
+  playFrameEl.textContent = '0';
+  if (selectedKF >= 0 && selectedKF < keyframes.length) {
+    loadPose(keyframes[selectedKF]);
+  } else if (keyframes.length > 0) {
+    loadPose(keyframes[0]);
+  }
+  draw();
+}
+
+playBtn.addEventListener('click', startPreview);
+stopBtn.addEventListener('click', stopPreview);
+
+// ─── Export ───
+
+document.getElementById('saveBtn').addEventListener('click', () => {
+  if (keyframes.length < 2) { output.textContent = '// Need at least 2 keyframes'; return; }
+  const name = animName.value.trim() || 'attack';
+  let text = `// Paste into shared/data.js → ANIMATIONS\n`;
+  text += `${name}: {\n`;
+  text += '  keyframes: [\n';
+  for (const kf of keyframes) {
+    text += `    { offsetX: ${kf.offsetX}, offsetY: ${kf.offsetY}, scale: ${kf.scale}, rotation: ${kf.rotation} },\n`;
+  }
+  text += '  ],\n';
+  text += '  segments: [';
+  text += segments.join(', ');
+  text += ']\n';
+  text += '}';
+  output.textContent = text;
+  navigator.clipboard.writeText(text);
+  const orig = document.getElementById('saveBtn').textContent;
+  document.getElementById('saveBtn').textContent = 'Copied!';
+  setTimeout(() => { document.getElementById('saveBtn').textContent = orig; }, 2000);
+});
+
+// ─── Init ───
+
+loadPose(keyframes[0]);
+draw();
+</script>
+</body>
+</html>

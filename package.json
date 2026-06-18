@@ -1,0 +1,13 @@
+{
+  "name": "hold-your-ground",
+  "version": "0.1.0",
+  "description": "Multiplayer circle battle game",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "socket.io": "^4.8.0"
+  }
+}
