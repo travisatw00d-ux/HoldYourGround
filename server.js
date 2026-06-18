@@ -295,6 +295,7 @@ function checkSwordHit(p) {
 }
 
 let zombieAIStep = 0;
+const state = { players: [], zombies: [], arenaWidth: WORLD_W, arenaHeight: WORLD_H };
 
 function gameTick() {
   const tickStart = Date.now();
@@ -523,10 +524,12 @@ function gameTick() {
     }
   }
 
-  const state = {
-    players: Object.values(players).map(p => ({
-      id: p.id,
-      x: p.x, y: p.y,
+  // reuse state objects to avoid GC pressure
+  state.players.length = 0;
+  for (const id in players) {
+    const p = players[id];
+    state.players.push({
+      id: p.id, x: p.x, y: p.y,
       name: p.name, color: p.color,
       alive: p.alive, kills: p.kills,
       health: p.health, maxHealth: p.maxHealth,
@@ -538,23 +541,22 @@ function gameTick() {
       currentItem: p.currentItem,
       inventory: p.inventory,
       lvl: p.lvl || 1
-    })),
-    zombies: zombies.map(z => ({
-      id: z.id,
-      x: z.x, y: z.y,
+    });
+  }
+  state.zombies.length = 0;
+  for (const z of zombies) {
+    state.zombies.push({
+      id: z.id, x: z.x, y: z.y,
       alive: z.alive,
-      health: z.health,
-      maxHealth: z.maxHealth,
+      health: z.health, maxHealth: z.maxHealth,
       headingtoward: z.headingtoward,
       headingAngle: z.headingAngle || 0,
       isStray: !!z.isStray,
       strayCalled: !!z.strayCalled,
       lvl: z.lvl || 1
-    })),
-    serverLevel: Object.values(players).reduce((sum, p) => sum + (p.lvl || 1), 0),
-    arenaWidth: WORLD_W,
-    arenaHeight: WORLD_H
-  };
+    });
+  }
+  state.serverLevel = Object.values(players).reduce((sum, p) => sum + (p.lvl || 1), 0);
   io.emit('state', state);
   const tickMs = Date.now() - tickStart;
   if (tickMs > 30) console.log(`tick=${tickMs}ms players=${ids.length} zombies=${zombies.length}`);
