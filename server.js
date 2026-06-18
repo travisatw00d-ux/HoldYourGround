@@ -244,7 +244,6 @@ function checkSwordHit(p) {
     const hiltY = sy + (BLADE_HILT_X * sinR + BLADE_HILT_Y * cosR) * scale;
 
     if (si === cfs.length - 1) {
-      console.log(`[SWING] ${p.id} cf=${cf.toFixed(1)} elapsed=${elapsed}ms angle=${angle.toFixed(3)} tip=(${tipX.toFixed(0)},${tipY.toFixed(0)}) steps=${cfs.length}`);
     }
 
     for (const id in players) {
@@ -255,7 +254,6 @@ function checkSwordHit(p) {
       const d = Math.sqrt(d2);
       if (d < closestDist) { closestDist = d; closestTarget = id; }
       if (d2 < (bladeW + t.radius) * (bladeW + t.radius)) {
-        console.log(`  >>> HIT ${id} d=${d.toFixed(1)}`);
         t.health -= p.attackDmg;
         const kx = t.x - p.x, ky = t.y - p.y;
         const kd = Math.sqrt(kx * kx + ky * ky) || 1;
@@ -279,7 +277,6 @@ function checkSwordHit(p) {
       const d = Math.sqrt(d2);
       if (d < closestDist) { closestDist = d; closestTarget = z.id; }
       if (d2 < (bladeW + z.radius) * (bladeW + z.radius)) {
-        console.log(`  >>> HIT ${z.id} d=${d.toFixed(1)}`);
         z.health -= p.attackDmg;
         const kzx = z.x - p.x, kzy = z.y - p.y;
         const kzd = Math.sqrt(kzx * kzx + kzy * kzy) || 1;
@@ -295,12 +292,12 @@ function checkSwordHit(p) {
     }
   }
 
-  console.log(`  closest=${closestTarget} dist=${closestDist.toFixed(1)}`);
 }
 
 let zombieAIStep = 0;
 
 function gameTick() {
+  const tickStart = Date.now();
   const ids = Object.keys(players);
   if (ids.length === 0) return;
 
@@ -559,6 +556,8 @@ function gameTick() {
     arenaHeight: WORLD_H
   };
   io.emit('state', state);
+  const tickMs = Date.now() - tickStart;
+  if (tickMs > 30) console.log(`tick=${tickMs}ms players=${ids.length} zombies=${zombies.length}`);
 }
 
 initZombies();
