@@ -1,6 +1,6 @@
 const { ZOMBIE_DAMAGE, ZOMBIE_RADIUS, ZOMBIE_COUNT, WORLD_W, WORLD_H, ZOMBIE_MARGIN, getZombieStats } = require('./config.js');
 const { players, zombies, randomZombieSpawn } = require('./game-state.js');
-const io = require('./io.js').getIo();
+const getIo = () => require('./io.js').getIo();
 
 function moveZombies() {
   for (const z of zombies) {
@@ -53,7 +53,7 @@ function moveZombies() {
         target.health -= ZOMBIE_DAMAGE;
         if (target.health <= 0 && target.alive) {
           target.alive = false;
-          io.to(target.id).emit('eliminated', { kills: target.kills });
+          getIo().to(target.id).emit('eliminated', { kills: target.kills });
         }
       }
     }
@@ -90,7 +90,7 @@ function mergeZombies() {
           headingtoward: '', headingAngle: 0,
           isStray: (a.isStray || b.isStray) ? Math.random() < 0.5 : false, strayCalled: false, lvl: newLvl
         });
-        io.emit('zombieMerge', { x: mx, y: my });
+        getIo().emit('zombieMerge', { x: mx, y: my });
         break;
       }
     }
