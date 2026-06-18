@@ -44,6 +44,7 @@ const io = new Server(server, {
 
 app.use(express.static('public'));
 app.use('/images', express.static('images'));
+app.get('/health', (req, res) => res.send('OK'));
 
 const COLORS = [
   '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7',
