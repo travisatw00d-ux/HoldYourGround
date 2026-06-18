@@ -6,6 +6,9 @@ const { ITEMS, ANIMATIONS, SWORD_IMG_SIZE, BLADE_TIP_X, BLADE_TIP_Y, BLADE_HILT_
 const PORT = process.env.PORT || 3000;
 const WORLD_W = 3200;
 const WORLD_H = 2400;
+const VIEW_W = 800;
+const VIEW_H = 600;
+const VIEW_MARGIN = 300;
 const PLAYER_RADIUS = 20;
 const MAX_PLAYERS = 10;
 const TICK_MS = 1000 / 30;
@@ -17,7 +20,7 @@ const BASE_ATTACK_SPEED_MS = 800;
 const BASE_HEALTH = 100;
 const ATTACK_RANGE = 35;
 const ATTACK_KNOCKBACK = 6;
-const ZOMBIE_COUNT = 100;
+const ZOMBIE_COUNT = 60;
 const ZOMBIE_RADIUS = 20;
 const ZOMBIE_SPEED = 1.5;
 const ZOMBIE_HEALTH = 5;
@@ -203,14 +206,11 @@ function distToSegSq(px, py, ax, ay, bx, by) {
 
 function checkSwordHit(p) {
   const totalFrames = p.attackAnim.segments.reduce((a, b) => a + b, 0);
-  const elapsed = Date.now() - p.attackStartTime;
-  const duration = 300;
-  const currentCf = Math.min(Math.floor((elapsed / duration) * totalFrames), totalFrames - 1);
+  const totalTicks = Math.ceil(totalFrames / (2 * ATTACK_SPEED_MULT));
+  const currentCf = Math.min(Math.floor((p.attackFrame / totalTicks) * totalFrames), totalFrames - 1);
   const bladeW = 12;
   const angle = (p.attacking && p.attackLockedAngle != null) ? p.attackLockedAngle : (p.facingAngle || 0);
 
-  // Subdivide the blade sweep between prevCf and currentCf so fast swings
-  // can't tunnel through a target sitting between two sampled frames.
   const cfs = [];
   if (p.prevCf >= 0 && p.prevCf !== currentCf) {
     const span = currentCf - p.prevCf;
@@ -223,8 +223,9 @@ function checkSwordHit(p) {
   }
   p.prevCf = currentCf;
 
-  let closestDist = Infinity;
-  let closestTarget = null;
+  // Use spatial grid to only check nearby entities
+  const nearbyPlayers = grid.getNearbyPlayers(p.x, p.y);
+  const nearbyZombies = grid.getNearbyZombies(p.x, p.y);
 
   for (let si = 0; si < cfs.length; si++) {
     const cf = cfs[si];
@@ -242,23 +243,17 @@ function checkSwordHit(p) {
     const hiltX = sx + (BLADE_HILT_X * cosR - BLADE_HILT_Y * sinR) * scale;
     const hiltY = sy + (BLADE_HILT_X * sinR + BLADE_HILT_Y * cosR) * scale;
 
-    if (si === cfs.length - 1) {
-    }
-
-    for (const id in players) {
-      if (id === p.id || !players[id].alive) continue;
-      const t = players[id];
-      if (p.attackHitIds.includes(id)) continue;
+    for (const t of nearbyPlayers) {
+      if (t.id === p.id || !t.alive) continue;
+      if (p.attackHitIds.includes(t.id)) continue;
       const d2 = distToSegSq(t.x, t.y, hiltX, hiltY, tipX, tipY);
-      const d = Math.sqrt(d2);
-      if (d < closestDist) { closestDist = d; closestTarget = id; }
       if (d2 < (bladeW + t.radius) * (bladeW + t.radius)) {
         t.health -= p.attackDmg;
         const kx = t.x - p.x, ky = t.y - p.y;
         const kd = Math.sqrt(kx * kx + ky * ky) || 1;
         t.velX += (kx / kd) * ATTACK_KNOCKBACK;
         t.velY += (ky / kd) * ATTACK_KNOCKBACK;
-        p.attackHitIds.push(id);
+        p.attackHitIds.push(t.id);
         if (t.health <= 0) {
           t.alive = false;
           p.kills++;
@@ -269,12 +264,10 @@ function checkSwordHit(p) {
       }
     }
 
-    for (const z of zombies) {
+    for (const z of nearbyZombies) {
       if (!z.alive) continue;
       if (p.attackHitIds.includes(z.id)) continue;
       const d2 = distToSegSq(z.x, z.y, hiltX, hiltY, tipX, tipY);
-      const d = Math.sqrt(d2);
-      if (d < closestDist) { closestDist = d; closestTarget = z.id; }
       if (d2 < (bladeW + z.radius) * (bladeW + z.radius)) {
         z.health -= p.attackDmg;
         const kzx = z.x - p.x, kzy = z.y - p.y;
@@ -290,12 +283,61 @@ function checkSwordHit(p) {
       }
     }
   }
+}
 
+// Simple spatial hash grid for O(n) neighbor lookups
+class SpatialGrid {
+  constructor(cellSize) {
+    this.cellSize = cellSize;
+    this.zombieCells = new Map();
+    this.playerCells = new Map();
+  }
+
+  _key(x, y) {
+    return `${Math.floor(x / this.cellSize)},${Math.floor(y / this.cellSize)}`;
+  }
+
+  clear() {
+    this.zombieCells.clear();
+    this.playerCells.clear();
+  }
+
+  insertZombie(z) {
+    const k = this._key(z.x, z.y);
+    let arr = this.zombieCells.get(k);
+    if (!arr) { arr = []; this.zombieCells.set(k, arr); }
+    arr.push(z);
+  }
+
+  insertPlayer(p) {
+    const k = this._key(p.x, p.y);
+    let arr = this.playerCells.get(k);
+    if (!arr) { arr = []; this.playerCells.set(k, arr); }
+    arr.push(p);
+  }
+
+  _getNearby(cells, x, y) {
+    const cx = Math.floor(x / this.cellSize);
+    const cy = Math.floor(y / this.cellSize);
+    const result = [];
+    for (let dx = -1; dx <= 1; dx++) {
+      for (let dy = -1; dy <= 1; dy++) {
+        const k = `${cx + dx},${cy + dy}`;
+        const cell = cells.get(k);
+        if (cell) { for (let i = 0; i < cell.length; i++) result.push(cell[i]); }
+      }
+    }
+    return result;
+  }
+
+  getNearbyZombies(x, y) { return this._getNearby(this.zombieCells, x, y); }
+  getNearbyPlayers(x, y) { return this._getNearby(this.playerCells, x, y); }
 }
 
 let zombieAIStep = 0;
-const state = { players: [], zombies: [], arenaWidth: WORLD_W, arenaHeight: WORLD_H };
-
+const grid = new SpatialGrid(120);
+const playerSnapPool = [];
+const zombieSnapPool = [];
 function gameTick() {
   const tickStart = Date.now();
   const ids = Object.keys(players);
@@ -324,7 +366,12 @@ function gameTick() {
     p.y = Math.max(PLAYER_RADIUS, Math.min(WORLD_H - PLAYER_RADIUS, p.y));
   }
 
-  // staggered zombie target search (groups of 20, each group searches every 5th tick)
+  // Build spatial grid for this tick's position snapshot
+  grid.clear();
+  for (const z of zombies) { if (z.alive) grid.insertZombie(z); }
+  for (const id in players) { const p = players[id]; if (p.alive) grid.insertPlayer(p); }
+
+  // staggered zombie target search using spatial grid (groups of 20, each group searches every 5th tick)
   const AI_GROUP_SIZE = 20;
   const searchStart = (zombieAIStep % 5) * AI_GROUP_SIZE;
   const searchEnd = Math.min(searchStart + AI_GROUP_SIZE, zombies.length);
@@ -334,16 +381,18 @@ function gameTick() {
     let target = null;
 
     if (z.isStray) {
+      const nearby = grid.getNearbyZombies(z.x, z.y);
       let closestD2 = Infinity;
-      for (const other of zombies) {
+      for (const other of nearby) {
         if (other.id === z.id || !other.alive) continue;
         const dx = other.x - z.x, dy = other.y - z.y;
         const d2 = dx * dx + dy * dy;
         if (d2 < closestD2) { closestD2 = d2; target = other; }
       }
     } else if (z.strayCalled) {
+      const nearby = grid.getNearbyZombies(z.x, z.y);
       let closestD2 = Infinity;
-      for (const other of zombies) {
+      for (const other of nearby) {
         if (other.id === z.id || !other.alive || !other.isStray) continue;
         const dx = other.x - z.x, dy = other.y - z.y;
         const d2 = dx * dx + dy * dy;
@@ -352,9 +401,9 @@ function gameTick() {
     }
 
     if (!target) {
+      const nearby = grid.getNearbyPlayers(z.x, z.y);
       let closestD2 = Infinity;
-      for (const id in players) {
-        const p = players[id];
+      for (const p of nearby) {
         if (!p.alive) continue;
         const dx = p.x - z.x, dy = p.y - z.y;
         const d2 = dx * dx + dy * dy;
@@ -370,7 +419,7 @@ function gameTick() {
   }
   zombieAIStep++;
 
-  // movement + contact damage for ALL zombies every tick
+  // movement for ALL zombies every tick
   for (const z of zombies) {
     if (!z.alive || z.headingAngle === undefined) continue;
     const mx = Math.cos(z.headingAngle) * z.speed;
@@ -379,11 +428,18 @@ function gameTick() {
     z.y += my;
     z.x = Math.max(z.radius, Math.min(WORLD_W - z.radius, z.x));
     z.y = Math.max(z.radius, Math.min(WORLD_H - z.radius, z.y));
+  }
 
-    // contact damage against nearest player
+  // Rebuild zombie grid after movement for accurate contact-damage / merge checks
+  grid.zombieCells.clear();
+  for (const z of zombies) { if (z.alive) grid.insertZombie(z); }
+
+  // contact damage: each zombie checks nearby players via grid
+  for (const z of zombies) {
+    if (!z.alive) continue;
+    const nearby = grid.getNearbyPlayers(z.x, z.y);
     let closestP = null, closestPD2 = Infinity;
-    for (const id in players) {
-      const p = players[id];
+    for (const p of nearby) {
       if (!p.alive) continue;
       const dx = p.x - z.x, dy = p.y - z.y;
       const d2 = dx * dx + dy * dy;
@@ -455,25 +511,25 @@ function gameTick() {
     }
   }
 
-  // zombie-zombie collision → merge
-  const toRemove = [];
-  for (let i = 0; i < zombies.length; i++) {
-    const a = zombies[i];
-    if (!a.alive || toRemove.includes(a.id)) continue;
-    for (let j = i + 1; j < zombies.length; j++) {
-      const b = zombies[j];
-      if (!b.alive || toRemove.includes(b.id)) continue;
-      const dx = b.x - a.x, dy = b.y - a.y;
-      if (dx * dx + dy * dy < (a.radius + b.radius) * (a.radius + b.radius)) {
-        toRemove.push(a.id, b.id);
-        const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
-        const newLvl = a.lvl + b.lvl;
+  // zombie-zombie collision → merge (spatial grid, avoids O(n²))
+  const mergeToRemove = new Set();
+  for (const z of zombies) {
+    if (!z.alive || mergeToRemove.has(z.id)) continue;
+    const nearby = grid.getNearbyZombies(z.x, z.y);
+    for (const other of nearby) {
+      if (other.id === z.id || !other.alive || mergeToRemove.has(other.id)) continue;
+      const dx = other.x - z.x, dy = other.y - z.y;
+      if (dx * dx + dy * dy < (z.radius + other.radius) * (z.radius + other.radius)) {
+        mergeToRemove.add(z.id);
+        mergeToRemove.add(other.id);
+        const mx = (z.x + other.x) / 2, my = (z.y + other.y) / 2;
+        const newLvl = z.lvl + other.lvl;
         const st = getZombieStats(newLvl);
         let hpPct;
-        if (a.lvl === b.lvl) {
-          hpPct = Math.min(1, a.health / a.maxHealth + b.health / b.maxHealth);
+        if (z.lvl === other.lvl) {
+          hpPct = Math.min(1, z.health / z.maxHealth + other.health / other.maxHealth);
         } else {
-          const higher = a.lvl > b.lvl ? a : b;
+          const higher = z.lvl > other.lvl ? z : other;
           hpPct = higher.health / higher.maxHealth;
         }
         zombies.push({
@@ -483,14 +539,14 @@ function gameTick() {
           maxHealth: st.health,
           radius: ZOMBIE_RADIUS, speed: st.speed,
           headingtoward: '', headingAngle: 0,
-          isStray: (a.isStray || b.isStray) ? Math.random() < 0.5 : false, strayCalled: false, lvl: newLvl
+          isStray: (z.isStray || other.isStray) ? Math.random() < 0.5 : false, strayCalled: false, lvl: newLvl
         });
         io.emit('zombieMerge', { x: mx, y: my });
         break;
       }
     }
   }
-  zombies = zombies.filter(z => !toRemove.includes(z.id));
+  zombies = zombies.filter(z => !mergeToRemove.has(z.id));
 
   // ensure exactly 100 zombies
   while (zombies.length < ZOMBIE_COUNT) {
@@ -523,40 +579,78 @@ function gameTick() {
     }
   }
 
-  // reuse state objects to avoid GC pressure
-  state.players.length = 0;
+  // Reusable snapshot pools — avoids allocating new objects every tick
+  let snapIdx = 0;
+
   for (const id in players) {
     const p = players[id];
-    state.players.push({
-      id: p.id, x: p.x, y: p.y,
-      name: p.name, color: p.color,
-      alive: p.alive, kills: p.kills,
-      health: p.health, maxHealth: p.maxHealth,
-      speed: p.speed, attackDmg: p.attackDmg, attackSpeed: p.attackSpeed,
-      facingAngle: p.facingAngle,
-      attacking: p.attacking,
-      attackStartTime: p.attackStartTime,
-      attackLockedAngle: p.attackLockedAngle,
-      currentItem: p.currentItem,
-      inventory: p.inventory,
-      lvl: p.lvl || 1
+    let s;
+    if (snapIdx < playerSnapPool.length) {
+      s = playerSnapPool[snapIdx];
+    } else {
+      s = {};
+      playerSnapPool.push(s);
+    }
+    s.id = p.id; s.x = p.x; s.y = p.y;
+    s.name = p.name; s.color = p.color;
+    s.alive = p.alive; s.kills = p.kills;
+    s.health = p.health; s.maxHealth = p.maxHealth;
+    s.speed = p.speed; s.attackDmg = p.attackDmg; s.attackSpeed = p.attackSpeed;
+    s.facingAngle = p.facingAngle;
+    s.attacking = p.attacking;
+    s.attackStartTime = p.attackStartTime;
+    s.attackLockedAngle = p.attackLockedAngle;
+    s.currentItem = p.currentItem;
+    s.inventory = p.inventory;
+    s.lvl = p.lvl || 1;
+    snapIdx++;
+  }
+  playerSnapPool.length = snapIdx;
+
+  const currentServerLevel = Object.values(players).reduce((sum, p) => sum + (p.lvl || 1), 0);
+
+  // Per-player view-culled state: each client only receives zombies near their viewport
+  let zSnapIdx = 0;
+  for (const id in players) {
+    const p = players[id];
+    if (!p) continue;
+
+    const halfVW = VIEW_W / 2 + VIEW_MARGIN;
+    const halfVH = VIEW_H / 2 + VIEW_MARGIN;
+
+    zSnapIdx = 0;
+    for (const z of zombies) {
+      if (!z.alive) continue;
+      const dzx = Math.abs(z.x - p.x);
+      const dzy = Math.abs(z.y - p.y);
+      if (dzx > halfVW || dzy > halfVH) continue;
+      let s;
+      if (zSnapIdx < zombieSnapPool.length) {
+        s = zombieSnapPool[zSnapIdx];
+      } else {
+        s = {};
+        zombieSnapPool.push(s);
+      }
+      s.id = z.id; s.x = z.x; s.y = z.y;
+      s.alive = z.alive;
+      s.health = z.health; s.maxHealth = z.maxHealth;
+      s.headingtoward = z.headingtoward;
+      s.headingAngle = z.headingAngle || 0;
+      s.isStray = !!z.isStray;
+      s.strayCalled = !!z.strayCalled;
+      s.lvl = z.lvl || 1;
+      zSnapIdx++;
+    }
+    zombieSnapPool.length = zSnapIdx;
+
+    io.to(id).emit('state', {
+      arenaWidth: WORLD_W,
+      arenaHeight: WORLD_H,
+      serverLevel: currentServerLevel,
+      players: playerSnapPool.slice(0, snapIdx),
+      zombies: zombieSnapPool.slice(0, zSnapIdx)
     });
   }
-  state.zombies.length = 0;
-  for (const z of zombies) {
-    state.zombies.push({
-      id: z.id, x: z.x, y: z.y,
-      alive: z.alive,
-      health: z.health, maxHealth: z.maxHealth,
-      headingtoward: z.headingtoward,
-      headingAngle: z.headingAngle || 0,
-      isStray: !!z.isStray,
-      strayCalled: !!z.strayCalled,
-      lvl: z.lvl || 1
-    });
-  }
-  state.serverLevel = Object.values(players).reduce((sum, p) => sum + (p.lvl || 1), 0);
-  io.emit('state', state);
   const tickMs = Date.now() - tickStart;
   if (tickMs > 30) console.log(`tick=${tickMs}ms players=${ids.length} zombies=${zombies.length}`);
 }
