@@ -274,14 +274,6 @@ socket.on('state', (msg) => {
     newZombies.push(z);
   }
   zombies = newZombies;
-  } catch (e) {
-    console.error('[HYG] state buffer error:', e);
-    const es = emptyState();
-    players = es.players;
-    zombies = es.zombies;
-    return;
-  }
-
   worldW = arenaW;
   worldH = arenaH;
   serverLevel = sLevel;
@@ -305,6 +297,13 @@ socket.on('state', (msg) => {
   lastPacketBytes = u8.byteLength;
   updateLeaderboard();
   updateHotbar();
+  } catch (e) {
+    console.error('[HYG] state buffer error:', e);
+    const es = emptyState();
+    players = es.players;
+    zombies = es.zombies;
+    return;
+  }
 });
 
 socket.on('playerInfo', (info) => { playerMeta[info.id] = info; });
