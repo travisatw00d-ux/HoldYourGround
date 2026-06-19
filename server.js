@@ -69,8 +69,8 @@ const BUILD_TAG = GAME_HASH;
 // build tag (DOM, not canvas) so the version is provable on the menu AND in-game.
 const indexHtml = fs.readFileSync(path.join(publicDir, 'index.html'), 'utf8')
   .replace('<body>', `<body><div id="btag" style="position:fixed;left:4px;bottom:2px;font:10px monospace;color:rgba(255,255,255,0.55);z-index:9999;pointer-events:none;">b${BUILD_TAG}</div>`)
-  .replace('<script src="/shared/data.js?v=2"></script>', `<script>window.BUILD='${BUILD_TAG}';</script><script src="/data-${DATA_HASH}.js"></script>`)
-  .replace('<script src="game.js?v=7"></script>', `<script src="/game-${GAME_HASH}.js"></script>`);
+  .replace(/<script src="\/shared\/data\.js\?v=\d+"><\/script>/, `<script>window.BUILD='${BUILD_TAG}';</script><script src="/data-${DATA_HASH}.js"></script>`)
+  .replace(/<script src="game\.js\?v=\d+"><\/script>/, `<script src="/game-${GAME_HASH}.js"></script>`);
 
 app.get('/', (req, res) => { res.set('Cache-Control', 'no-store'); res.type('html').send(indexHtml); });
 app.get(`/game-${GAME_HASH}.js`, (req, res) => { res.set('Cache-Control', 'public, max-age=31536000, immutable'); res.sendFile(path.join(publicDir, 'game.js')); });
