@@ -1,0 +1,50 @@
+const { ITEMS, ANIMATIONS, SWORD_IMG_SIZE, BLADE_TIP_X, BLADE_TIP_Y, BLADE_HILT_X, BLADE_HILT_Y } = require('../public/shared/data.js');
+
+const PORT = process.env.PORT || 3000;
+const WORLD_W = 3200;
+const WORLD_H = 2400;
+const VIEW_W = 800;
+const VIEW_H = 600;
+const VIEW_MARGIN = 300;
+const PLAYER_RADIUS = 20;
+const MAX_PLAYERS = 10;
+const TICK_MS = 1000 / 30;
+const BROADCAST_MS = 55;
+
+const BASE_SPEED = 13;
+const BASE_ATTACK_DMG = 5;
+const BASE_ATTACK_SPEED_MS = 800;
+const BASE_HEALTH = 100;
+const ATTACK_RANGE = 35;
+const ATTACK_KNOCKBACK = 6;
+const ZOMBIE_COUNT = 100;
+const ZOMBIE_RADIUS = 20;
+const ZOMBIE_SPEED = 1.5;
+const ZOMBIE_HEALTH = 5;
+const ZOMBIE_DAMAGE = 1;
+const ZOMBIE_MARGIN = 80;
+const ATTACK_SPEED_MULT = 4;
+const SPAWN_MIN_DIST = 400;
+
+const COLORS = [
+  '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7',
+  '#DDA0DD', '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E9'
+];
+
+function getZombieStats(lvl) {
+  if (lvl <= 5) {
+    return { health: 4 + lvl, speed: 1.5 };
+  }
+  return { health: 12 + lvl, speed: 1.3 };
+}
+
+module.exports = {
+  PORT, WORLD_W, WORLD_H, VIEW_W, VIEW_H, VIEW_MARGIN,
+  PLAYER_RADIUS, MAX_PLAYERS, TICK_MS, BROADCAST_MS,
+  BASE_SPEED, BASE_ATTACK_DMG, BASE_ATTACK_SPEED_MS, BASE_HEALTH,
+  ATTACK_RANGE, ATTACK_KNOCKBACK, ZOMBIE_COUNT, ZOMBIE_RADIUS,
+  ZOMBIE_SPEED, ZOMBIE_HEALTH, ZOMBIE_DAMAGE, ZOMBIE_MARGIN,
+  ATTACK_SPEED_MULT, SPAWN_MIN_DIST, COLORS,
+  ITEMS, ANIMATIONS, BLADE_TIP_X, BLADE_TIP_Y, BLADE_HILT_X, BLADE_HILT_Y,
+  getZombieStats
+};

@@ -685,8 +685,11 @@ function render() {
   // Interpolation: render ~one snapshot interval behind for smooth motion.
   // If a snapshot is overdue (network/server jitter), extrapolate remote
   // entities up to ~100ms past the last target instead of freezing in place.
-  let interval = snapshotTime - prevSnapshotTime;
-  if (interval <= 0) interval = 16;
+  // Interpolation interval = the server's BROADCAST cadence (from emitTimes),
+  // NOT the arrival delta. Burst-released packets collapse the arrival delta to
+  // ~ms while the position delta stays a full step — that mismatch scaled
+  // entities off-screen (the "zoom-out" glitch). Broadcast cadence is jitter-immune.
+  let interval = (lastSrvInterval >= 30 && lastSrvInterval <= 200) ? lastSrvInterval : 66;
   let alpha = (performance.now() - snapshotTime) / interval;
   const alphaCap = 1 + 150 / interval; // glide through ~150ms of network jitter
   if (alpha > alphaCap) alpha = alphaCap; else if (alpha < 0) alpha = 0;
