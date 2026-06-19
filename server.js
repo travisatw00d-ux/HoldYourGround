@@ -1,5 +1,8 @@
 const express = require('express');
 const http = require('http');
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
 const { Server } = require('socket.io');
 const { ITEMS, ANIMATIONS, SWORD_IMG_SIZE, BLADE_TIP_X, BLADE_TIP_Y, BLADE_HILT_X, BLADE_HILT_Y } = require('./public/shared/data.js');
 
@@ -12,6 +15,7 @@ const VIEW_MARGIN = 300;
 const PLAYER_RADIUS = 20;
 const MAX_PLAYERS = 10;
 const TICK_MS = 1000 / 30;
+const BROADCAST_MS = 55; // network broadcast rate (~18 Hz), decoupled from the 30 Hz sim
 
 // ──── BALANCE CONFIG (edit & restart server) ────
 const BASE_SPEED = 13;
@@ -20,7 +24,7 @@ const BASE_ATTACK_SPEED_MS = 800;
 const BASE_HEALTH = 100;
 const ATTACK_RANGE = 35;
 const ATTACK_KNOCKBACK = 6;
-const ZOMBIE_COUNT = 60;
+const ZOMBIE_COUNT = 100;
 const ZOMBIE_RADIUS = 20;
 const ZOMBIE_SPEED = 1.5;
 const ZOMBIE_HEALTH = 5;
@@ -40,14 +44,44 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: ["https://iolegends.com", "https://www.iolegends.com"],
-    credentials: true
-  }
+    origin: true,           // frontend is served from Cloudflare; allow its origin
+    credentials: false
+  },
+  // Small frequent realtime packets: skip per-packet compression (lower CPU + latency)
+  httpCompression: false,
+  pingInterval: 10000,
+  pingTimeout: 5000
 });
 
-app.use(express.static('public'));
+// ──── Content-hashed assets ────
+// Asset URLs include a hash of the file contents, computed at startup. Every code
+// change → new URL, so no browser/CDN/proxy cache can ever serve a stale copy.
+// A client-side /version poll auto-reloads players when a new build lands.
+const publicDir = path.join(__dirname, 'public');
+function hashOf(rel) {
+  return crypto.createHash('md5').update(fs.readFileSync(path.join(publicDir, rel))).digest('hex').slice(0, 8);
+}
+const GAME_HASH = hashOf('game.js');
+const DATA_HASH = hashOf('shared/data.js');
+const BUILD_TAG = GAME_HASH;
+
+// Templated index.html: inject window.BUILD + hashed asset URLs + an always-visible
+// build tag (DOM, not canvas) so the version is provable on the menu AND in-game.
+const indexHtml = fs.readFileSync(path.join(publicDir, 'index.html'), 'utf8')
+  .replace('<body>', `<body><div id="btag" style="position:fixed;left:4px;bottom:2px;font:10px monospace;color:rgba(255,255,255,0.55);z-index:9999;pointer-events:none;">b${BUILD_TAG}</div>`)
+  .replace('<script src="/shared/data.js?v=2"></script>', `<script>window.BUILD='${BUILD_TAG}';</script><script src="/data-${DATA_HASH}.js"></script>`)
+  .replace('<script src="game.js?v=7"></script>', `<script src="/game-${GAME_HASH}.js"></script>`);
+
+app.get('/', (req, res) => { res.set('Cache-Control', 'no-store'); res.type('html').send(indexHtml); });
+app.get(`/game-${GAME_HASH}.js`, (req, res) => { res.set('Cache-Control', 'public, max-age=31536000, immutable'); res.sendFile(path.join(publicDir, 'game.js')); });
+app.get(`/data-${DATA_HASH}.js`, (req, res) => { res.set('Cache-Control', 'public, max-age=31536000, immutable'); res.sendFile(path.join(publicDir, 'shared/data.js')); });
+app.get('/version', (req, res) => { res.set('Cache-Control', 'no-store'); res.send(BUILD_TAG); });
+
+// Other static assets (css, sprites, tool pages) — never cached, always revalidate.
+app.use(express.static('public', { setHeaders: (res) => { res.set('Cache-Control', 'no-store'); } }));
 app.use('/images', express.static('images'));
 app.get('/health', (req, res) => res.send('OK'));
+console.log(`[build] game=${GAME_HASH} data=${DATA_HASH} build=${BUILD_TAG}`);
 
 const COLORS = [
   '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7',
@@ -57,6 +91,8 @@ const COLORS = [
 let players = {};
 let zombies = [];
 let colorIndex = 0;
+let lastBroadcast = 0;
+let lastTickMs = 0;
 
 function randomSpawn(minDist) {
   const margin = PLAYER_RADIUS * 4;
@@ -157,7 +193,7 @@ function initZombies() {
     const sp = randomZombieSpawn();
     const st = getZombieStats(1);
     zombies.push({
-      id: `zombie_${i}`,
+      id: i,
       x: sp.x, y: sp.y,
       alive: true,
       health: st.health, maxHealth: st.health,
@@ -165,16 +201,20 @@ function initZombies() {
       speed: st.speed,
       headingtoward: '',
       headingAngle: 0,
-      isStray: Math.random() < 0.2,
-      strayCalled: false,
+      targetPlayerId: null,
+      recalcTimer: Math.floor(Math.random() * 90),
       lvl: 1
     });
   }
 }
 
+function animTotal(anim) {
+  return anim._total || (anim._total = anim.segments.reduce((a, b) => a + b, 0));
+}
+
 function interpHitbox(anim, cf) {
   const { keyframes, segments } = anim;
-  const total = segments.reduce((a, b) => a + b, 0);
+  const total = animTotal(anim);
   const clamped = Math.max(0, Math.min(cf, total - 1));
   let accum = 0;
   for (let i = 0; i < segments.length; i++) {
@@ -205,7 +245,7 @@ function distToSegSq(px, py, ax, ay, bx, by) {
 }
 
 function checkSwordHit(p) {
-  const totalFrames = p.attackAnim.segments.reduce((a, b) => a + b, 0);
+  const totalFrames = animTotal(p.attackAnim);
   const totalTicks = Math.ceil(totalFrames / (2 * ATTACK_SPEED_MULT));
   const currentCf = Math.min(Math.floor((p.attackFrame / totalTicks) * totalFrames), totalFrames - 1);
   const bladeW = 12;
@@ -285,59 +325,160 @@ function checkSwordHit(p) {
   }
 }
 
-// Simple spatial hash grid for O(n) neighbor lookups
+// Flat-array spatial grid (bounded world): integer indexing, no string keys,
+// and per-grid reused scratch arrays so neighbor queries allocate nothing.
 class SpatialGrid {
-  constructor(cellSize) {
+  constructor(cellSize, worldW, worldH) {
     this.cellSize = cellSize;
-    this.zombieCells = new Map();
-    this.playerCells = new Map();
-  }
-
-  _key(x, y) {
-    return `${Math.floor(x / this.cellSize)},${Math.floor(y / this.cellSize)}`;
+    this.cols = Math.ceil(worldW / cellSize) + 1;
+    this.rows = Math.ceil(worldH / cellSize) + 1;
+    this.count = this.cols * this.rows;
+    this.zombieCells = new Array(this.count);
+    this.playerCells = new Array(this.count);
+    for (let i = 0; i < this.count; i++) {
+      this.zombieCells[i] = [];
+      this.playerCells[i] = [];
+    }
+    this.playerScratch = [];
+    this.zombieScratch = [];
   }
 
   clear() {
-    this.zombieCells.clear();
-    this.playerCells.clear();
+    const zc = this.zombieCells, pc = this.playerCells, n = this.count;
+    for (let i = 0; i < n; i++) { zc[i].length = 0; pc[i].length = 0; }
+  }
+
+  clearZombies() {
+    const zc = this.zombieCells, n = this.count;
+    for (let i = 0; i < n; i++) zc[i].length = 0;
   }
 
   insertZombie(z) {
-    const k = this._key(z.x, z.y);
-    let arr = this.zombieCells.get(k);
-    if (!arr) { arr = []; this.zombieCells.set(k, arr); }
-    arr.push(z);
+    const c = this.cols, cs = this.cellSize, rows = this.rows;
+    let cx = (z.x / cs) | 0; if (cx < 0) cx = 0; else if (cx >= c) cx = c - 1;
+    let cy = (z.y / cs) | 0; if (cy < 0) cy = 0; else if (cy >= rows) cy = rows - 1;
+    this.zombieCells[cy * c + cx].push(z);
   }
 
   insertPlayer(p) {
-    const k = this._key(p.x, p.y);
-    let arr = this.playerCells.get(k);
-    if (!arr) { arr = []; this.playerCells.set(k, arr); }
-    arr.push(p);
+    const c = this.cols, cs = this.cellSize, rows = this.rows;
+    let cx = (p.x / cs) | 0; if (cx < 0) cx = 0; else if (cx >= c) cx = c - 1;
+    let cy = (p.y / cs) | 0; if (cy < 0) cy = 0; else if (cy >= rows) cy = rows - 1;
+    this.playerCells[cy * c + cx].push(p);
   }
 
-  _getNearby(cells, x, y) {
-    const cx = Math.floor(x / this.cellSize);
-    const cy = Math.floor(y / this.cellSize);
-    const result = [];
-    for (let dx = -1; dx <= 1; dx++) {
-      for (let dy = -1; dy <= 1; dy++) {
-        const k = `${cx + dx},${cy + dy}`;
-        const cell = cells.get(k);
-        if (cell) { for (let i = 0; i < cell.length; i++) result.push(cell[i]); }
+  _query(cells, x, y, result) {
+    result.length = 0;
+    const c = this.cols, cs = this.cellSize, rows = this.rows;
+    let cx = (x / cs) | 0; if (cx < 0) cx = 0; else if (cx >= c) cx = c - 1;
+    let cy = (y / cs) | 0; if (cy < 0) cy = 0; else if (cy >= rows) cy = rows - 1;
+    const x0 = cx - 1 < 0 ? 0 : cx - 1;
+    const x1 = cx + 1 >= c ? c - 1 : cx + 1;
+    const y0 = cy - 1 < 0 ? 0 : cy - 1;
+    const y1 = cy + 1 >= rows ? rows - 1 : cy + 1;
+    for (let yy = y0; yy <= y1; yy++) {
+      const base = yy * c;
+      for (let xx = x0; xx <= x1; xx++) {
+        const cell = cells[base + xx];
+        for (let i = 0, n = cell.length; i < n; i++) result.push(cell[i]);
       }
     }
     return result;
   }
 
-  getNearbyZombies(x, y) { return this._getNearby(this.zombieCells, x, y); }
-  getNearbyPlayers(x, y) { return this._getNearby(this.playerCells, x, y); }
+  getNearbyZombies(x, y) { return this._query(this.zombieCells, x, y, this.zombieScratch); }
+  getNearbyPlayers(x, y) { return this._query(this.playerCells, x, y, this.playerScratch); }
 }
 
-let zombieAIStep = 0;
-const grid = new SpatialGrid(120);
-const playerSnapPool = [];
-const zombieSnapPool = [];
+const grid = new SpatialGrid(120, WORLD_W, WORLD_H);
+const mergeToRemove = new Set();
+let zombieIdCounter = 100000;
+function nextZombieId() { return zombieIdCounter++; }
+
+// ──── Binary state protocol ────
+// One compact Buffer per viewer per broadcast instead of a large JSON object.
+// Little-endian. Layout:
+//   header: u8 ver | u16 arenaW | u16 arenaH | u16 serverLevel | u8 playerCount | u16 zombieCount
+//   per player: u8 idLen | id bytes | f32 x | f32 y | i16 health | u8 alive | u8 attacking |
+//               f32 facingAngle | f32 attackLockedAngle | f64 attackStartTime | i16 kills | u8 lvl
+//   per zombie: i32 id | f32 x | f32 y | i16 health | f32 headingAngle | u8 lvl | u8 alive
+function buildPlayerBlock(list) {
+  let size = 0;
+  for (let i = 0; i < list.length; i++) size += 1 + Buffer.byteLength(list[i].id, 'utf8') + 31;
+  const buf = Buffer.allocUnsafe(size);
+  let o = 0;
+  for (let i = 0; i < list.length; i++) {
+    const p = list[i];
+    const idBytes = Buffer.from(p.id, 'utf8');
+    buf[o++] = idBytes.length;
+    idBytes.copy(buf, o); o += idBytes.length;
+    buf.writeFloatLE(p.x, o); o += 4;
+    buf.writeFloatLE(p.y, o); o += 4;
+    buf.writeInt16LE(Math.round(p.health), o); o += 2;
+    buf[o++] = p.alive ? 1 : 0;
+    buf[o++] = p.attacking ? 1 : 0;
+    buf.writeFloatLE(p.facingAngle || 0, o); o += 4;
+    buf.writeFloatLE(p.attackLockedAngle || 0, o); o += 4;
+    buf.writeDoubleLE(p.attackStartTime || 0, o); o += 8;
+    buf.writeInt16LE(p.kills || 0, o); o += 2;
+    buf[o++] = p.lvl || 1;
+  }
+  return buf;
+}
+
+function buildStateBuffer(playerBlock, playerCount, serverLevel, viewZombies, emitTime) {
+  const zCount = viewZombies.length;
+  const buf = Buffer.allocUnsafe(18 + playerBlock.length + zCount * 20);
+  let o = 0;
+  buf[o++] = 1;
+  buf.writeDoubleLE(emitTime, o); o += 8;
+  buf.writeUInt16LE(WORLD_W, o); o += 2;
+  buf.writeUInt16LE(WORLD_H, o); o += 2;
+  buf.writeUInt16LE(serverLevel, o); o += 2;
+  buf[o++] = playerCount;
+  buf.writeUInt16LE(zCount, o); o += 2;
+  playerBlock.copy(buf, o); o += playerBlock.length;
+  for (let i = 0; i < zCount; i++) {
+    const z = viewZombies[i];
+    buf.writeInt32LE(z.id, o); o += 4;
+    buf.writeFloatLE(z.x, o); o += 4;
+    buf.writeFloatLE(z.y, o); o += 4;
+    buf.writeInt16LE(Math.round(z.health), o); o += 2;
+    buf.writeFloatLE(z.headingAngle || 0, o); o += 4;
+    buf[o++] = z.lvl || 1;
+    buf[o++] = z.alive ? 1 : 0;
+  }
+  return buf;
+}
+
+function playerInfoObj(p) {
+  return {
+    id: p.id, name: p.name, color: p.color,
+    currentItem: p.currentItem, inventory: p.inventory,
+    maxHealth: p.maxHealth, speed: p.speed, attackDmg: p.attackDmg, attackSpeed: p.attackSpeed,
+    lvl: p.lvl || 1
+  };
+}
+
+function recalcZombieTarget(z) {
+  let closestP = null, closestD2 = Infinity;
+  for (const id in players) {
+    const p = players[id];
+    if (!p.alive) continue;
+    const dx = p.x - z.x, dy = p.y - z.y;
+    const d2 = dx * dx + dy * dy;
+    if (d2 < closestD2) { closestD2 = d2; closestP = p; }
+  }
+  if (closestP) {
+    z.targetPlayerId = closestP.id;
+    z.headingtoward = closestP.name || closestP.id;
+    z.headingAngle = Math.atan2(closestP.y - z.y, closestP.x - z.x);
+  }
+}
+
+function recalcAllZombieTargets() {
+  for (const z of zombies) { if (z.alive) recalcZombieTarget(z); }
+}
 function gameTick() {
   const tickStart = Date.now();
   const ids = Object.keys(players);
@@ -371,53 +512,21 @@ function gameTick() {
   for (const z of zombies) { if (z.alive) grid.insertZombie(z); }
   for (const id in players) { const p = players[id]; if (p.alive) grid.insertPlayer(p); }
 
-  // staggered zombie target search using spatial grid (groups of 20, each group searches every 5th tick)
-  const AI_GROUP_SIZE = 20;
-  const searchStart = (zombieAIStep % 5) * AI_GROUP_SIZE;
-  const searchEnd = Math.min(searchStart + AI_GROUP_SIZE, zombies.length);
-  for (let i = searchStart; i < searchEnd; i++) {
-    const z = zombies[i];
+  // Periodic zombie target recalculation: far zombies every 90 ticks (3s), close ones every 15 ticks (0.5s)
+  for (const z of zombies) {
     if (!z.alive) continue;
-    let target = null;
-
-    if (z.isStray) {
-      const nearby = grid.getNearbyZombies(z.x, z.y);
-      let closestD2 = Infinity;
-      for (const other of nearby) {
-        if (other.id === z.id || !other.alive) continue;
-        const dx = other.x - z.x, dy = other.y - z.y;
-        const d2 = dx * dx + dy * dy;
-        if (d2 < closestD2) { closestD2 = d2; target = other; }
+    z.recalcTimer--;
+    if (z.recalcTimer <= 0) {
+      recalcZombieTarget(z);
+      if (z.targetPlayerId && players[z.targetPlayerId] && players[z.targetPlayerId].alive) {
+        const tp = players[z.targetPlayerId];
+        const dx = z.x - tp.x, dy = z.y - tp.y;
+        z.recalcTimer = (dx * dx + dy * dy) < 700 * 700 ? 15 : 90;
+      } else {
+        z.recalcTimer = 90;
       }
-    } else if (z.strayCalled) {
-      const nearby = grid.getNearbyZombies(z.x, z.y);
-      let closestD2 = Infinity;
-      for (const other of nearby) {
-        if (other.id === z.id || !other.alive || !other.isStray) continue;
-        const dx = other.x - z.x, dy = other.y - z.y;
-        const d2 = dx * dx + dy * dy;
-        if (d2 < closestD2) { closestD2 = d2; target = other; }
-      }
-    }
-
-    if (!target) {
-      const nearby = grid.getNearbyPlayers(z.x, z.y);
-      let closestD2 = Infinity;
-      for (const p of nearby) {
-        if (!p.alive) continue;
-        const dx = p.x - z.x, dy = p.y - z.y;
-        const d2 = dx * dx + dy * dy;
-        if (d2 < closestD2) { closestD2 = d2; target = p; }
-      }
-    }
-
-    if (target) {
-      z.headingtoward = target.name || target.id || '';
-      z.headingAngle = Math.atan2(target.y - z.y, target.x - z.x);
-      if (z.isStray && target.isStray !== undefined) target.strayCalled = true;
     }
   }
-  zombieAIStep++;
 
   // movement for ALL zombies every tick
   for (const z of zombies) {
@@ -431,7 +540,7 @@ function gameTick() {
   }
 
   // Rebuild zombie grid after movement for accurate contact-damage / merge checks
-  grid.zombieCells.clear();
+  grid.clearZombies();
   for (const z of zombies) { if (z.alive) grid.insertZombie(z); }
 
   // contact damage: each zombie checks nearby players via grid
@@ -500,7 +609,7 @@ function gameTick() {
     if (!p.alive || !p.attacking) continue;
     checkSwordHit(p);
     p.attackFrame++;
-    const totalFrames = p.attackAnim.segments.reduce((a, b) => a + b, 0);
+    const totalFrames = animTotal(p.attackAnim);
     const totalTicks = Math.ceil(totalFrames / (2 * ATTACK_SPEED_MULT));
     if (p.attackFrame >= totalTicks) {
       p.attacking = false;
@@ -512,9 +621,10 @@ function gameTick() {
   }
 
   // zombie-zombie collision → merge (spatial grid, avoids O(n²))
-  const mergeToRemove = new Set();
+  mergeToRemove.clear();
+  let mergeCount = 0;
   for (const z of zombies) {
-    if (!z.alive || mergeToRemove.has(z.id)) continue;
+    if (!z.alive || mergeToRemove.has(z.id) || mergeCount >= 8) continue;
     const nearby = grid.getNearbyZombies(z.x, z.y);
     for (const other of nearby) {
       if (other.id === z.id || !other.alive || mergeToRemove.has(other.id)) continue;
@@ -533,32 +643,43 @@ function gameTick() {
           hpPct = higher.health / higher.maxHealth;
         }
         zombies.push({
-          id: `zombie_${Date.now()}_${Math.random()}`,
+          id: nextZombieId(),
           x: mx, y: my, alive: true,
           health: Math.max(1, Math.round(st.health * hpPct)),
           maxHealth: st.health,
           radius: ZOMBIE_RADIUS, speed: st.speed,
           headingtoward: '', headingAngle: 0,
-          isStray: (z.isStray || other.isStray) ? Math.random() < 0.5 : false, strayCalled: false, lvl: newLvl
+          targetPlayerId: null,
+          recalcTimer: Math.floor(Math.random() * 90),
+          lvl: newLvl
         });
         io.emit('zombieMerge', { x: mx, y: my });
+        mergeCount++;
         break;
       }
     }
   }
-  zombies = zombies.filter(z => !mergeToRemove.has(z.id));
+  if (mergeToRemove.size > 0) {
+    let w = 0;
+    for (let r = 0; r < zombies.length; r++) {
+      if (!mergeToRemove.has(zombies[r].id)) zombies[w++] = zombies[r];
+    }
+    zombies.length = w;
+  }
 
   // ensure exactly 100 zombies
   while (zombies.length < ZOMBIE_COUNT) {
     const sp = randomZombieSpawn();
     const st = getZombieStats(1);
     zombies.push({
-      id: `zombie_${Date.now()}_${Math.random()}`,
+      id: nextZombieId(),
       x: sp.x, y: sp.y, alive: true,
       health: st.health, maxHealth: st.health,
       radius: ZOMBIE_RADIUS, speed: st.speed,
       headingtoward: '', headingAngle: 0,
-      isStray: Math.random() < 0.2, strayCalled: false, lvl: 1
+      targetPlayerId: null,
+      recalcTimer: Math.floor(Math.random() * 90),
+      lvl: 1
     });
   }
 
@@ -573,90 +694,72 @@ function gameTick() {
       z.speed = st.speed;
       z.lvl = 1;
       z.headingAngle = 0;
-      z.isStray = Math.random() < 0.2;
-      z.strayCalled = false;
       z.alive = true;
+      recalcZombieTarget(z);
+      z.recalcTimer = Math.floor(Math.random() * 90);
     }
   }
 
-  // Reusable snapshot pools — avoids allocating new objects every tick
-  let snapIdx = 0;
+  // Network broadcast is decoupled from the 30 Hz sim: only serialize/emit at
+  // ~BROADCAST_MS intervals. The simulation above still runs every tick.
+  if (tickStart - lastBroadcast < BROADCAST_MS) return;
+  lastBroadcast = tickStart;
 
+  // Shared player list + server level (computed once, reused for every viewer).
+  const playerList = [];
+  let serverLevelSum = 0;
   for (const id in players) {
     const p = players[id];
-    let s;
-    if (snapIdx < playerSnapPool.length) {
-      s = playerSnapPool[snapIdx];
-    } else {
-      s = {};
-      playerSnapPool.push(s);
-    }
-    s.id = p.id; s.x = p.x; s.y = p.y;
-    s.name = p.name; s.color = p.color;
-    s.alive = p.alive; s.kills = p.kills;
-    s.health = p.health; s.maxHealth = p.maxHealth;
-    s.speed = p.speed; s.attackDmg = p.attackDmg; s.attackSpeed = p.attackSpeed;
-    s.facingAngle = p.facingAngle;
-    s.attacking = p.attacking;
-    s.attackStartTime = p.attackStartTime;
-    s.attackLockedAngle = p.attackLockedAngle;
-    s.currentItem = p.currentItem;
-    s.inventory = p.inventory;
-    s.lvl = p.lvl || 1;
-    snapIdx++;
+    serverLevelSum += p.lvl || 1;
+    playerList.push(p);
   }
-  playerSnapPool.length = snapIdx;
+  const playerBlock = buildPlayerBlock(playerList);
+  const currentServerLevel = serverLevelSum;
 
-  const currentServerLevel = Object.values(players).reduce((sum, p) => sum + (p.lvl || 1), 0);
-
-  // Per-player view-culled state: each client only receives zombies near their viewport
-  let zSnapIdx = 0;
+  // Per-player view-culled binary state. Smaller packets => far less TCP
+  // head-of-line blocking jitter on lossy links.
+  const halfVW = VIEW_W / 2 + VIEW_MARGIN;
+  const halfVH = VIEW_H / 2 + VIEW_MARGIN;
+  const emitTime = Date.now();
   for (const id in players) {
     const p = players[id];
     if (!p) continue;
-
-    const halfVW = VIEW_W / 2 + VIEW_MARGIN;
-    const halfVH = VIEW_H / 2 + VIEW_MARGIN;
-
-    zSnapIdx = 0;
-    for (const z of zombies) {
+    const viewZ = [];
+    for (let i = 0; i < zombies.length; i++) {
+      const z = zombies[i];
       if (!z.alive) continue;
-      const dzx = Math.abs(z.x - p.x);
-      const dzy = Math.abs(z.y - p.y);
-      if (dzx > halfVW || dzy > halfVH) continue;
-      let s;
-      if (zSnapIdx < zombieSnapPool.length) {
-        s = zombieSnapPool[zSnapIdx];
-      } else {
-        s = {};
-        zombieSnapPool.push(s);
-      }
-      s.id = z.id; s.x = z.x; s.y = z.y;
-      s.alive = z.alive;
-      s.health = z.health; s.maxHealth = z.maxHealth;
-      s.headingtoward = z.headingtoward;
-      s.headingAngle = z.headingAngle || 0;
-      s.isStray = !!z.isStray;
-      s.strayCalled = !!z.strayCalled;
-      s.lvl = z.lvl || 1;
-      zSnapIdx++;
+      const dzx = z.x - p.x; if (dzx < -halfVW || dzx > halfVW) continue;
+      const dzy = z.y - p.y; if (dzy < -halfVH || dzy > halfVH) continue;
+      viewZ.push(z);
     }
-    zombieSnapPool.length = zSnapIdx;
-
-    io.to(id).emit('state', {
-      arenaWidth: WORLD_W,
-      arenaHeight: WORLD_H,
-      serverLevel: currentServerLevel,
-      players: playerSnapPool.slice(0, snapIdx),
-      zombies: zombieSnapPool.slice(0, zSnapIdx)
-    });
+    // volatile: if this client can't keep up, drop stale state instead of buffering
+    io.to(id).volatile.emit('state', buildStateBuffer(playerBlock, playerList.length, currentServerLevel, viewZ, emitTime));
   }
   const tickMs = Date.now() - tickStart;
+  lastTickMs = tickMs;
   if (tickMs > 30) console.log(`tick=${tickMs}ms players=${ids.length} zombies=${zombies.length}`);
 }
 
 initZombies();
-setInterval(gameTick, TICK_MS);
+// Drift-compensating fixed-timestep loop: holds a true 30 Hz sim even under
+// event-loop jitter, catching up (bounded) if a tick runs late instead of
+// silently slowing down like setInterval does.
+let nextTickAt = Date.now();
+const MAX_TICKS_PER_WAKE = 5;
+function tickLoop() {
+  const now = Date.now();
+  let steps = 0;
+  while (now >= nextTickAt && steps < MAX_TICKS_PER_WAKE) {
+    gameTick();
+    nextTickAt += TICK_MS;
+    steps++;
+  }
+  if (Date.now() - nextTickAt > TICK_MS * MAX_TICKS_PER_WAKE) {
+    nextTickAt = Date.now(); // fell too far behind — resync, don't spiral
+  }
+  setTimeout(tickLoop, Math.max(0, nextTickAt - Date.now()));
+}
+setTimeout(tickLoop, TICK_MS);
 
 io.on('connection', (socket) => {
   console.log(`[${socket.id}] connected`);
@@ -667,8 +770,15 @@ io.on('connection', (socket) => {
       return;
     }
     addPlayer(socket.id, name);
+    recalcAllZombieTargets();
     console.log(`[${socket.id}] joined as "${players[socket.id].name}"`);
     socket.emit('init', { id: socket.id, arenaWidth: WORLD_W, arenaHeight: WORLD_H });
+    // Send identity/stats for everyone (rare meta channel) so the client can
+    // merge them with the binary state stream.
+    for (const oid in players) {
+      socket.emit('playerInfo', playerInfoObj(players[oid]));
+    }
+    io.to(socket.id).emit('playerInfo', playerInfoObj(players[socket.id]));
     socket.emit('joined');
   });
 
@@ -705,12 +815,17 @@ io.on('connection', (socket) => {
     if (slot >= 0 && slot < p.inventory.length) {
       p.currentItem = p.inventory[slot];
       recalcStats(p);
+      io.emit('playerInfo', playerInfoObj(p));
     }
   });
+
+  // Diagnostics echo (round-trip latency for the client overlay)
+  socket.on('diagPing', (t) => socket.emit('diagPong', { t, tickMs: lastTickMs }));
 
   socket.on('disconnect', () => {
     console.log(`[${socket.id}] disconnected`);
     delete players[socket.id];
+    io.emit('playerLeft', socket.id);
   });
 });
 

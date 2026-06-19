@@ -23,6 +23,6 @@ primary_region = 'ord'
     path = '/health'
 
 [[vm]]
-  memory = '4gb'
+  memory = '2gb'
   cpu_kind = 'performance'
-  cpus = 2
+  cpus = 1

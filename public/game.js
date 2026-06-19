@@ -1,3 +1,4 @@
+console.log('[HYG client v6 loaded]');
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
 
@@ -6,18 +7,36 @@ const VH = 600;
 canvas.width = VW;
 canvas.height = VH;
 
-let socket = io();
+let socket = io('wss://server.iolegends.com', { transports: ['websocket'] });
+
+// Self-healing: poll the server's build tag; if it changed (new deploy), auto-reload
+// so this client can never get stuck on stale code.
+const MY_BUILD = window.BUILD || '';
+setInterval(() => {
+  fetch('/version', { cache: 'no-store' }).then(r => r.text()).then(t => {
+    const v = t.trim();
+    if (MY_BUILD && v !== MY_BUILD) {
+      console.log('[HYG] new build ' + v + ' (was ' + MY_BUILD + '), reloading');
+      location.reload();
+    }
+  }).catch(() => {});
+}, 8000);
+
+const textDecoder = new TextDecoder();
+function zombieMaxHealth(lvl) { return lvl <= 5 ? 4 + lvl : 12 + lvl; }
 
 let myId = null;
 let worldW = 0;
 let worldH = 0;
 let players = {};
+let playerMeta = {};
 let zombies = [];
 let screen = 'menu';
 let backgroundCanvas = null;
 
 let animFrame = null;
 let inputInterval = null;
+let diagPingInterval = null;
 
 let hitFlash = 0;
 let mouseX = 0;
@@ -27,6 +46,22 @@ let debugHitbox = false;
 let dmgNumbers = [];
 let mergeSmokes = [];
 let serverLevel = 0;
+let lbSig = '';
+let hotSig = '';
+let snapshotTime = 0;
+let prevSnapshotTime = 0;
+
+// Diagnostics overlay (toggle with F)
+let showDiag = true;
+let fpsFrames = 0, fpsLast = 0, fpsValue = 0, frameTimeMs = 0;
+let ping = 0;
+let maxPing = 0, maxPingAt = 0, maxFrameMs = 0, maxFrameAt = 0;
+let lastStateAt = 0, lastArrival = 0, maxArrival = 0, maxArrivalAt = 0;
+let lastEmitTime = 0, lastSrvInterval = 0, maxSrvInterval = 0, maxSrvAt = 0;
+let lastRAF = 0, maxFrameGap = 0, maxFrameGapAt = 0;
+let lastPacketBytes = 0;
+let pktCounter = 0;
+let levelGrad = null;
 
 const swordImg = new Image();
 swordImg.src = '/images/woodensword.png';
@@ -51,6 +86,27 @@ zombieT2LeftHandImg.src = '/images/T2zombielefthand.png';
 
 const zombieT2RightHandImg = new Image();
 zombieT2RightHandImg.src = '/images/T2zombierighthand.png';
+
+// Pre-render each sprite to a small offscreen canvas (2x supersampled) so the
+// hot loop blits a tiny canvas instead of resampling a full-res image every draw.
+const spriteCache = new WeakMap();
+function getSprite(img, w, h) {
+  w = Math.max(1, Math.round(w * 2) / 2);
+  h = Math.max(1, Math.round(h * 2) / 2);
+  let inner = spriteCache.get(img);
+  if (!inner) { inner = new Map(); spriteCache.set(img, inner); }
+  const key = w + 'x' + h;
+  let sc = inner.get(key);
+  if (!sc) {
+    const m = 2;
+    sc = document.createElement('canvas');
+    sc.width = Math.round(w * m);
+    sc.height = Math.round(h * m);
+    sc.getContext('2d').drawImage(img, 0, 0, sc.width, sc.height);
+    inner.set(key, sc);
+  }
+  return sc;
+}
 
 const menu = document.getElementById('menu');
 const eliminated = document.getElementById('eliminated');
@@ -133,19 +189,115 @@ socket.on('joined', () => {
   startRender();
 });
 
-socket.on('state', (data) => {
+socket.on('state', (msg) => {
+  // Binary state protocol (see server.js buildStateBuffer). Little-endian.
+  // Normalize whether Socket.io delivers an ArrayBuffer or a typed-array view.
+  const u8 = msg instanceof ArrayBuffer ? new Uint8Array(msg)
+    : new Uint8Array(msg.buffer, msg.byteOffset, msg.byteLength);
+  const dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+  let o = 0;
+  /* const version = */ dv.getUint8(o); o += 1;
+  const emitTime = dv.getFloat64(o, true); o += 8;
+  const arenaW = dv.getUint16(o, true); o += 2;
+  const arenaH = dv.getUint16(o, true); o += 2;
+  const sLevel = dv.getUint16(o, true); o += 2;
+  const playerCount = dv.getUint8(o); o += 1;
+  const zombieCount = dv.getUint16(o, true); o += 2;
+
+  // decode players, merge cached identity/stats, carry prev position for interp
+  const oldP = players;
   const map = {};
-  for (const p of data.players) {
-    map[p.id] = p;
+  for (let i = 0; i < playerCount; i++) {
+    const idLen = dv.getUint8(o); o += 1;
+    const id = textDecoder.decode(u8.subarray(o, o + idLen)); o += idLen;
+    const x = dv.getFloat32(o, true); o += 4;
+    const y = dv.getFloat32(o, true); o += 4;
+    const health = dv.getInt16(o, true); o += 2;
+    const alive = dv.getUint8(o) === 1; o += 1;
+    const attacking = dv.getUint8(o) === 1; o += 1;
+    const facingAngle = dv.getFloat32(o, true); o += 4;
+    const attackLockedAngle = dv.getFloat32(o, true); o += 4;
+    const attackStartTime = dv.getFloat64(o, true); o += 8;
+    const kills = dv.getInt16(o, true); o += 2;
+    const lvl = dv.getUint8(o); o += 1;
+
+    const old = oldP[id];
+    const meta = playerMeta[id] || {};
+    const p = {
+      id, x, y, health, alive, attacking, facingAngle, attackLockedAngle, attackStartTime, kills, lvl,
+      name: meta.name || 'Player',
+      color: meta.color || '#888888',
+      currentItem: meta.currentItem || 'wooden_sword',
+      inventory: meta.inventory || ['wooden_sword'],
+      maxHealth: meta.maxHealth || 100,
+      speed: meta.speed != null ? meta.speed : 13,
+      attackDmg: meta.attackDmg != null ? meta.attackDmg : 5,
+      attackSpeed: meta.attackSpeed != null ? meta.attackSpeed : 800
+    };
+    if (old && Math.abs(x - old.x) < 200 && Math.abs(y - old.y) < 200) {
+      p.px = old.x; p.py = old.y;
+    } else {
+      p.px = x; p.py = y;
+    }
+    map[id] = p;
   }
   players = map;
-  zombies = data.zombies || [];
-  worldW = data.arenaWidth;
-  worldH = data.arenaHeight;
-  serverLevel = data.serverLevel || 0;
+
+  // decode zombies
+  const oldZ = {};
+  for (let i = 0; i < zombies.length; i++) oldZ[zombies[i].id] = zombies[i];
+  const newZombies = [];
+  for (let i = 0; i < zombieCount; i++) {
+    const zid = dv.getInt32(o, true); o += 4;
+    const zx = dv.getFloat32(o, true); o += 4;
+    const zy = dv.getFloat32(o, true); o += 4;
+    const zhealth = dv.getInt16(o, true); o += 2;
+    const zheading = dv.getFloat32(o, true); o += 4;
+    const zlvl = dv.getUint8(o); o += 1;
+    const zalive = dv.getUint8(o) === 1; o += 1;
+    const old = oldZ[zid];
+    const maxHealth = old ? old.maxHealth : zombieMaxHealth(zlvl);
+    const z = {
+      id: zid, x: zx, y: zy, health: zhealth, maxHealth,
+      headingAngle: zheading, lvl: zlvl, alive: zalive
+    };
+    if (old && Math.abs(zx - old.x) < 200 && Math.abs(zy - old.y) < 200) {
+      z.px = old.x; z.py = old.y;
+    } else {
+      z.px = zx; z.py = zy;
+    }
+    z.label = zlvl > 1 ? 'zombie lvl ' + zlvl : 'zombie';
+    newZombies.push(z);
+  }
+  zombies = newZombies;
+
+  worldW = arenaW;
+  worldH = arenaH;
+  serverLevel = sLevel;
+  prevSnapshotTime = snapshotTime || performance.now();
+  snapshotTime = performance.now();
+  const sNow = performance.now();
+  if (lastStateAt) {
+    const delta = sNow - lastStateAt;
+    lastArrival = delta;
+    if (sNow - maxArrivalAt > 2000) { maxArrival = delta; maxArrivalAt = sNow; }
+    else if (delta > maxArrival) maxArrival = delta;
+  }
+  lastStateAt = sNow;
+  if (lastEmitTime) {
+    const ival = emitTime - lastEmitTime;
+    lastSrvInterval = ival;
+    if (sNow - maxSrvAt > 2000) { maxSrvInterval = ival; maxSrvAt = sNow; }
+    else if (ival > maxSrvInterval) maxSrvInterval = ival;
+  }
+  lastEmitTime = emitTime;
+  lastPacketBytes = u8.byteLength;
   updateLeaderboard();
   updateHotbar();
 });
+
+socket.on('playerInfo', (info) => { playerMeta[info.id] = info; });
+socket.on('playerLeft', (id) => { delete playerMeta[id]; });
 
 socket.on('eliminated', ({ kills }) => {
   stopRender();
@@ -174,6 +326,14 @@ socket.on('zombieMerge', ({ x, y }) => {
 socket.on('attackStart', ({ lockedAngle }) => {
   startAttackAnim(lockedAngle);
 });
+
+socket.on('diagPong', (t) => {
+  ping = Date.now() - t;
+  const now = performance.now();
+  if (now - maxPingAt > 2000) { maxPing = ping; maxPingAt = now; }
+  else if (ping > maxPing) maxPing = ping;
+});
+diagPingInterval = setInterval(() => { if (socket.connected) socket.emit('diagPing', Date.now()); }, 250);
 
 function startAttackAnim(lockedAngle) {
   if (localAnim) return;
@@ -205,6 +365,9 @@ document.addEventListener('keydown', (e) => {
   }
   if (e.key === 'h' || e.key === 'H') {
     debugHitbox = !debugHitbox;
+  }
+  if (e.key === 'f' || e.key === 'F') {
+    showDiag = !showDiag;
   }
 });
 
@@ -240,6 +403,10 @@ function getInput() {
 
 function updateLeaderboard() {
   const sorted = Object.values(players).sort((a, b) => b.kills - a.kills);
+  let sig = '';
+  for (let i = 0; i < sorted.length; i++) sig += sorted[i].name + ':' + sorted[i].kills + '|';
+  if (sig === lbSig) return;
+  lbSig = sig;
   let html = '';
   for (let i = 0; i < sorted.length; i++) {
     const p = sorted[i];
@@ -253,7 +420,10 @@ function updateLeaderboard() {
 
 function updateHotbar() {
   const me = players[myId];
-  if (!me) { hotbarEl.innerHTML = ''; return; }
+  if (!me) { if (hotSig !== '') { hotSig = ''; hotbarEl.innerHTML = ''; } return; }
+  const sig = me.currentItem + '|' + (me.inventory ? me.inventory.join(',') : '');
+  if (sig === hotSig) return;
+  hotSig = sig;
   let html = '';
   for (let i = 0; i < me.inventory.length; i++) {
     const itemKey = me.inventory[i];
@@ -270,13 +440,16 @@ function clamp(v, min, max) {
   return Math.max(min, Math.min(max, v));
 }
 
-function getCamera() {
+const _cam = { x: 0, y: 0 };
+function getCamera(alpha) {
   const me = players[myId];
-  if (!me) return { x: 0, y: 0 };
-  return {
-    x: clamp(me.x - VW / 2, 0, Math.max(0, worldW - VW)),
-    y: clamp(me.y - VH / 2, 0, Math.max(0, worldH - VH))
-  };
+  if (!me) { _cam.x = 0; _cam.y = 0; return _cam; }
+  if (alpha === undefined) alpha = 1;
+  const mx = (me.px === undefined ? me.x : me.px + (me.x - me.px) * alpha);
+  const my = (me.py === undefined ? me.y : me.py + (me.y - me.py) * alpha);
+  _cam.x = clamp(mx - VW / 2, 0, Math.max(0, worldW - VW));
+  _cam.y = clamp(my - VH / 2, 0, Math.max(0, worldH - VH));
+  return _cam;
 }
 
 // --- Render loop ---
@@ -296,13 +469,19 @@ function startRender() {
     }
   }, 50);
 
-  function loop() {
+  function loop(ts) {
     if (screen === 'playing') {
+      if (lastRAF && ts - lastRAF < 500) {
+        const gap = ts - lastRAF;
+        if (ts - maxFrameGapAt > 2000) { maxFrameGap = gap; maxFrameGapAt = ts; }
+        else if (gap > maxFrameGap) maxFrameGap = gap;
+      }
+      lastRAF = ts;
       render();
       animFrame = requestAnimationFrame(loop);
     }
   }
-  loop();
+  loop(performance.now());
 }
 
 function stopRender() {
@@ -423,7 +602,7 @@ function drawZombieHand(ctx, z, szx, szy, angle, handKey, lvl) {
   ctx.save();
   ctx.translate(szx + rx, szy + ry);
   ctx.rotate(angle + (vis.rotation || 0));
-  ctx.drawImage(img, -sw / 2, -sh / 2, sw, sh);
+  ctx.drawImage(getSprite(img, sw, sh), -sw / 2, -sh / 2, sw, sh);
   ctx.restore();
 }
 
@@ -485,19 +664,31 @@ function drawSword(ctx, p, sx, sy) {
   ctx.save();
   ctx.translate(sx + rx, sy + ry);
   ctx.rotate(angle + (vis.rotation || 0));
-  ctx.drawImage(swordImg, -sw / 2, -sh / 2, sw, sh);
+  ctx.drawImage(getSprite(swordImg, sw, sh), -sw / 2, -sh / 2, sw, sh);
   ctx.restore();
 }
 
 function render() {
   ctx.clearRect(0, 0, VW, VH);
+  const rT0 = performance.now();
 
-  const cam = getCamera();
+  // Interpolation: render ~one snapshot interval behind for smooth motion.
+  // If a snapshot is overdue (network/server jitter), extrapolate remote
+  // entities up to ~100ms past the last target instead of freezing in place.
+  let interval = snapshotTime - prevSnapshotTime;
+  if (interval <= 0) interval = 16;
+  let alpha = (performance.now() - snapshotTime) / interval;
+  const alphaCap = 1 + 150 / interval; // glide through ~150ms of network jitter
+  if (alpha > alphaCap) alpha = alphaCap; else if (alpha < 0) alpha = 0;
+
+  const cam = getCamera(alpha);
 
   // compute local facing at full frame rate from mouse (locked during attack)
   const me = players[myId];
   if (me && me.alive) {
-    const target = Math.atan2((mouseY + cam.y) - me.y, (mouseX + cam.x) - me.x);
+    const mex = me.px + (me.x - me.px) * alpha;
+    const mey = me.py + (me.y - me.py) * alpha;
+    const target = Math.atan2((mouseY + cam.y) - mey, (mouseX + cam.x) - mex);
     if (localAnim) {
       const diff = target - localAnim.lockedAngle;
       const norm = Math.atan2(Math.sin(diff), Math.cos(diff));
@@ -520,9 +711,13 @@ function render() {
   }
 
   // draw zombies
+  ctx.font = '11px "Segoe UI", system-ui, sans-serif';
+  ctx.textAlign = 'center';
   for (const z of zombies) {
     if (!z.alive) continue;
-    const szx = z.x - cam.x, szy = z.y - cam.y;
+    const zx = z.px + (z.x - z.px) * alpha;
+    const zy = z.py + (z.y - z.py) * alpha;
+    const szx = zx - cam.x, szy = zy - cam.y;
     if (szx < -40 || szx > VW + 40 || szy < -40 || szy > VH + 40) continue;
 
     // facing angle from server (computed from target direction)
@@ -537,7 +732,7 @@ function render() {
       const h = headImg.naturalHeight * sz;
       ctx.translate(szx, szy);
       ctx.rotate(zombieAngle - Math.PI / 2);
-      ctx.drawImage(headImg, -w / 2, -h / 2, w, h);
+      ctx.drawImage(getSprite(headImg, w, h), -w / 2, -h / 2, w, h);
       ctx.restore();
     }
 
@@ -545,22 +740,22 @@ function render() {
     drawZombieHand(ctx, z, szx, szy, zombieAngle, 'right_hand', z.lvl);
 
     ctx.fillStyle = '#ff6666';
-    ctx.font = '11px "Segoe UI", system-ui, sans-serif';
-    ctx.textAlign = 'center';
-    const zombieLabel = 'zombie' + (z.lvl && z.lvl > 1 ? ' lvl ' + z.lvl : '');
-    ctx.fillText(zombieLabel, szx, szy - 30);
+    ctx.fillText(z.label || 'zombie', szx, szy - 30);
     drawHealthBar(ctx, szx, szy - 24, 30, 3, z.health, z.maxHealth);
   }
 
-  const sorted = Object.values(players).sort((a, b) => b.kills - a.kills);
-  const topKills = sorted.length > 0 ? sorted[0].kills : 0;
+  let topKills = 0;
+  for (const id in players) {
+    const k = players[id].kills;
+    if (k > topKills) topKills = k;
+  }
 
   for (const id in players) {
     const p = players[id];
     if (!p.alive) continue;
 
-    const sx = p.x - cam.x;
-    const sy = p.y - cam.y;
+    const sx = (p.px + (p.x - p.px) * alpha) - cam.x;
+    const sy = (p.py + (p.y - p.py) * alpha) - cam.y;
 
     if (sx < -40 || sx > VW + 40 || sy < -40 || sy > VH + 40) continue;
 
@@ -634,9 +829,12 @@ function render() {
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.font = '32px "Lilita One", "Segoe UI", sans-serif';
-      const grad = ctx.createLinearGradient(textX, textY - 14, textX, textY + 14);
-      grad.addColorStop(0, '#ffffff');
-      grad.addColorStop(1, '#b0b0b0');
+      if (!levelGrad) {
+        levelGrad = ctx.createLinearGradient(textX, textY - 14, textX, textY + 14);
+        levelGrad.addColorStop(0, '#ffffff');
+        levelGrad.addColorStop(1, '#b0b0b0');
+      }
+      const grad = levelGrad;
       ctx.lineJoin = 'round';
       ctx.miterLimit = 2;
       // shadow
@@ -700,9 +898,60 @@ function render() {
 
   // track blade history for swept-area debug visualization
   if (me && me.alive && localAnim) {
-    const seg = getBladeSegment(me, me.x - cam.x, me.y - cam.y);
+    const mex = me.px + (me.x - me.px) * alpha;
+    const mey = me.py + (me.y - me.py) * alpha;
+    const seg = getBladeSegment(me, mex - cam.x, mey - cam.y);
     if (seg) bladeHistory = seg;
   } else if (!localAnim) {
     bladeHistory = null;
   }
+
+  // frame timing + diagnostics overlay
+  frameTimeMs = performance.now() - rT0;
+  fpsFrames++;
+  const __n = performance.now();
+  if (__n - fpsLast >= 500) {
+    fpsValue = Math.round(fpsFrames * 1000 / (__n - fpsLast));
+    fpsFrames = 0;
+    fpsLast = __n;
+  }
+  if (__n - maxFrameAt > 2000) { maxFrameMs = frameTimeMs; maxFrameAt = __n; }
+  else if (frameTimeMs > maxFrameMs) maxFrameMs = frameTimeMs;
+
+  // Always-visible build watermark (ground truth for "are you on the latest version?").
+  if (window.BUILD) {
+    ctx.font = '10px monospace';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'bottom';
+    ctx.fillStyle = 'rgba(0,0,0,0.45)';
+    ctx.fillText('b' + window.BUILD, 10, VH - 4);
+    ctx.textBaseline = 'alphabetic';
+  }
+  drawDiag();
+}
+
+function drawDiag() {
+  if (!showDiag) return;
+  ctx.save();
+  ctx.font = '11px monospace';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+  ctx.fillStyle = 'rgba(0,0,0,0.55)';
+  ctx.fillRect(6, 86, 200, 106);
+  const ftCol = frameTimeMs > 20 ? '#ff9' : '#9fe';
+  ctx.fillStyle = ftCol;
+  ctx.fillText(`fps ${fpsValue}  frame ${frameTimeMs.toFixed(1)} (max ${maxFrameMs.toFixed(0)})`, 10, 90);
+  ctx.fillStyle = ping < 80 ? '#9f9' : ping < 150 ? '#fe9' : '#f99';
+  ctx.fillText(`ping ${ping}ms (max ${maxPing}ms)`, 10, 106);
+  ctx.fillStyle = maxArrival < 100 ? '#9f9' : maxArrival < 160 ? '#fe9' : '#f99';
+  ctx.fillText(`arrival ${Math.round(lastArrival)} (max ${Math.round(maxArrival)})`, 10, 122);
+  ctx.fillStyle = maxSrvInterval < 80 ? '#9f9' : maxSrvInterval < 120 ? '#fe9' : '#f99';
+  ctx.fillText(`srv ${Math.round(lastSrvInterval)} (max ${Math.round(maxSrvInterval)})`, 10, 138);
+  ctx.fillStyle = maxFrameGap < 25 ? '#9f9' : maxFrameGap < 45 ? '#fe9' : '#f99';
+  ctx.fillText(`rafgap 17 (max ${Math.round(maxFrameGap)})`, 10, 154);
+  ctx.fillStyle = '#9fe';
+  ctx.fillText(`pkt ${(lastPacketBytes / 1024).toFixed(1)}KB`, 10, 170);
+  ctx.fillStyle = 'rgba(159,238,238,0.6)';
+  ctx.fillText('[F] toggle diag', 10, 186);
+  ctx.restore();
 }
