@@ -18,7 +18,7 @@ export function drawDiag(ctx) {
   ctx.fillStyle = state.maxSrvInterval < 80 ? '#9f9' : state.maxSrvInterval < 120 ? '#fe9' : '#f99';
   ctx.fillText(`srv ${Math.round(state.lastSrvInterval)} (max ${Math.round(state.maxSrvInterval)})`, 10, 138);
   ctx.fillStyle = state.maxFrameGap < 25 ? '#9f9' : state.maxFrameGap < 45 ? '#fe9' : '#f99';
-  ctx.fillText(`rafgap 17 (max ${Math.round(state.maxFrameGap)})`, 10, 154);
+  ctx.fillText(`rafgap ${Math.round(state.lastFrameGap)} (max ${Math.round(state.maxFrameGap)})`, 10, 154);
   ctx.fillStyle = '#9fe';
   ctx.fillText(`pkt ${(state.lastPacketBytes / 1024).toFixed(1)}KB`, 10, 170);
   ctx.fillStyle = 'rgba(159,238,238,0.6)';

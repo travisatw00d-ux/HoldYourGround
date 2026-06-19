@@ -544,6 +544,7 @@ export function startRender(socket) {
     if (state.screen === 'playing') {
       if (lastRAF && ts - lastRAF < 500) {
         const gap = ts - lastRAF;
+        state.lastFrameGap = gap;
         if (ts - state.maxFrameGapAt > 2000) { state.maxFrameGap = gap; state.maxFrameGapAt = ts; }
         else if (gap > state.maxFrameGap) state.maxFrameGap = gap;
       }

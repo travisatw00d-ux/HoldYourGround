@@ -29,6 +29,6 @@ export const state = {
   maxPing: 0, maxPingAt: 0, maxFrameMs: 0, maxFrameAt: 0,
   lastStateAt: 0, lastArrival: 0, maxArrival: 0, maxArrivalAt: 0,
   lastEmitTime: 0, lastSrvInterval: 0, maxSrvInterval: 0, maxSrvAt: 0,
-  lastRAF: 0, maxFrameGap: 0, maxFrameGapAt: 0,
+  lastRAF: 0, lastFrameGap: 0, maxFrameGap: 0, maxFrameGapAt: 0,
   lastPacketBytes: 0, pktCounter: 0
 };
