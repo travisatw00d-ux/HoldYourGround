@@ -1,4 +1,4 @@
-console.log('[HYG client v6 loaded]');
+console.log('[HYG client v8 loaded]');
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
 
@@ -61,6 +61,7 @@ let lastEmitTime = 0, lastSrvInterval = 0, maxSrvInterval = 0, maxSrvAt = 0;
 let lastRAF = 0, maxFrameGap = 0, maxFrameGapAt = 0;
 let lastPacketBytes = 0;
 let pktCounter = 0;
+let bladeHistory = null;
 let levelGrad = null;
 
 const swordImg = new Image();
@@ -172,6 +173,8 @@ function generateBackground(w, h) {
 
 // --- Socket events ---
 
+function emptyState() { return { players: {}, zombies: [] }; }
+
 socket.on('lobbyFull', () => {
   errorMsg.textContent = 'Server is full (max 10 players)';
 });
@@ -196,6 +199,7 @@ socket.on('state', (msg) => {
     : new Uint8Array(msg.buffer, msg.byteOffset, msg.byteLength);
   const dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
   let o = 0;
+  try {
   /* const version = */ dv.getUint8(o); o += 1;
   const emitTime = dv.getFloat64(o, true); o += 8;
   const arenaW = dv.getUint16(o, true); o += 2;
@@ -270,6 +274,13 @@ socket.on('state', (msg) => {
     newZombies.push(z);
   }
   zombies = newZombies;
+  } catch (e) {
+    console.error('[HYG] state buffer error:', e);
+    const es = emptyState();
+    players = es.players;
+    zombies = es.zombies;
+    return;
+  }
 
   worldW = arenaW;
   worldH = arenaH;
