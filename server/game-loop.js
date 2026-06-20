@@ -171,8 +171,6 @@ function gameTick() {
   const playerBlock = bp.buildPlayerBlock(_playerList);
   const currentServerLevel = serverLevelSum;
 
-  const halfVW = VIEW_W / 2 + VIEW_MARGIN;
-  const halfVH = VIEW_H / 2 + VIEW_MARGIN;
   const emitTime = Date.now();
   if (lastEmitTime && emitTime - lastEmitTime > 100) {
     console.log(`[STALL] broadcast gap=${emitTime - lastEmitTime}ms (real server-side gap)`);
@@ -181,13 +179,18 @@ function gameTick() {
   for (const id in players) {
     const p = players[id];
     if (!p) continue;
+    const zoom = p.cameraZoom || 1;
+    const vw = p.viewW || VIEW_W;
+    const vh = p.viewH || VIEW_H;
+    const pHalfVW = (vw / zoom) / 2 + VIEW_MARGIN / Math.max(0.1, zoom);
+    const pHalfVH = (vh / zoom) / 2 + VIEW_MARGIN / Math.max(0.1, zoom);
     _viewZ.length = 0;
     for (let i = 0; i < zombies.length; i++) {
       const z = zombies[i];
       if (!z.alive) continue;
       if (!p.fullscreen) {
-        const dzx = z.x - p.x; if (dzx < -halfVW || dzx > halfVW) continue;
-        const dzy = z.y - p.y; if (dzy < -halfVH || dzy > halfVH) continue;
+        const dzx = z.x - p.x; if (dzx < -pHalfVW || dzx > pHalfVW) continue;
+        const dzy = z.y - p.y; if (dzy < -pHalfVH || dzy > pHalfVH) continue;
       }
       _viewZ.push(z);
     }
@@ -226,8 +229,12 @@ function setFullscreen(id, enabled) {
   playerMod.setFullscreen(id, getPlayers(), enabled);
 }
 
+function setCameraZoom(id, zoom) {
+  playerMod.setCameraZoom(id, getPlayers(), zoom);
+}
+
 module.exports = {
   initGameLoop, getPlayers, getZombies, getPlayerCount,
   addPlayer, handleInput, handleAttack, handleEquip,
-  respawnPlayer, getPlayerInfoObj, setFullscreen
+  respawnPlayer, getPlayerInfoObj, setFullscreen, setCameraZoom
 };

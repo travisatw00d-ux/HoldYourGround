@@ -7,9 +7,9 @@ let socket = null;
 export function getSocket() { return socket; }
 
 export function connect() {
-  const serverUrl = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-    ? undefined
-    : 'wss://server.iolegends.com';
+  const serverUrl = window.location.hostname === 'iolegends.com' || window.location.hostname === 'www.iolegends.com'
+    ? 'wss://server.iolegends.com'
+    : undefined;
   socket = io(serverUrl, { transports: ['websocket'] });
 
   const MY_BUILD = window.BUILD || '';
@@ -46,6 +46,8 @@ export function connect() {
     document.getElementById('hotbarInventory').classList.remove('hidden');
     document.getElementById('settingsBtn').classList.remove('hidden');
     document.getElementById('errorMsg').textContent = '';
+    state.cameraZoom = 1.0;
+    socket.emit('cameraZoom', { zoom: 1.0, viewW: state.viewW, viewH: state.viewH });
     startRender(socket);
   });
 
@@ -180,6 +182,8 @@ export function connect() {
     document.getElementById('hud').classList.remove('hidden');
     document.getElementById('hotbarInventory').classList.remove('hidden');
     document.getElementById('settingsBtn').classList.remove('hidden');
+    state.cameraZoom = 1.0;
+    socket.emit('cameraZoom', { zoom: 1.0, viewW: state.viewW, viewH: state.viewH });
     startRender(socket);
   });
 

@@ -60,6 +60,9 @@ function addPlayer(id, name, players, zombies) {
     attackStartTime: 0,
     prevCf: -1,
     lvl: 1,
+    cameraZoom: 1.0,
+    viewW: 800,
+    viewH: 600,
     fullscreen: false
   };
   recalcStats(players[id]);
@@ -68,6 +71,14 @@ function addPlayer(id, name, players, zombies) {
 function setFullscreen(id, players, enabled) {
   const p = players[id];
   if (p) p.fullscreen = !!enabled;
+}
+
+function setCameraZoom(id, players, opts) {
+  const p = players[id];
+  if (!p) return;
+  p.cameraZoom = Math.max(0.1, Math.min(4.0, (opts && opts.zoom) || 1));
+  if (opts && opts.viewW) p.viewW = opts.viewW;
+  if (opts && opts.viewH) p.viewH = opts.viewH;
 }
 
 function respawnPlayer(id, players, zombies) {
@@ -99,4 +110,4 @@ function playerInfoObj(p) {
 
 function resetColorIndex() { colorIndex = 0; }
 
-module.exports = { randomSpawn, recalcStats, addPlayer, respawnPlayer, playerInfoObj, resetColorIndex, setFullscreen };
+module.exports = { randomSpawn, recalcStats, addPlayer, respawnPlayer, playerInfoObj, resetColorIndex, setFullscreen, setCameraZoom };

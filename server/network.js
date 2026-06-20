@@ -30,7 +30,7 @@ const io = new Server(server, {
 
 const publicDir = path.join(__dirname, '..', 'public');
 
-app.get('/', (req, res) => { res.sendFile(path.join(publicDir, 'holdyourground', 'index.html')); });
+app.get('/', (req, res) => { res.set('Cache-Control', 'no-store'); res.sendFile(path.join(publicDir, 'holdyourground', 'index.html')); });
 app.get('/version', (req, res) => { res.set('Cache-Control', 'no-store'); res.send('1'); });
 app.use(express.static('public', { setHeaders: (res) => { res.set('Cache-Control', 'no-store'); } }));
 app.use('/images', express.static('images', { setHeaders: (res) => { res.set('Cache-Control', 'no-store'); } }));
@@ -74,6 +74,10 @@ io.on('connection', (socket) => {
 
   socket.on('fullscreen', ({ enabled }) => {
     gameLoop.setFullscreen(socket.id, enabled);
+  });
+
+  socket.on('cameraZoom', (data) => {
+    gameLoop.setCameraZoom(socket.id, data);
   });
 
   socket.on('diagPing', (t) => socket.emit('diagPong', { t }));

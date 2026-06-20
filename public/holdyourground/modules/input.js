@@ -33,6 +33,19 @@ export function setupInput(socket, canvas) {
     keys[e.key] = false;
   });
 
+  window.addEventListener('blur', () => {
+    for (const key in keys) keys[key] = false;
+  });
+
+  canvas.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const dir = e.deltaY > 0 ? -1 : 1;
+    state.cameraZoom *= dir > 0 ? 1.1 : 1 / 1.1;
+    const minZoom = state.worldW ? Math.max(state.viewW / state.worldW, state.viewH / state.worldH) : 0.25;
+    state.cameraZoom = Math.max(minZoom, Math.min(4.0, state.cameraZoom));
+    socket.emit('cameraZoom', { zoom: state.cameraZoom, viewW: state.viewW, viewH: state.viewH });
+  }, { passive: false });
+
   canvas.addEventListener('mousedown', (e) => {
     if (e.button === 0 && state.screen === 'playing') {
       socket.emit('attack', { facingAngle: state.players[state.myId]?.facingAngle || 0 });

@@ -87,12 +87,25 @@ document.addEventListener('fullscreenchange', () => {
     resizeViewport(w, h);
     fullscreenToggle.checked = true;
     socket.emit('fullscreen', { enabled: true });
+    socket.emit('cameraZoom', { zoom: state.cameraZoom, viewW: state.viewW, viewH: state.viewH });
   } else {
     wrapper.style.width = '800px';
     wrapper.style.height = '600px';
     resizeViewport(800, 600);
     fullscreenToggle.checked = false;
     socket.emit('fullscreen', { enabled: false });
+    socket.emit('cameraZoom', { zoom: state.cameraZoom, viewW: state.viewW, viewH: state.viewH });
+  }
+});
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'F11') {
+    e.preventDefault();
+    if (document.fullscreenElement) {
+      document.exitFullscreen();
+    } else {
+      wrapper.requestFullscreen().catch(() => {});
+    }
   }
 });
 

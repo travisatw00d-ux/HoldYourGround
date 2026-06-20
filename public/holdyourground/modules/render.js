@@ -294,6 +294,13 @@ function render() {
   const alphaCap = 1 + 150 / interval;
   if (alpha > alphaCap) alpha = alphaCap; else if (alpha < 0) alpha = 0;
 
+  if (state.worldW) {
+    const minZ = Math.max(state.viewW / state.worldW, state.viewH / state.worldH);
+    state.cameraZoom = Math.max(minZ, Math.min(4.0, state.cameraZoom));
+  }
+  const zoom = state.cameraZoom;
+  const eW = state.viewW / zoom;
+  const eH = state.viewH / zoom;
   const cam = getCamera(alpha);
 
   // Local player facing angle
@@ -301,7 +308,7 @@ function render() {
   if (me && me.alive) {
     const mex = me.px + (me.x - me.px) * alpha;
     const mey = me.py + (me.y - me.py) * alpha;
-    const target = Math.atan2((state.mouseY + cam.y) - mey, (state.mouseX + cam.x) - mex);
+    const target = Math.atan2((state.mouseY / zoom + cam.y) - mey, (state.mouseX / zoom + cam.x) - mex);
     if (state.localAnim) {
       const diff = target - state.localAnim.lockedAngle;
       const norm = Math.atan2(Math.sin(diff), Math.cos(diff));
@@ -320,9 +327,13 @@ function render() {
     if (state.localAnim.frame >= state.localAnim.totalFrames) state.localAnim = null;
   }
 
+  // --- Game world (affected by zoom) ---
+  ctx.save();
+  ctx.scale(zoom, zoom);
+
   // Background
   if (state.backgroundCanvas) {
-    ctx.drawImage(state.backgroundCanvas, cam.x, cam.y, state.viewW, state.viewH, 0, 0, state.viewW, state.viewH);
+    ctx.drawImage(state.backgroundCanvas, cam.x, cam.y, eW, eH, 0, 0, eW, eH);
   }
 
   // Zombies
@@ -333,7 +344,7 @@ function render() {
     const zx = z.px + (z.x - z.px) * alpha;
     const zy = z.py + (z.y - z.py) * alpha;
     const szx = zx - cam.x, szy = zy - cam.y;
-    if (szx < -40 || szx > state.viewW + 40 || szy < -40 || szy > state.viewH + 40) continue;
+    if (szx < -40 || szx > eW + 40 || szy < -40 || szy > eH + 40) continue;
 
     const zombieAngle = z.headingAngle || 0;
     const headImg = (z.lvl >= 6 && zombieT2HeadImg.complete && zombieT2HeadImg.naturalWidth > 0) ? zombieT2HeadImg : zombieHeadImg;
@@ -366,7 +377,7 @@ function render() {
     if (!p.alive) continue;
     const sx = (p.px + (p.x - p.px) * alpha) - cam.x;
     const sy = (p.py + (p.y - p.py) * alpha) - cam.y;
-    if (sx < -40 || sx > state.viewW + 40 || sy < -40 || sy > state.viewH + 40) continue;
+    if (sx < -40 || sx > eW + 40 || sy < -40 || sy > eH + 40) continue;
 
     drawSword(ctx, p, sx, sy);
     if (state.debugHitbox) drawDebugSwordHitbox(ctx, p, sx, sy);
@@ -393,6 +404,51 @@ function render() {
     ctx.textAlign = 'center';
     ctx.fillText(p.name, sx, sy - 42);
   }
+
+  // Damage numbers
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = 'bold 18px "Segoe UI", system-ui, sans-serif';
+  for (let i = state.dmgNumbers.length - 1; i >= 0; i--) {
+    const dn = state.dmgNumbers[i];
+    dn.timer -= 1 / 60;
+    const sx = dn.x - cam.x;
+    const sy = dn.y - cam.y - 30 * (1 - dn.timer / dn.duration);
+    if (dn.timer <= 0) { state.dmgNumbers.splice(i, 1); continue; }
+    const a = dn.timer > 0.3 ? 1 : dn.timer / 0.3;
+    ctx.fillStyle = `rgba(255, 60, 60, ${a})`;
+    ctx.fillText(`-${dn.dmg}`, sx, sy);
+  }
+  ctx.textBaseline = 'alphabetic';
+
+  // Merge smoke
+  for (let i = state.mergeSmokes.length - 1; i >= 0; i--) {
+    const s = state.mergeSmokes[i];
+    s.timer -= 1 / 60;
+    if (s.timer <= 0) { state.mergeSmokes.splice(i, 1); continue; }
+    const pct = 1 - s.timer;
+    const sx = s.x - cam.x, sy = s.y - cam.y;
+    for (let r = 0; r < 3; r++) {
+      const radius = 10 + (pct + r * 0.15) * 40;
+      ctx.beginPath();
+      ctx.arc(sx, sy, Math.max(2, radius), 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(160, 160, 160, ${Math.max(0, 1 - pct - r * 0.25)})`;
+      ctx.fill();
+    }
+  }
+
+  // Blade history
+  if (me && me.alive && state.localAnim) {
+    const mex = me.px + (me.x - me.px) * alpha;
+    const mey = me.py + (me.y - me.py) * alpha;
+    const seg = getBladeSegment(me, mex - cam.x, mey - cam.y);
+    if (seg) state.bladeHistory = seg;
+  } else if (!state.localAnim) {
+    state.bladeHistory = null;
+  }
+
+  ctx.restore();
+  // --- End game world ---
 
   // Stat HUD
   if (me) {
@@ -462,48 +518,6 @@ function render() {
     state.hitFlash--;
   }
 
-  // Damage numbers
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.font = 'bold 18px "Segoe UI", system-ui, sans-serif';
-  for (let i = state.dmgNumbers.length - 1; i >= 0; i--) {
-    const dn = state.dmgNumbers[i];
-    dn.timer -= 1 / 60;
-    const sx = dn.x - cam.x;
-    const sy = dn.y - cam.y - 30 * (1 - dn.timer / dn.duration);
-    if (dn.timer <= 0) { state.dmgNumbers.splice(i, 1); continue; }
-    const a = dn.timer > 0.3 ? 1 : dn.timer / 0.3;
-    ctx.fillStyle = `rgba(255, 60, 60, ${a})`;
-    ctx.fillText(`-${dn.dmg}`, sx, sy);
-  }
-  ctx.textBaseline = 'alphabetic';
-
-  // Merge smoke
-  for (let i = state.mergeSmokes.length - 1; i >= 0; i--) {
-    const s = state.mergeSmokes[i];
-    s.timer -= 1 / 60;
-    if (s.timer <= 0) { state.mergeSmokes.splice(i, 1); continue; }
-    const pct = 1 - s.timer;
-    const sx = s.x - cam.x, sy = s.y - cam.y;
-    for (let r = 0; r < 3; r++) {
-      const radius = 10 + (pct + r * 0.15) * 40;
-      ctx.beginPath();
-      ctx.arc(sx, sy, Math.max(2, radius), 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(160, 160, 160, ${Math.max(0, 1 - pct - r * 0.25)})`;
-      ctx.fill();
-    }
-  }
-
-  // Blade history
-  if (me && me.alive && state.localAnim) {
-    const mex = me.px + (me.x - me.px) * alpha;
-    const mey = me.py + (me.y - me.py) * alpha;
-    const seg = getBladeSegment(me, mex - cam.x, mey - cam.y);
-    if (seg) state.bladeHistory = seg;
-  } else if (!state.localAnim) {
-    state.bladeHistory = null;
-  }
-
   // Frame timing
   state.frameTimeMs = performance.now() - rT0;
   state.fpsFrames++;
@@ -538,7 +552,8 @@ export function startRender(socket) {
       const cam = getCamera();
       const me = state.players[state.myId];
       if (me) {
-        input.angle = me.facingAngle || Math.atan2((state.mouseY + cam.y) - me.y, (state.mouseX + cam.x) - me.x);
+        const zoom = state.cameraZoom;
+        input.angle = me.facingAngle || Math.atan2((state.mouseY / zoom + cam.y) - me.y, (state.mouseX / zoom + cam.x) - me.x);
       }
       socket.emit('input', input);
     }

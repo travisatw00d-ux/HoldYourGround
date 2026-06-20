@@ -12,7 +12,10 @@ export function getCamera(alpha) {
   if (alpha === undefined) alpha = 1;
   const mx = (me.px === undefined ? me.x : me.px + (me.x - me.px) * alpha);
   const my = (me.py === undefined ? me.y : me.py + (me.y - me.py) * alpha);
-  _cam.x = clamp(mx - state.viewW / 2, 0, Math.max(0, state.worldW - state.viewW));
-  _cam.y = clamp(my - state.viewH / 2, 0, Math.max(0, state.worldH - state.viewH));
+  const zoom = state.cameraZoom;
+  const vw = state.viewW / zoom;
+  const vh = state.viewH / zoom;
+  _cam.x = clamp(mx - vw / 2, 0, Math.max(0, state.worldW - vw));
+  _cam.y = clamp(my - vh / 2, 0, Math.max(0, state.worldH - vh));
   return _cam;
 }

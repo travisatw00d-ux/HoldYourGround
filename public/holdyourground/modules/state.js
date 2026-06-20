@@ -8,6 +8,7 @@ export const state = {
   screen: 'menu',
   viewW: 800,
   viewH: 600,
+  cameraZoom: 1.0,
   backgroundCanvas: null,
   mouseX: 0,
   mouseY: 0,
