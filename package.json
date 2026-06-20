@@ -4,7 +4,8 @@
   "description": "Hold Your Ground - Multiplayer zombie survival IO game",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "deploy": "fly deploy --no-cache"
   },
   "dependencies": {
     "express": "^4.21.0",
