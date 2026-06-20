@@ -13,10 +13,10 @@ const swordImg = new Image(); swordImg.src = '/images/woodensword.png';
 const zombieHeadImg = new Image(); zombieHeadImg.src = '/images/zombiehead.png';
 const zombieT2HeadImg = new Image(); zombieT2HeadImg.src = '/images/T2zombiehead.png';
 const serverLevelImg = new Image(); serverLevelImg.src = '/images/ServerLevel.png';
-const zombieLeftHandImg = new Image(); zombieLeftHandImg.src = '/images/zombielefthand-v2.png';
-const zombieRightHandImg = new Image(); zombieRightHandImg.src = '/images/zombierighthand-v2.png';
-const zombieT2LeftHandImg = new Image(); zombieT2LeftHandImg.src = '/images/T2zombielefthand-v2.png';
-const zombieT2RightHandImg = new Image(); zombieT2RightHandImg.src = '/images/T2zombierighthand-v2.png';
+const zombieLeftHandImg = new Image(); zombieLeftHandImg.src = '/images/zombielefthand.png';
+const zombieRightHandImg = new Image(); zombieRightHandImg.src = '/images/zombierighthand.png';
+const zombieT2LeftHandImg = new Image(); zombieT2LeftHandImg.src = '/images/T2zombielefthand.png';
+const zombieT2RightHandImg = new Image(); zombieT2RightHandImg.src = '/images/T2zombierighthand.png';
 
 export function resizeViewport(w, h) {
   state.viewW = w;
