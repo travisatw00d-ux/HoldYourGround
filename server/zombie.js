@@ -34,9 +34,11 @@ function createZombie(lvl, players, x, y) {
     radius: ZOMBIE_RADIUS,
     speed: st.speed,
     headingtoward: '',
-    headingAngle: 0,
+    headingAngle: undefined,
     targetPlayerId: null,
     recalcTimer: Math.floor(Math.random() * 90),
+    isStray: Math.random() < 0.2,
+    strayCalled: false,
     lvl
   };
 }
@@ -49,24 +51,53 @@ function initZombies(players) {
   return zombies;
 }
 
-function recalcZombieTarget(z, players) {
-  let closestP = null, closestD2 = Infinity;
-  for (const id in players) {
-    const p = players[id];
-    if (!p.alive) continue;
-    const dx = p.x - z.x, dy = p.y - z.y;
-    const d2 = dx * dx + dy * dy;
-    if (d2 < closestD2) { closestD2 = d2; closestP = p; }
+function recalcZombieTarget(z, players, zombies) {
+  let target = null;
+
+  if (z.isStray) {
+    let closestD2 = Infinity;
+    for (const other of zombies) {
+      if (other.id === z.id || !other.alive) continue;
+      const dx = other.x - z.x, dy = other.y - z.y;
+      const d2 = dx * dx + dy * dy;
+      if (d2 < closestD2) { closestD2 = d2; target = other; }
+    }
+    if (target) target.strayCalled = true;
+  } else if (z.strayCalled) {
+    let closestD2 = Infinity;
+    for (const other of zombies) {
+      if (other.id === z.id || !other.alive || !other.isStray) continue;
+      const dx = other.x - z.x, dy = other.y - z.y;
+      const d2 = dx * dx + dy * dy;
+      if (d2 < closestD2) { closestD2 = d2; target = other; }
+    }
   }
-  if (closestP) {
-    z.targetPlayerId = closestP.id;
-    z.headingtoward = closestP.name || closestP.id;
-    z.headingAngle = Math.atan2(closestP.y - z.y, closestP.x - z.x);
+
+  if (!target) {
+    let closestD2 = Infinity;
+    for (const id in players) {
+      const p = players[id];
+      if (!p.alive) continue;
+      const dx = p.x - z.x, dy = p.y - z.y;
+      const d2 = dx * dx + dy * dy;
+      if (d2 < closestD2) { closestD2 = d2; target = p; }
+    }
+  }
+
+  if (target) {
+    if (target.name !== undefined) {
+      z.targetPlayerId = target.id;
+      z.headingtoward = target.name || target.id;
+    } else {
+      z.targetPlayerId = null;
+      z.headingtoward = String(target.id);
+    }
+    z.headingAngle = Math.atan2(target.y - z.y, target.x - z.x);
   }
 }
 
 function recalcAllZombieTargets(zombies, players) {
-  for (const z of zombies) { if (z.alive) recalcZombieTarget(z, players); }
+  for (const z of zombies) { if (z.alive) recalcZombieTarget(z, players, zombies); }
 }
 
 function tickTargeting(zombies, players) {
@@ -74,7 +105,7 @@ function tickTargeting(zombies, players) {
     if (!z.alive) continue;
     z.recalcTimer--;
     if (z.recalcTimer <= 0) {
-      recalcZombieTarget(z, players);
+      recalcZombieTarget(z, players, zombies);
       if (z.targetPlayerId && players[z.targetPlayerId] && players[z.targetPlayerId].alive) {
         const tp = players[z.targetPlayerId];
         const dx = z.x - tp.x, dy = z.y - tp.y;
@@ -114,11 +145,11 @@ function processMerge(zombies, grid) {
         const mx = (z.x + other.x) / 2, my = (z.y + other.y) / 2;
         const newLvl = z.lvl + other.lvl;
         const st = getZombieStats(newLvl);
+        const higher = z.lvl >= other.lvl ? z : other;
         let hpPct;
         if (z.lvl === other.lvl) {
           hpPct = Math.min(1, z.health / z.maxHealth + other.health / other.maxHealth);
         } else {
-          const higher = z.lvl > other.lvl ? z : other;
           hpPct = higher.health / higher.maxHealth;
         }
         zombies.push({
@@ -127,9 +158,12 @@ function processMerge(zombies, grid) {
           health: Math.max(1, Math.round(st.health * hpPct)),
           maxHealth: st.health,
           radius: ZOMBIE_RADIUS, speed: st.speed,
-          headingtoward: '', headingAngle: 0,
+          headingtoward: higher.headingtoward,
+          headingAngle: higher.headingAngle,
           targetPlayerId: null,
-          recalcTimer: Math.floor(Math.random() * 90),
+          recalcTimer: 0,
+          isStray: (z.isStray || other.isStray) ? Math.random() < 0.5 : false,
+          strayCalled: false,
           lvl: newLvl
         });
         events.push({ type: 'zombieMerge', x: mx, y: my });
@@ -165,8 +199,10 @@ function reviveDead(zombies, players) {
       z.speed = st.speed;
       z.lvl = 1;
       z.headingAngle = 0;
+      z.isStray = Math.random() < 0.2;
+      z.strayCalled = false;
       z.alive = true;
-      recalcZombieTarget(z, players);
+      recalcZombieTarget(z, players, zombies);
       z.recalcTimer = Math.floor(Math.random() * 90);
     }
   }

@@ -1,8 +1,6 @@
 const express = require('express');
 const http = require('http');
-const fs = require('fs');
 const path = require('path');
-const crypto = require('crypto');
 const { Server } = require('socket.io');
 const { PerformanceObserver } = require('perf_hooks');
 
@@ -30,28 +28,14 @@ const io = new Server(server, {
   pingTimeout: 5000
 });
 
-// Content-hashed asset routing
 const publicDir = path.join(__dirname, '..', 'public');
-function hashOf(rel) {
-  return crypto.createHash('md5').update(fs.readFileSync(path.join(publicDir, rel))).digest('hex').slice(0, 8);
-}
-const GAME_HASH = hashOf('game.js');
-const DATA_HASH = hashOf('shared/data.js');
-const BUILD_TAG = GAME_HASH;
 
-const indexHtml = fs.readFileSync(path.join(publicDir, 'index.html'), 'utf8')
-  .replace('<body>', `<body><div id="btag" style="position:fixed;left:4px;bottom:2px;font:10px monospace;color:rgba(255,255,255,0.55);z-index:9999;pointer-events:none;">b${BUILD_TAG}</div>`)
-  .replace(/<script src="\/shared\/data\.js\?v=\d+"><\/script>/, `<script>window.BUILD='${BUILD_TAG}';</script><script src="/data-${DATA_HASH}.js"></script>`)
-  .replace(/<script src="game\.js\?v=\d+"><\/script>/, `<script src="/game-${GAME_HASH}.js"></script>`);
-
-app.get('/', (req, res) => { res.set('Cache-Control', 'no-store'); res.type('html').send(indexHtml); });
-app.get(`/game-${GAME_HASH}.js`, (req, res) => { res.set('Cache-Control', 'public, max-age=31536000, immutable'); res.sendFile(path.join(publicDir, 'game.js')); });
-app.get(`/data-${DATA_HASH}.js`, (req, res) => { res.set('Cache-Control', 'public, max-age=31536000, immutable'); res.sendFile(path.join(publicDir, 'shared/data.js')); });
-app.get('/version', (req, res) => { res.set('Cache-Control', 'no-store'); res.send(BUILD_TAG); });
+app.get('/', (req, res) => { res.sendFile(path.join(publicDir, 'holdyourground', 'index.html')); });
+app.get('/version', (req, res) => { res.set('Cache-Control', 'no-store'); res.send('1'); });
 app.use(express.static('public', { setHeaders: (res) => { res.set('Cache-Control', 'no-store'); } }));
 app.use('/images', express.static('images'));
 app.get('/health', (req, res) => res.send('OK'));
-console.log(`[build] game=${GAME_HASH} data=${DATA_HASH} build=${BUILD_TAG}`);
+console.log(`[server] holdyourground on http://localhost:${PORT}`);
 
 // Socket.IO event handlers
 io.on('connection', (socket) => {
