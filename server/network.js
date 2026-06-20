@@ -33,7 +33,7 @@ const publicDir = path.join(__dirname, '..', 'public');
 app.get('/', (req, res) => { res.set('Cache-Control', 'no-store'); res.sendFile(path.join(publicDir, 'holdyourground', 'index.html')); });
 app.get('/version', (req, res) => { res.set('Cache-Control', 'no-store'); res.send('1'); });
 app.use(express.static('public', { setHeaders: (res) => { res.set('Cache-Control', 'no-store'); } }));
-app.use('/images', express.static('images', { setHeaders: (res) => { res.set('Cache-Control', 'no-store'); } }));
+app.use('/images', express.static('images', { setHeaders: (res) => { res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate'); res.set('Pragma', 'no-cache'); res.set('Expires', '0'); } }));
 app.get('/health', (req, res) => res.send('OK'));
 console.log(`[server] holdyourground on http://localhost:${PORT}`);
 
