@@ -1,5 +1,5 @@
 import { state } from './modules/state.js';
-import { connect } from './modules/net.js';
+import { connect, onRoomList } from './modules/net.js';
 import { setupInput } from './modules/input.js';
 import { startRender, stopRender, resizeViewport } from './modules/render.js';
 
@@ -9,6 +9,7 @@ const eliminated = document.getElementById('eliminated');
 const hud = document.getElementById('hud');
 const nameInput = document.getElementById('nameInput');
 const joinBtn = document.getElementById('joinBtn');
+const createRoomBtn = document.getElementById('createRoomBtn');
 const respawnBtn = document.getElementById('respawnBtn');
 const hotbarEl = document.getElementById('hotbarInventory');
 const settingsBtn = document.getElementById('settingsBtn');
@@ -16,6 +17,10 @@ const settingsPanel = document.getElementById('settingsPanel');
 const settingsClose = document.getElementById('settingsClose');
 const fullscreenToggle = document.getElementById('fullscreenToggle');
 const wrapper = document.getElementById('wrapper');
+const roomListEl = document.getElementById('roomList');
+const errorMsg = document.getElementById('errorMsg');
+
+let selectedRoomId = null;
 
 function showScreen(id) {
   menu.classList.add('hidden');
@@ -31,28 +36,65 @@ function showScreen(id) {
 
 showScreen('menu');
 
-function joinGame() {
+function joinGame(roomId) {
   const name = nameInput.value.trim() || 'Player';
-  socket.emit('join', { name });
+  socket.emit('join', { roomId, name });
 }
 
-// Connect socket
+function renderRoomList(rooms) {
+  roomListEl.innerHTML = '';
+  errorMsg.textContent = '';
+
+  if (!rooms || rooms.length === 0) {
+    roomListEl.innerHTML = '<div class="room-entry empty">No rooms available</div>';
+    return;
+  }
+
+  for (const room of rooms) {
+    const entry = document.createElement('div');
+    entry.className = 'room-entry';
+    if (selectedRoomId === room.id) entry.classList.add('selected');
+    entry.innerHTML = `<span class="room-name">${room.id}</span><span class="room-players">${room.playerCount}/${room.maxPlayers}</span>`;
+    entry.addEventListener('click', () => {
+      selectedRoomId = room.id;
+      document.querySelectorAll('.room-entry').forEach(e => e.classList.remove('selected'));
+      entry.classList.add('selected');
+      errorMsg.textContent = '';
+    });
+    entry.addEventListener('dblclick', () => {
+      selectedRoomId = room.id;
+      joinGame(room.id);
+    });
+    roomListEl.appendChild(entry);
+  }
+}
+
 const socket = connect();
 
-// Setup input handlers
+onRoomList(renderRoomList);
+
 setupInput(socket, canvas);
 
-// UI event handlers
-joinBtn.addEventListener('click', joinGame);
+joinBtn.addEventListener('click', () => {
+  if (!selectedRoomId) { errorMsg.textContent = 'Select a room or start a new one'; return; }
+  joinGame(selectedRoomId);
+});
+
+createRoomBtn.addEventListener('click', () => {
+  const name = nameInput.value.trim() || 'Player';
+  socket.emit('createRoom', { name });
+});
+
 nameInput.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') joinGame();
+  if (e.key === 'Enter' && selectedRoomId) {
+    joinGame(selectedRoomId);
+  }
 });
 
 respawnBtn.addEventListener('click', () => {
   socket.emit('respawn');
 });
 
-// Settings UI
 settingsBtn.addEventListener('click', () => {
   settingsPanel.classList.remove('hidden');
 });
@@ -69,7 +111,6 @@ document.addEventListener('click', (e) => {
   }
 });
 
-// Fullscreen toggle
 fullscreenToggle.addEventListener('change', () => {
   if (fullscreenToggle.checked) {
     wrapper.requestFullscreen().catch(() => { fullscreenToggle.checked = false; });
@@ -109,7 +150,6 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
-// Diagnostics ping loop
 setInterval(() => {
   if (socket.connected) socket.emit('diagPing', Date.now());
 }, 250);

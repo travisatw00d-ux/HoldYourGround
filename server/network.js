@@ -5,10 +5,9 @@ const { Server } = require('socket.io');
 const { PerformanceObserver } = require('perf_hooks');
 
 const { PORT, COLORS, WORLD_W, WORLD_H, MAX_PLAYERS } = require('./config');
-const gameLoop = require('./game-loop');
+const roomManager = require('./game-loop');
 const playerMod = require('./player');
 
-// GC observer for diagnostics
 const gcObserver = new PerformanceObserver((list) => {
   for (const entry of list.getEntries()) {
     if (entry.duration > 15) console.log(`[GC] kind=${entry.kind} dur=${entry.duration.toFixed(1)}ms`);
@@ -19,10 +18,7 @@ try { gcObserver.observe({ entryTypes: ['gc'], buffered: true }); } catch (e) {}
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
-  cors: {
-    origin: true,
-    credentials: false
-  },
+  cors: { origin: true, credentials: false },
   httpCompression: false,
   pingInterval: 10000,
   pingTimeout: 5000
@@ -37,56 +33,80 @@ app.use('/images', express.static('images', { setHeaders: (res) => { res.set('Ca
 app.get('/health', (req, res) => res.send('OK'));
 console.log(`[server] holdyourground on http://localhost:${PORT}`);
 
-// Socket.IO event handlers
+function broadcastRoomList() {
+  io.emit('roomList', roomManager.getRoomList());
+}
+
 io.on('connection', (socket) => {
   console.log(`[${socket.id}] connected`);
+  socket.emit('roomList', roomManager.getRoomList());
 
-  socket.on('join', ({ name }) => {
-    if (gameLoop.getPlayerCount() >= MAX_PLAYERS) {
-      socket.emit('lobbyFull');
-      return;
-    }
-    gameLoop.addPlayer(socket.id, name);
-    const players = gameLoop.getPlayers();
-    console.log(`[${socket.id}] joined as "${players[socket.id].name}"`);
-    socket.emit('init', { id: socket.id, arenaWidth: WORLD_W, arenaHeight: WORLD_H });
-    for (const oid in players) {
-      socket.emit('playerInfo', gameLoop.getPlayerInfoObj(oid));
-    }
-    socket.emit('joined');
+  socket.on('createRoom', ({ name }) => {
+    const roomId = roomManager.createRoom();
+    if (!roomId) { socket.emit('error', 'Server full — no room slots available'); return; }
+    joinRoom(socket, roomId, name || 'Player');
   });
 
+  socket.on('join', ({ roomId, name }) => {
+    if (!roomId) { socket.emit('error', 'No room specified'); return; }
+    joinRoom(socket, roomId, name || 'Player');
+  });
+
+  function joinRoom(socket, roomId, name) {
+    const room = roomManager.getRoom(roomId);
+    if (!room) { socket.emit('error', 'Room not found'); return; }
+    if (room.getPlayerCount() >= MAX_PLAYERS) { socket.emit('roomFull'); return; }
+
+    roomManager.addPlayerToRoom(roomId, socket.id, name);
+    socket.join('room:' + roomId);
+    console.log(`[${socket.id}] joined room ${roomId} as "${name}"`);
+    socket.emit('init', { id: socket.id, arenaWidth: WORLD_W, arenaHeight: WORLD_H });
+    for (const oid in room.players) {
+      socket.emit('playerInfo', room.getPlayerInfoObj(oid));
+    }
+    socket.emit('joined');
+    broadcastRoomList();
+  }
+
   socket.on('respawn', () => {
-    gameLoop.respawnPlayer(socket.id);
+    const room = roomManager.getPlayerRoom(socket.id);
+    if (room) room.respawnPlayer(socket.id);
   });
 
   socket.on('input', ({ dx, dy, angle }) => {
-    gameLoop.handleInput(socket.id, { dx, dy, angle });
+    const room = roomManager.getPlayerRoom(socket.id);
+    if (room) room.handleInput(socket.id, { dx, dy, angle });
   });
 
   socket.on('attack', ({ facingAngle }) => {
-    gameLoop.handleAttack(socket.id, facingAngle);
+    const room = roomManager.getPlayerRoom(socket.id);
+    if (room) room.handleAttack(socket.id, facingAngle);
   });
 
   socket.on('equip', ({ slot }) => {
-    gameLoop.handleEquip(socket.id, slot);
+    const room = roomManager.getPlayerRoom(socket.id);
+    if (room) room.handleEquip(socket.id, slot);
   });
 
   socket.on('fullscreen', ({ enabled }) => {
-    gameLoop.setFullscreen(socket.id, enabled);
+    const room = roomManager.getPlayerRoom(socket.id);
+    if (room) room.setFullscreen(socket.id, enabled);
   });
 
   socket.on('cameraZoom', (data) => {
-    gameLoop.setCameraZoom(socket.id, data);
+    const room = roomManager.getPlayerRoom(socket.id);
+    if (room) room.setCameraZoom(socket.id, data);
   });
 
   socket.on('diagPing', (t) => socket.emit('diagPong', { t }));
 
   socket.on('disconnect', () => {
     console.log(`[${socket.id}] disconnected`);
-    const players = gameLoop.getPlayers();
-    delete players[socket.id];
-    io.emit('playerLeft', socket.id);
+    const roomId = roomManager.removePlayerFromRoom(socket.id);
+    if (roomId) {
+      io.to('room:' + roomId).emit('playerLeft', socket.id);
+      broadcastRoomList();
+    }
   });
 });
 
@@ -94,5 +114,4 @@ server.listen(PORT, () => {
   console.log(`Hold Your Ground — http://localhost:${PORT}`);
 });
 
-// Start the game loop
-gameLoop.initGameLoop(io);
+roomManager.initGameLoop(io);

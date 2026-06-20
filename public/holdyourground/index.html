@@ -14,7 +14,13 @@
       <h1>Hold Your Ground</h1>
       <p class="subtitle">Last circle standing wins</p>
       <input type="text" id="nameInput" placeholder="Enter your name" maxlength="16" autofocus>
-      <button id="joinBtn">Play</button>
+      <div id="roomListContainer">
+        <div id="roomList"></div>
+        <div class="room-actions">
+          <button id="createRoomBtn">Start a New Room</button>
+          <button id="joinBtn">Join</button>
+        </div>
+      </div>
       <p id="errorMsg" class="error"></p>
     </div>
 

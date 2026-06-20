@@ -3,8 +3,10 @@ import { getInput, setupInput } from './input.js';
 import { startRender, stopRender, generateBackground, updateLeaderboard, updateHotbar, startAttackAnim } from './render.js';
 
 let socket = null;
+let roomListCallback = null;
 
 export function getSocket() { return socket; }
+export function onRoomList(cb) { roomListCallback = cb; }
 
 export function connect() {
   const serverUrl = window.location.hostname === 'iolegends.com' || window.location.hostname === 'www.iolegends.com'
@@ -27,8 +29,16 @@ export function connect() {
   const zombieMaxHealth = (lvl) => lvl <= 5 ? 4 + lvl : 12 + lvl;
   const emptyState = () => ({ players: {}, zombies: [] });
 
-  socket.on('lobbyFull', () => {
-    document.getElementById('errorMsg').textContent = 'Server is full (max 10 players)';
+  socket.on('roomList', (rooms) => {
+    if (roomListCallback) roomListCallback(rooms);
+  });
+
+  socket.on('roomFull', () => {
+    document.getElementById('errorMsg').textContent = 'Room is full';
+  });
+
+  socket.on('error', (msg) => {
+    document.getElementById('errorMsg').textContent = msg;
   });
 
   socket.on('init', ({ id, arenaWidth, arenaHeight }) => {

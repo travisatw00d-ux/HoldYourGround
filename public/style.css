@@ -311,3 +311,72 @@ button:active {
 .toggle-switch input:checked + .toggle-slider::before {
   transform: translateX(20px);
 }
+
+#roomListContainer {
+  width: 100%;
+  max-width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+#roomList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 40px;
+}
+
+.room-entry {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  font-size: 0.85rem;
+}
+
+.room-entry:hover {
+  background: rgba(78, 205, 196, 0.1);
+  border-color: rgba(78, 205, 196, 0.3);
+}
+
+.room-entry.selected {
+  background: rgba(78, 205, 196, 0.15);
+  border-color: #4ECDC4;
+}
+
+.room-entry.empty {
+  cursor: default;
+  color: rgba(255, 255, 255, 0.3);
+  font-style: italic;
+  justify-content: center;
+}
+
+.room-entry.empty:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.room-name {
+  font-weight: 600;
+  color: #eee;
+}
+
+.room-players {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 0.8rem;
+}
+
+.room-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.room-actions button {
+  flex: 1;
+}
