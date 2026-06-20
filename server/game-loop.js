@@ -185,8 +185,10 @@ function gameTick() {
     for (let i = 0; i < zombies.length; i++) {
       const z = zombies[i];
       if (!z.alive) continue;
-      const dzx = z.x - p.x; if (dzx < -halfVW || dzx > halfVW) continue;
-      const dzy = z.y - p.y; if (dzy < -halfVH || dzy > halfVH) continue;
+      if (!p.fullscreen) {
+        const dzx = z.x - p.x; if (dzx < -halfVW || dzx > halfVW) continue;
+        const dzy = z.y - p.y; if (dzy < -halfVH || dzy > halfVH) continue;
+      }
       _viewZ.push(z);
     }
     io.to(id).emit('state', bp.buildStateBuffer(playerBlock, _playerList.length, currentServerLevel, _viewZ, emitTime));
@@ -220,8 +222,12 @@ function initGameLoop(newIo) {
   setTimeout(tickLoop, TICK_MS);
 }
 
+function setFullscreen(id, enabled) {
+  playerMod.setFullscreen(id, getPlayers(), enabled);
+}
+
 module.exports = {
   initGameLoop, getPlayers, getZombies, getPlayerCount,
   addPlayer, handleInput, handleAttack, handleEquip,
-  respawnPlayer, getPlayerInfoObj
+  respawnPlayer, getPlayerInfoObj, setFullscreen
 };

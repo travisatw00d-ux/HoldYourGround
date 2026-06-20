@@ -1,7 +1,7 @@
 {
   "name": "hold-your-ground",
   "version": "0.1.0",
-  "description": "Multiplayer circle battle game",
+  "description": "Hold Your Ground - Multiplayer zombie survival IO game",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"

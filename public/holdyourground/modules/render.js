@@ -3,12 +3,10 @@ import { getCamera } from './camera.js';
 import { getInput } from './input.js';
 import { drawDiag } from './diag.js';
 
-const VW = 800;
-const VH = 600;
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
-canvas.width = VW;
-canvas.height = VH;
+canvas.width = state.viewW;
+canvas.height = state.viewH;
 
 // Image assets
 const swordImg = new Image(); swordImg.src = '/images/woodensword.png';
@@ -19,6 +17,13 @@ const zombieLeftHandImg = new Image(); zombieLeftHandImg.src = '/images/zombiele
 const zombieRightHandImg = new Image(); zombieRightHandImg.src = '/images/zombierighthand.png';
 const zombieT2LeftHandImg = new Image(); zombieT2LeftHandImg.src = '/images/T2zombielefthand.png';
 const zombieT2RightHandImg = new Image(); zombieT2RightHandImg.src = '/images/T2zombierighthand.png';
+
+export function resizeViewport(w, h) {
+  state.viewW = w;
+  state.viewH = h;
+  canvas.width = w;
+  canvas.height = h;
+}
 
 let animFrame = null;
 let inputInterval = null;
@@ -49,7 +54,7 @@ export function generateBackground(w, h) {
   const bx = bc.getContext('2d');
   bx.fillStyle = '#ffffff';
   bx.fillRect(0, 0, w, h);
-  bx.strokeStyle = 'rgba(0,0,0,0.06)';
+  bx.strokeStyle = 'rgba(0,0,0,0.12)';
   bx.lineWidth = 1;
   bx.beginPath();
   const gs = 80;
@@ -281,7 +286,7 @@ export { updateLeaderboard, updateHotbar };
 
 // Main render function
 function render() {
-  ctx.clearRect(0, 0, VW, VH);
+  ctx.clearRect(0, 0, state.viewW, state.viewH);
   const rT0 = performance.now();
 
   let interval = (state.lastSrvInterval >= 30 && state.lastSrvInterval <= 200) ? state.lastSrvInterval : 66;
@@ -317,7 +322,7 @@ function render() {
 
   // Background
   if (state.backgroundCanvas) {
-    ctx.drawImage(state.backgroundCanvas, cam.x, cam.y, VW, VH, 0, 0, VW, VH);
+    ctx.drawImage(state.backgroundCanvas, cam.x, cam.y, state.viewW, state.viewH, 0, 0, state.viewW, state.viewH);
   }
 
   // Zombies
@@ -328,7 +333,7 @@ function render() {
     const zx = z.px + (z.x - z.px) * alpha;
     const zy = z.py + (z.y - z.py) * alpha;
     const szx = zx - cam.x, szy = zy - cam.y;
-    if (szx < -40 || szx > VW + 40 || szy < -40 || szy > VH + 40) continue;
+    if (szx < -40 || szx > state.viewW + 40 || szy < -40 || szy > state.viewH + 40) continue;
 
     const zombieAngle = z.headingAngle || 0;
     const headImg = (z.lvl >= 6 && zombieT2HeadImg.complete && zombieT2HeadImg.naturalWidth > 0) ? zombieT2HeadImg : zombieHeadImg;
@@ -361,7 +366,7 @@ function render() {
     if (!p.alive) continue;
     const sx = (p.px + (p.x - p.px) * alpha) - cam.x;
     const sy = (p.py + (p.y - p.py) * alpha) - cam.y;
-    if (sx < -40 || sx > VW + 40 || sy < -40 || sy > VH + 40) continue;
+    if (sx < -40 || sx > state.viewW + 40 || sy < -40 || sy > state.viewH + 40) continue;
 
     drawSword(ctx, p, sx, sy);
     if (state.debugHitbox) drawDebugSwordHitbox(ctx, p, sx, sy);
@@ -405,7 +410,7 @@ function render() {
     ctx.textBaseline = 'bottom';
     ctx.fillStyle = 'rgba(0,0,0,0.6)';
     ctx.font = '12px "Segoe UI", system-ui, sans-serif';
-    ctx.fillText(`X: ${Math.round(me.x)}  Y: ${Math.round(me.y)}`, VW - 10, VH - 10);
+    ctx.fillText(`X: ${Math.round(me.x)}  Y: ${Math.round(me.y)}`, state.viewW - 10, state.viewH - 10);
     ctx.textBaseline = 'alphabetic';
   }
 
@@ -453,7 +458,7 @@ function render() {
   // Hit flash
   if (state.hitFlash > 0) {
     ctx.fillStyle = `rgba(255, 0, 0, ${state.hitFlash / 20})`;
-    ctx.fillRect(0, 0, VW, VH);
+    ctx.fillRect(0, 0, state.viewW, state.viewH);
     state.hitFlash--;
   }
 
@@ -517,7 +522,7 @@ function render() {
     ctx.textAlign = 'left';
     ctx.textBaseline = 'bottom';
     ctx.fillStyle = 'rgba(0,0,0,0.45)';
-    ctx.fillText('b' + window.BUILD, 10, VH - 4);
+    ctx.fillText('b' + window.BUILD, 10, state.viewH - 4);
     ctx.textBaseline = 'alphabetic';
   }
   drawDiag(ctx);

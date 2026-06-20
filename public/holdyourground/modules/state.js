@@ -6,6 +6,8 @@ export const state = {
   playerMeta: {},
   zombies: [],
   screen: 'menu',
+  viewW: 800,
+  viewH: 600,
   backgroundCanvas: null,
   mouseX: 0,
   mouseY: 0,

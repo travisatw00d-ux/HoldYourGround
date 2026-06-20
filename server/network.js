@@ -33,7 +33,7 @@ const publicDir = path.join(__dirname, '..', 'public');
 app.get('/', (req, res) => { res.sendFile(path.join(publicDir, 'holdyourground', 'index.html')); });
 app.get('/version', (req, res) => { res.set('Cache-Control', 'no-store'); res.send('1'); });
 app.use(express.static('public', { setHeaders: (res) => { res.set('Cache-Control', 'no-store'); } }));
-app.use('/images', express.static('images'));
+app.use('/images', express.static('images', { setHeaders: (res) => { res.set('Cache-Control', 'no-store'); } }));
 app.get('/health', (req, res) => res.send('OK'));
 console.log(`[server] holdyourground on http://localhost:${PORT}`);
 
@@ -70,6 +70,10 @@ io.on('connection', (socket) => {
 
   socket.on('equip', ({ slot }) => {
     gameLoop.handleEquip(socket.id, slot);
+  });
+
+  socket.on('fullscreen', ({ enabled }) => {
+    gameLoop.setFullscreen(socket.id, enabled);
   });
 
   socket.on('diagPing', (t) => socket.emit('diagPong', { t }));

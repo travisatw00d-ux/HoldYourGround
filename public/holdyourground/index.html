@@ -30,6 +30,26 @@
     </div>
 
     <div id="hotbarInventory" class="hotbar hidden"></div>
+
+    <div id="settingsBtn" class="settings-btn hidden">
+      <img src="/images/settingsgear.png" alt="Settings">
+    </div>
+
+    <div id="settingsPanel" class="settings-panel hidden">
+      <div class="settings-header">
+        <span class="settings-title">Settings</span>
+        <button id="settingsClose" class="settings-close">&times;</button>
+      </div>
+      <div class="settings-body">
+        <div class="settings-row">
+          <span class="settings-label">Fullscreen Mode</span>
+          <label class="toggle-switch">
+            <input type="checkbox" id="fullscreenToggle">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+      </div>
+    </div>
   </div>
 
   <script src="/shared/data.js"></script>

@@ -1,7 +1,7 @@
 import { state } from './modules/state.js';
 import { connect } from './modules/net.js';
 import { setupInput } from './modules/input.js';
-import { startRender, stopRender } from './modules/render.js';
+import { startRender, stopRender, resizeViewport } from './modules/render.js';
 
 const canvas = document.getElementById('canvas');
 const menu = document.getElementById('menu');
@@ -11,16 +11,22 @@ const nameInput = document.getElementById('nameInput');
 const joinBtn = document.getElementById('joinBtn');
 const respawnBtn = document.getElementById('respawnBtn');
 const hotbarEl = document.getElementById('hotbarInventory');
+const settingsBtn = document.getElementById('settingsBtn');
+const settingsPanel = document.getElementById('settingsPanel');
+const settingsClose = document.getElementById('settingsClose');
+const fullscreenToggle = document.getElementById('fullscreenToggle');
+const wrapper = document.getElementById('wrapper');
 
 function showScreen(id) {
   menu.classList.add('hidden');
   eliminated.classList.add('hidden');
   hud.classList.add('hidden');
   hotbarEl.classList.add('hidden');
+  settingsPanel.classList.add('hidden');
   state.screen = id;
   if (id === 'menu') menu.classList.remove('hidden');
   if (id === 'eliminated') eliminated.classList.remove('hidden');
-  if (id === 'playing') { hud.classList.remove('hidden'); hotbarEl.classList.remove('hidden'); }
+  if (id === 'playing') { hud.classList.remove('hidden'); hotbarEl.classList.remove('hidden'); settingsBtn.classList.remove('hidden'); }
 }
 
 showScreen('menu');
@@ -44,6 +50,50 @@ nameInput.addEventListener('keydown', (e) => {
 
 respawnBtn.addEventListener('click', () => {
   socket.emit('respawn');
+});
+
+// Settings UI
+settingsBtn.addEventListener('click', () => {
+  settingsPanel.classList.remove('hidden');
+});
+
+settingsClose.addEventListener('click', () => {
+  settingsPanel.classList.add('hidden');
+});
+
+document.addEventListener('click', (e) => {
+  if (!settingsPanel.classList.contains('hidden') &&
+      !settingsPanel.contains(e.target) &&
+      !settingsBtn.contains(e.target)) {
+    settingsPanel.classList.add('hidden');
+  }
+});
+
+// Fullscreen toggle
+fullscreenToggle.addEventListener('change', () => {
+  if (fullscreenToggle.checked) {
+    wrapper.requestFullscreen().catch(() => { fullscreenToggle.checked = false; });
+  } else {
+    if (document.fullscreenElement) document.exitFullscreen();
+  }
+});
+
+document.addEventListener('fullscreenchange', () => {
+  if (document.fullscreenElement) {
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    wrapper.style.width = w + 'px';
+    wrapper.style.height = h + 'px';
+    resizeViewport(w, h);
+    fullscreenToggle.checked = true;
+    socket.emit('fullscreen', { enabled: true });
+  } else {
+    wrapper.style.width = '800px';
+    wrapper.style.height = '600px';
+    resizeViewport(800, 600);
+    fullscreenToggle.checked = false;
+    socket.emit('fullscreen', { enabled: false });
+  }
 });
 
 // Diagnostics ping loop

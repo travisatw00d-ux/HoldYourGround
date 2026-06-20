@@ -59,9 +59,15 @@ function addPlayer(id, name, players, zombies) {
     attackLockedAngle: 0,
     attackStartTime: 0,
     prevCf: -1,
-    lvl: 1
+    lvl: 1,
+    fullscreen: false
   };
   recalcStats(players[id]);
+}
+
+function setFullscreen(id, players, enabled) {
+  const p = players[id];
+  if (p) p.fullscreen = !!enabled;
 }
 
 function respawnPlayer(id, players, zombies) {
@@ -93,4 +99,4 @@ function playerInfoObj(p) {
 
 function resetColorIndex() { colorIndex = 0; }
 
-module.exports = { randomSpawn, recalcStats, addPlayer, respawnPlayer, playerInfoObj, resetColorIndex };
+module.exports = { randomSpawn, recalcStats, addPlayer, respawnPlayer, playerInfoObj, resetColorIndex, setFullscreen };

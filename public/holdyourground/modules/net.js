@@ -44,6 +44,7 @@ export function connect() {
     document.getElementById('eliminated').classList.add('hidden');
     document.getElementById('hud').classList.remove('hidden');
     document.getElementById('hotbarInventory').classList.remove('hidden');
+    document.getElementById('settingsBtn').classList.remove('hidden');
     document.getElementById('errorMsg').textContent = '';
     startRender(socket);
   });
@@ -166,6 +167,8 @@ export function connect() {
     document.getElementById('eliminated').classList.remove('hidden');
     document.getElementById('hud').classList.add('hidden');
     document.getElementById('hotbarInventory').classList.add('hidden');
+    document.getElementById('settingsBtn').classList.add('hidden');
+    document.getElementById('settingsPanel').classList.add('hidden');
     state.screen = 'eliminated';
   });
 
@@ -176,6 +179,7 @@ export function connect() {
     document.getElementById('eliminated').classList.add('hidden');
     document.getElementById('hud').classList.remove('hidden');
     document.getElementById('hotbarInventory').classList.remove('hidden');
+    document.getElementById('settingsBtn').classList.remove('hidden');
     startRender(socket);
   });
 

@@ -1,8 +1,5 @@
 import { state } from './state.js';
 
-const VW = 800;
-const VH = 600;
-
 function clamp(v, min, max) {
   return Math.max(min, Math.min(max, v));
 }
@@ -15,7 +12,7 @@ export function getCamera(alpha) {
   if (alpha === undefined) alpha = 1;
   const mx = (me.px === undefined ? me.x : me.px + (me.x - me.px) * alpha);
   const my = (me.py === undefined ? me.y : me.py + (me.y - me.py) * alpha);
-  _cam.x = clamp(mx - VW / 2, 0, Math.max(0, state.worldW - VW));
-  _cam.y = clamp(my - VH / 2, 0, Math.max(0, state.worldH - VH));
+  _cam.x = clamp(mx - state.viewW / 2, 0, Math.max(0, state.worldW - state.viewW));
+  _cam.y = clamp(my - state.viewH / 2, 0, Math.max(0, state.worldH - state.viewH));
   return _cam;
 }

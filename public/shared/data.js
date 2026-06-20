@@ -50,13 +50,13 @@
     left_hand: {
       offsetX: 16,
       offsetY: -20,
-      scale: 0.050,
+      scale: 0.230,
       rotation: -1.55
     },
     right_hand: {
       offsetX: 16,
       offsetY: 20,
-      scale: 0.050,
+      scale: 0.230,
       rotation: -1.55
     }
   };
