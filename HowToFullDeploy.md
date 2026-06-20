@@ -43,17 +43,30 @@ This runs `fly deploy --no-cache` and updates the live game server at fly.io.
 
 If you only changed client-side files (HTML, JS, CSS, images in `public/`):
 
-### Step 1 — Copy files to the frontend project
+### ⚠️ CRITICAL — Copy ALL changed files
 
-Copy your changed files from `HoldYourGround\public\` to `IOWebsite\public\`:
+The frontend project (`IOWebsite`) is a **separate copy** of the game files. You must manually sync changes.
+
+Minimum files to copy (adjust paths as needed):
 
 ```bash
-# Example — copy render.js changes
-copy "C:\Dev\IOGames\HoldYourGround\public\holdyourground\modules\render.js" "C:\Dev\IOWebsite\public\holdyourground\modules\render.js"
+# Copy game code
+copy "C:\Dev\IOGames\HoldYourGround\public\holdyourground\game.js" "C:\Dev\IOWebsite\public\holdyourground\game.js"
+copy "C:\Dev\IOGames\HoldYourGround\public\holdyourground\index.html" "C:\Dev\IOWebsite\public\holdyourground\index.html"
+copy "C:\Dev\IOGames\HoldYourGround\public\holdyourground\modules\*.js" "C:\Dev\IOWebsite\public\holdyourground\modules\"
 
-# Example — copy image changes
+# Copy shared data (ITEM_VISUALS, ANIMATIONS, ZOMBIE_VISUALS, blade coords, etc.)
+# MISSING THIS FILE = invisible swords, hands, and items!
+copy "C:\Dev\IOGames\HoldYourGround\public\shared\data.js" "C:\Dev\IOWebsite\public\shared\data.js"
+
+# Copy styles
+copy "C:\Dev\IOGames\HoldYourGround\public\style.css" "C:\Dev\IOWebsite\public\style.css"
+
+# Copy images
 copy "C:\Dev\IOGames\HoldYourGround\images\*.png" "C:\Dev\IOWebsite\public\images\"
 ```
+
+> **⚠️ Don't forget `public\shared\data.js`!** This file defines `ITEMS`, `ITEM_VISUALS`, `ANIMATIONS`, `ZOMBIE_VISUALS`, `BLADE_TIP_X/Y`, and `BLADE_HILT_X/Y`. Missing it causes swords, hands, and items to be invisible. The game will run but nothing will render visually.
 
 ### Step 2 — Deploy to Cloudflare
 
@@ -82,13 +95,17 @@ This runs `next build` followed by `npx wrangler deploy` using the API token sto
 Use this checklist when you changed BOTH server and client code:
 
 - [ ] 1. Make your changes in `C:\Dev\IOGames\HoldYourGround\`
-- [ ] 2. Copy changed frontend files to `C:\Dev\IOWebsite\public\`
+- [ ] 2. Copy ALL changed frontend files to `C:\Dev\IOWebsite\public\`
   - `HoldYourGround\public\holdyourground\` → `IOWebsite\public\holdyourground\`
+  - `HoldYourGround\public\shared\data.js` → `IOWebsite\public\shared\data.js` (⚠️ critical!)
+  - `HoldYourGround\public\style.css` → `IOWebsite\public\style.css`
   - `HoldYourGround\images\*.png` → `IOWebsite\public\images\`
 - [ ] 3. Deploy backend: `npm run deploy` in `HoldYourGround\`
 - [ ] 4. Commit & push frontend: `git push origin main` in `IOWebsite\`
-- [ ] 5. Wait ~1-2 minutes for Cloudflare auto-deploy to complete
-- [ ] 6. Test in incognito window at `https://iolegends.com`
+- [ ] 5. Wait ~1-2 minutes for Cloudflare auto-deploy to complete, OR run `deploy.bat` for immediate deploy
+- [ ] 6. If `deploy.bat` says "No targets deployed", activate manually:
+     `npx wrangler versions deploy --version-id <id>`
+- [ ] 7. Test in incognito window at `https://iolegends.com`
 
 ---
 
@@ -120,6 +137,7 @@ If you rename an image (to force cache refresh):
 
 | Symptom | Fix |
 |---|---|
+| Player visible but **sword/hands invisible** | `shared/data.js` missing from `IOWebsite\public\shared\`. Copy from `HoldYourGround\public\shared\data.js`. |
 | Hands/Images huge or wrong size | Check if `IOWebsite\public\images\` has the correct file dimensions (64×78 for hands, ~4-5KB). Copy from `HoldYourGround\images\` if wrong. |
 | Cloudflare serving old content | Push to frontend git repo to trigger auto-deploy, or run `deploy.bat`. |
 | "No targets deployed" during manual deploy | Run `npx wrangler versions deploy --version-id <id>` to activate. |
