@@ -99,8 +99,8 @@ class Room {
     if (p) p.fullscreen = !!enabled;
   }
 
-  setCameraZoom(id, zoom) {
-    playerMod.setCameraZoom(id, { [id]: this.players[id] }, zoom);
+  setCameraZoom(id, opts) {
+    playerMod.setCameraZoom(id, this.players, opts);
   }
 
   emitEvents(events) {
@@ -246,7 +246,11 @@ class RoomManager {
     }));
   }
 
-  getPlayerRoom(id) { return this.playerRoom.get(id) || null; }
+  getPlayerRoom(id) {
+    const roomId = this.playerRoom.get(id);
+    if (!roomId) return null;
+    return this.rooms.get(roomId) || null;
+  }
 
   addPlayerToRoom(roomId, playerId, name) {
     const room = this.rooms.get(roomId);
