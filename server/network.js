@@ -34,12 +34,30 @@ app.use('/images', express.static('images', { setHeaders: (res) => { res.set('Ca
 app.get('/health', (req, res) => res.send('OK'));
 console.log(`[server] holdyourground on http://localhost:${PORT}`);
 
+const lobbySockets = new Set();
+
 function broadcastRoomList() {
   io.emit('roomList', roomManager.getRoomList());
 }
 
+function broadcastLobbyCount() {
+  io.emit('lobbyCount', { count: lobbySockets.size });
+}
+
+function joinLobby(socket) {
+  lobbySockets.add(socket.id);
+  broadcastLobbyCount();
+}
+
+function leaveLobby(socket) {
+  lobbySockets.delete(socket.id);
+  broadcastLobbyCount();
+}
+
 io.on('connection', (socket) => {
   console.log(`[${socket.id}] connected`);
+  joinLobby(socket);
+  socket.emit('roomList', roomManager.getRoomList());
 
   socket.on('register', ({ username, password, displayName }) => {
     const result = auth.register(username, password, displayName);
@@ -83,8 +101,10 @@ io.on('connection', (socket) => {
     const room = roomManager.getRoom(roomId);
     if (!room) { socket.emit('error', 'Room not found'); return; }
     if (room.getPlayerCount() >= MAX_PLAYERS) { socket.emit('roomFull'); return; }
+    const accountType = socket.account ? socket.account.accountType || 'basic' : 'guest';
 
-    roomManager.addPlayerToRoom(roomId, socket.id, name);
+    leaveLobby(socket);
+    roomManager.addPlayerToRoom(roomId, socket.id, name, accountType);
     socket.join('room:' + roomId);
     console.log(`[${socket.id}] joined room ${roomId} as "${name}"`);
     socket.emit('init', { id: socket.id, arenaWidth: WORLD_W, arenaHeight: WORLD_H });
@@ -139,12 +159,14 @@ io.on('connection', (socket) => {
       io.to('room:' + roomId).emit('playerLeft', socket.id);
       broadcastRoomList();
     }
+    joinLobby(socket);
   });
 
   socket.on('diagPing', (t) => socket.emit('diagPong', { t }));
 
   socket.on('disconnect', () => {
     console.log(`[${socket.id}] disconnected`);
+    leaveLobby(socket);
     const roomId = roomManager.removePlayerFromRoom(socket.id);
     if (roomId) {
       io.to('room:' + roomId).emit('playerLeft', socket.id);

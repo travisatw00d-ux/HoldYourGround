@@ -22,6 +22,6 @@ export function drawDiag(ctx) {
   ctx.fillStyle = '#9fe';
   ctx.fillText(`pkt ${(state.lastPacketBytes / 1024).toFixed(1)}KB`, 10, 170);
   ctx.fillStyle = 'rgba(159,238,238,0.6)';
-  ctx.fillText('[F] toggle diag', 10, 186);
+  ctx.fillText('[H] cycle debug', 10, 186);
   ctx.restore();
 }

@@ -14,33 +14,42 @@
       <h1>Hold Your Ground</h1>
       <p class="subtitle">Last circle standing wins</p>
 
-      <div id="authForm">
-        <input type="text" id="usernameInput" placeholder="Username" maxlength="20" autofocus>
-        <input type="password" id="passwordInput" placeholder="Password" maxlength="100">
-        <div id="loginMode">
-          <button id="loginBtn">Login</button>
-          <p class="auth-toggle">New here? <a href="#" id="showRegisterBtn">Create an account</a></p>
-        </div>
-        <div id="registerMode" class="hidden">
-          <input type="text" id="displayNameInput" placeholder="Display name (shown in game)" maxlength="16">
-          <p class="auth-note">This will be your name shown to other players</p>
-          <button id="registerBtn">Create Account</button>
-          <p class="auth-toggle">Already have an account? <a href="#" id="showLoginBtn">Login here</a></p>
-        </div>
-        <button id="guestBtn" class="guest-btn">Play as Guest</button>
-      </div>
+      <div class="menu-columns">
+        <div class="menu-left">
+          <div id="authForm">
+            <input type="text" id="usernameInput" placeholder="Username" maxlength="20" autofocus>
+            <input type="password" id="passwordInput" placeholder="Password" maxlength="100">
+            <div id="loginMode">
+              <button id="loginBtn">Login</button>
+              <p class="auth-toggle">New here? <a href="#" id="showRegisterBtn">Create an account</a></p>
+            </div>
+            <div id="registerMode" class="hidden">
+              <input type="text" id="displayNameInput" placeholder="Display name (shown in game)" maxlength="16">
+              <p class="auth-note">This will be your name shown to other players</p>
+              <button id="registerBtn">Create Account</button>
+              <p class="auth-toggle">Already have an account? <a href="#" id="showLoginBtn">Login here</a></p>
+            </div>
+            <button id="guestBtn" class="guest-btn">Play as Guest</button>
+          </div>
 
-      <div id="roomListContainer" class="hidden">
-        <div id="welcomePanel">
-          <p id="welcomeMsg"></p>
-          <p id="accountStats"></p>
+          <div id="welcomePanel" class="hidden">
+            <p id="welcomeMsg"></p>
+            <p id="accountStats"></p>
+          </div>
+
+          <div class="room-actions">
+            <button id="createRoomBtn">Start a New Room</button>
+            <button id="joinBtn">Join</button>
+            <p id="signInPrompt" class="hidden">Please Sign In First Or Click Play As Guest</p>
+          </div>
         </div>
-        <div id="roomList"></div>
-        <div class="room-actions">
-          <button id="createRoomBtn">Start a New Room</button>
-          <button id="joinBtn">Join</button>
+
+        <div class="menu-right">
+          <p id="lobbyCountDisplay" class="lobby-count"></p>
+          <p id="adminBadge" class="hidden">ADMIN</p>
+          <p id="roomBrowserHeader">Room Browser</p>
+          <div id="roomList"></div>
         </div>
-        <p id="adminBadge" class="hidden">ADMIN</p>
       </div>
 
       <p id="errorMsg" class="error hidden"></p>

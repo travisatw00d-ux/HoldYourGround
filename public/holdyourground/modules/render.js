@@ -460,7 +460,7 @@ function render() {
     if (state.debugHitbox) {
       ctx.fillStyle = 'rgba(255,200,0,0.8)';
       ctx.font = 'bold 12px "Segoe UI", system-ui, sans-serif';
-      ctx.fillText('HITBOX DEBUG ON [H to toggle]', 10, 52);
+      ctx.fillText('HITBOX DEBUG ON [H cycle]', 10, 52);
     }
     ctx.textAlign = 'right';
     ctx.textBaseline = 'bottom';

@@ -1,5 +1,5 @@
 import { state } from './modules/state.js';
-import { connect, onRoomList, onAuthSuccess, onGuestJoined } from './modules/net.js';
+import { connect, onRoomList, onAuthSuccess, onGuestJoined, onLobbyCount } from './modules/net.js';
 import { setupInput } from './modules/input.js';
 import { startRender, stopRender, resizeViewport } from './modules/render.js';
 
@@ -8,7 +8,7 @@ const menu = document.getElementById('menu');
 const eliminated = document.getElementById('eliminated');
 const hud = document.getElementById('hud');
 const authForm = document.getElementById('authForm');
-const roomListContainer = document.getElementById('roomListContainer');
+const welcomePanel = document.getElementById('welcomePanel');
 const usernameInput = document.getElementById('usernameInput');
 const passwordInput = document.getElementById('passwordInput');
 const loginMode = document.getElementById('loginMode');
@@ -17,12 +17,17 @@ const loginBtn = document.getElementById('loginBtn');
 const registerBtn = document.getElementById('registerBtn');
 const showRegisterBtn = document.getElementById('showRegisterBtn');
 const showLoginBtn = document.getElementById('showLoginBtn');
-const guestBtn = document.getElementById('guestBtn');
 const displayNameInput = document.getElementById('displayNameInput');
+const guestBtn = document.getElementById('guestBtn');
+const lobbyCountDisplay = document.getElementById('lobbyCountDisplay');
+const roomListEl = document.getElementById('roomList');
+const welcomeMsg = document.getElementById('welcomeMsg');
+const accountStats = document.getElementById('accountStats');
+const lobbyBtn = document.getElementById('lobbyBtn');
+const adminBadge = document.getElementById('adminBadge');
 const joinBtn = document.getElementById('joinBtn');
 const createRoomBtn = document.getElementById('createRoomBtn');
 const respawnBtn = document.getElementById('respawnBtn');
-const lobbyBtn = document.getElementById('lobbyBtn');
 const hotbarEl = document.getElementById('hotbarInventory');
 const settingsBtn = document.getElementById('settingsBtn');
 const settingsPanel = document.getElementById('settingsPanel');
@@ -36,14 +41,12 @@ const escapeStep2 = document.getElementById('escapeStep2');
 const escapeReturnBtn = document.getElementById('escapeReturnBtn');
 const escapeConfirmBtn = document.getElementById('escapeConfirmBtn');
 const escapeCancelBtn = document.getElementById('escapeCancelBtn');
-const wrapper = document.getElementById('wrapper');
-const roomListEl = document.getElementById('roomList');
-const welcomeMsg = document.getElementById('welcomeMsg');
-const accountStats = document.getElementById('accountStats');
-const adminBadge = document.getElementById('adminBadge');
 const errorMsg = document.getElementById('errorMsg');
+const signInPrompt = document.getElementById('signInPrompt');
+const wrapper = document.getElementById('wrapper');
 
 let selectedRoomId = null;
+let currentRooms = [];
 
 function showScreen(id) {
   menu.classList.add('hidden');
@@ -60,11 +63,14 @@ function showScreen(id) {
 showScreen('menu');
 
 function joinGame(roomId) {
-  const name = state.account?.displayName || 'Player';
+  if (!state.account && !state.guestName) { signInPrompt.classList.remove('hidden'); return; }
+  signInPrompt.classList.add('hidden');
+  const name = state.account?.displayName || state.guestName || 'Player';
   socket.emit('join', { roomId, name });
 }
 
 function renderRoomList(rooms) {
+  currentRooms = rooms || [];
   roomListEl.innerHTML = '';
   errorMsg.textContent = '';
 
@@ -77,7 +83,12 @@ function renderRoomList(rooms) {
     const entry = document.createElement('div');
     entry.className = 'room-entry';
     if (selectedRoomId === room.id) entry.classList.add('selected');
-    entry.innerHTML = `<span class="room-name">${room.id}</span><span class="room-players">${room.playerCount}/${room.maxPlayers}</span>`;
+    const nameColors = { guest: '#eee', basic: '#228B22', admin: '#FFD700' };
+    const nameBold = { guest: true, basic: false, admin: true };
+    const players = room.playerNames && room.playerNames.length > 0
+      ? room.playerNames.map(p => '<span style="color:' + (nameColors[p.type] || '#eee') + ';' + (nameBold[p.type] ? 'font-weight:bold' : '') + '">' + p.name + '</span>').join(', ')
+      : '';
+    entry.innerHTML = `<div style="flex:1"><div class="room-first-line"><span class="room-level">LVL - ${room.serverLevel || 0}</span><span class="room-name">${room.id}</span><span class="room-players">${room.playerCount}/${room.maxPlayers}</span></div>${players ? '<div class="room-names">' + players + '</div>' : ''}</div>`;
     entry.addEventListener('click', () => {
       selectedRoomId = room.id;
       document.querySelectorAll('.room-entry').forEach(e => e.classList.remove('selected'));
@@ -90,6 +101,10 @@ function renderRoomList(rooms) {
     });
     roomListEl.appendChild(entry);
   }
+
+  const hasEmpty = currentRooms.some(r => r.playerCount === 0);
+  createRoomBtn.textContent = hasEmpty ? 'Create New Room' : 'Servers Full';
+  createRoomBtn.style.opacity = hasEmpty ? '1' : '0.4';
 }
 
 const socket = connect();
@@ -111,8 +126,10 @@ function showRegisterForm() {
   passwordInput.value = '';
 }
 
-onAuthSuccess((data) => {
+function onAuth(data) {
   state.account = data.account;
+  state.isGuest = false;
+  state.guestName = null;
   state.level = data.account.level;
   state.exp = data.account.exp;
   state.expToNext = data.account.expToNext;
@@ -139,7 +156,12 @@ onAuthSuccess((data) => {
   }
 
   authForm.classList.add('hidden');
-  roomListContainer.classList.remove('hidden');
+  welcomePanel.classList.remove('hidden');
+  signInPrompt.classList.add('hidden');
+}
+
+onAuthSuccess((data) => {
+  onAuth(data);
   renderRoomList(data.rooms);
 });
 
@@ -156,11 +178,17 @@ onGuestJoined((data) => {
   welcomeMsg.textContent = 'Playing as ' + data.name;
   accountStats.textContent = '';
   adminBadge.classList.add('hidden');
-
+  adminSettings.classList.add('hidden');
   wrapper.classList.remove('admin-mode');
+
   authForm.classList.add('hidden');
-  roomListContainer.classList.remove('hidden');
+  welcomePanel.classList.remove('hidden');
+  signInPrompt.classList.add('hidden');
   renderRoomList(data.rooms);
+});
+
+onLobbyCount((count) => {
+  lobbyCountDisplay.textContent = 'Lobby - ' + count;
 });
 
 onRoomList(renderRoomList);
@@ -207,39 +235,16 @@ joinBtn.addEventListener('click', () => {
 });
 
 createRoomBtn.addEventListener('click', () => {
-  const name = state.account?.displayName || 'Player';
-  socket.emit('createRoom', { name });
+  if (!state.account && !state.guestName) { signInPrompt.classList.remove('hidden'); return; }
+  signInPrompt.classList.add('hidden');
+  const emptyRoom = currentRooms.find(r => r.playerCount === 0);
+  if (!emptyRoom) { errorMsg.textContent = 'No empty servers available'; return; }
+  selectedRoomId = emptyRoom.id;
+  joinGame(emptyRoom.id);
 });
 
 respawnBtn.addEventListener('click', () => {
   socket.emit('respawn');
-});
-
-lobbyBtn.addEventListener('click', () => {
-  stopRender();
-  socket.emit('leaveRoom');
-  eliminated.classList.add('hidden');
-  menu.classList.remove('hidden');
-  roomListContainer.classList.remove('hidden');
-  welcomeMsg.textContent = 'Ready For Battle?';
-  state.screen = 'menu';
-  selectedRoomId = null;
-});
-
-settingsBtn.addEventListener('click', () => {
-  settingsPanel.classList.remove('hidden');
-});
-
-settingsClose.addEventListener('click', () => {
-  settingsPanel.classList.add('hidden');
-});
-
-document.addEventListener('click', (e) => {
-  if (!settingsPanel.classList.contains('hidden') &&
-      !settingsPanel.contains(e.target) &&
-      !settingsBtn.contains(e.target)) {
-    settingsPanel.classList.add('hidden');
-  }
 });
 
 socket.on('godModeToggled', ({ enabled }) => {
@@ -274,13 +279,22 @@ escapeConfirmBtn.addEventListener('click', () => {
   hideEscapeMenu();
   eliminated.classList.add('hidden');
   menu.classList.remove('hidden');
-  roomListContainer.classList.remove('hidden');
   welcomeMsg.textContent = 'Ready For Battle?';
   state.screen = 'menu';
   selectedRoomId = null;
 });
 
 escapeCancelBtn.addEventListener('click', hideEscapeMenu);
+
+lobbyBtn.addEventListener('click', () => {
+  stopRender();
+  socket.emit('leaveRoom');
+  eliminated.classList.add('hidden');
+  menu.classList.remove('hidden');
+  welcomeMsg.textContent = 'Ready For Battle?';
+  state.screen = 'menu';
+  selectedRoomId = null;
+});
 
 fullscreenToggle.addEventListener('change', () => {
   if (fullscreenToggle.checked) {

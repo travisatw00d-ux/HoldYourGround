@@ -22,10 +22,14 @@ export function setupInput(socket, canvas) {
       socket.emit('equip', { slot });
     }
     if (e.key === 'h' || e.key === 'H') {
-      state.debugHitbox = !state.debugHitbox;
-    }
-    if (e.key === 'f' || e.key === 'F') {
-      state.showDiag = !state.showDiag;
+      if (state.debugHitbox) {
+        state.debugHitbox = false;
+        state.showDiag = true;
+      } else if (state.showDiag) {
+        state.showDiag = false;
+      } else {
+        state.debugHitbox = true;
+      }
     }
   });
 

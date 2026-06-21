@@ -31,13 +31,14 @@ function recalcStats(p) {
 
 let colorIndex = 0;
 
-function addPlayer(id, name, players, zombies) {
+function addPlayer(id, name, players, zombies, accountType) {
   const spawn = randomSpawn(zombies, SPAWN_MIN_DIST);
   const ci = colorIndex++ % COLORS.length;
   players[id] = {
     id,
     _idBytes: Buffer.from(id, 'utf8'),
     name: name || 'Player',
+    accountType: accountType || 'guest',
     x: spawn.x, y: spawn.y,
     velX: 0, velY: 0,
     radius: PLAYER_RADIUS,

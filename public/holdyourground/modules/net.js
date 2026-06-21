@@ -6,11 +6,13 @@ let socket = null;
 let roomListCallback = null;
 let authSuccessCallback = null;
 let guestJoinedCallback = null;
+let lobbyCountCallback = null;
 
 export function getSocket() { return socket; }
 export function onRoomList(cb) { roomListCallback = cb; }
 export function onAuthSuccess(cb) { authSuccessCallback = cb; }
 export function onGuestJoined(cb) { guestJoinedCallback = cb; }
+export function onLobbyCount(cb) { lobbyCountCallback = cb; }
 
 export function connect() {
   const serverUrl = window.location.hostname === 'iolegends.com' || window.location.hostname === 'www.iolegends.com'
@@ -44,6 +46,10 @@ export function connect() {
   socket.on('authError', (msg) => {
     document.getElementById('errorMsg').textContent = msg;
     document.getElementById('errorMsg').classList.remove('hidden');
+  });
+
+  socket.on('lobbyCount', (data) => {
+    if (lobbyCountCallback) lobbyCountCallback(data.count);
   });
 
   socket.on('roomList', (rooms) => {

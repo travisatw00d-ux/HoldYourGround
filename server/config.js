@@ -3,12 +3,12 @@ const { ITEMS, ANIMATIONS, SWORD_IMG_SIZE, BLADE_TIP_X, BLADE_TIP_Y, BLADE_HILT_
 const PORT = process.env.PORT || 3000;
 const WORLD_W = 3200;
 const WORLD_H = 2400;
-const VIEW_W = 800;
-const VIEW_H = 600;
+const VIEW_W = 1024;
+const VIEW_H = 576;
 const VIEW_MARGIN = 500;
 const PLAYER_RADIUS = 20;
 const MAX_PLAYERS = 10;
-const MAX_ROOMS = 20;
+const MAX_ROOMS = 5;
 const ROOM_EMPTY_TIMEOUT_MS = 30000;
 const TICK_MS = 1000 / 30;
 const BROADCAST_MS = 55;

@@ -19,6 +19,7 @@ class Room {
     this.grid = new SpatialGrid(120, WORLD_W, WORLD_H);
     this.lastBroadcast = 0;
     this.lastEmitTime = 0;
+    this.currentServerLevel = 0;
     this._playerList = [];
     this._viewZ = [];
     this._emptyTimeout = null;
@@ -29,9 +30,9 @@ class Room {
   getPlayerCount() { return Object.keys(this.players).length; }
   isEmpty() { return this.getPlayerCount() === 0; }
 
-  addPlayer(id, name) {
+  addPlayer(id, name, accountType) {
     if (this.getPlayerCount() >= MAX_PLAYERS) return false;
-    playerMod.addPlayer(id, name, this.players, this.zombies);
+    playerMod.addPlayer(id, name, this.players, this.zombies, accountType);
     zombieMod.recalcAllZombieTargets(this.zombies, this.players);
     if (this._emptyTimeout) { clearTimeout(this._emptyTimeout); this._emptyTimeout = null; }
     return true;
@@ -188,7 +189,7 @@ class Room {
       this._playerList.push(p);
     }
     const playerBlock = bp.buildPlayerBlock(this._playerList);
-    const currentServerLevel = serverLevelSum;
+    this.currentServerLevel = serverLevelSum;
 
     const emitTime = Date.now();
     if (this.lastEmitTime && emitTime - this.lastEmitTime > 100) {
@@ -213,7 +214,7 @@ class Room {
         }
         this._viewZ.push(z);
       }
-      this.io.to(id).emit('state', bp.buildStateBuffer(playerBlock, this._playerList.length, currentServerLevel, this._viewZ, emitTime));
+      this.io.to(id).emit('state', bp.buildStateBuffer(playerBlock, this._playerList.length, this.currentServerLevel, this._viewZ, emitTime));
     }
     const tickMs = Date.now() - tickStart;
     if (tickMs > 30) console.log(`[room ${this.id}] tick=${tickMs}ms players=${ids.length} zombies=${this.zombies.length}`);
@@ -245,13 +246,30 @@ class RoomManager {
   getRoom(roomId) { return this.rooms.get(roomId) || null; }
 
   getRoomList() {
-    return Array.from(this.rooms.values())
-      .filter(r => !r.isEmpty())
-      .map(r => ({
-        id: r.id,
-        playerCount: r.getPlayerCount(),
-        maxPlayers: MAX_PLAYERS
-      }));
+    const list = Array.from(this.rooms.values()).map(r => ({
+      id: r.id,
+      playerCount: r.getPlayerCount(),
+      maxPlayers: MAX_PLAYERS,
+      serverLevel: r.currentServerLevel,
+      playerNames: Object.values(r.players).map(p => ({
+        name: p.name,
+        type: p.accountType || 'basic'
+      }))
+    }));
+    list.sort((a, b) => {
+      const aEmpty = a.playerCount === 0 ? 1 : 0;
+      const bEmpty = b.playerCount === 0 ? 1 : 0;
+      if (aEmpty !== bEmpty) return aEmpty - bEmpty;
+      return (b.serverLevel || 0) - (a.serverLevel || 0);
+    });
+    return list;
+  }
+
+  ensureSpareRoom() {
+    const hasEmpty = Array.from(this.rooms.values()).some(r => r.isEmpty());
+    if (!hasEmpty && this.rooms.size < MAX_ROOMS) {
+      this.createRoom();
+    }
   }
 
   getPlayerRoom(id) {
@@ -260,12 +278,13 @@ class RoomManager {
     return this.rooms.get(roomId) || null;
   }
 
-  addPlayerToRoom(roomId, playerId, name) {
+  addPlayerToRoom(roomId, playerId, name, accountType) {
     const room = this.rooms.get(roomId);
     if (!room) return false;
     if (room.getPlayerCount() >= MAX_PLAYERS) return false;
-    room.addPlayer(playerId, name);
+    room.addPlayer(playerId, name, accountType);
     this.playerRoom.set(playerId, roomId);
+    this.ensureSpareRoom();
     return true;
   }
 
@@ -276,6 +295,7 @@ class RoomManager {
     const room = this.rooms.get(roomId);
     if (!room) return null;
     room.removePlayer(playerId);
+    this.ensureSpareRoom();
     return roomId;
   }
 
@@ -283,6 +303,7 @@ class RoomManager {
     const now = Date.now();
     let steps = 0;
     while (now >= this.nextTickAt && steps < MAX_TICKS_PER_WAKE) {
+      this.ensureSpareRoom();
       for (const room of this.rooms.values()) {
         if (!room.isEmpty()) room.gameTick();
       }
@@ -297,6 +318,7 @@ class RoomManager {
 
   initGameLoop(io) {
     this.setIo(io);
+    this.ensureSpareRoom();
     this.nextTickAt = Date.now();
     setTimeout(() => this.tickLoop(), TICK_MS);
   }

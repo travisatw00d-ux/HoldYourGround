@@ -14,8 +14,8 @@ export const state = {
   playerMeta: {},
   zombies: [],
   screen: 'menu',
-  viewW: 800,
-  viewH: 600,
+  viewW: 1024,
+  viewH: 576,
   cameraZoom: 1.0,
   backgroundCanvas: null,
   mouseX: 0,
@@ -34,7 +34,7 @@ export const state = {
   levelGrad: null,
 
   // Diagnostics
-  showDiag: true,
+  showDiag: false,
   fpsFrames: 0, fpsLast: 0, fpsValue: 0, frameTimeMs: 0,
   ping: 0,
   maxPing: 0, maxPingAt: 0, maxFrameMs: 0, maxFrameAt: 0,

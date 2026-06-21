@@ -31,8 +31,8 @@ body {
 
 #wrapper {
   position: relative;
-  width: 800px;
-  height: 600px;
+  width: 1024px;
+  height: 576px;
 }
 
 #canvas {
@@ -56,7 +56,7 @@ body {
 
 .hidden,
 #authForm.hidden,
-#roomListContainer.hidden,
+#welcomePanel.hidden,
 .overlay.hidden {
   display: none;
 }
@@ -70,7 +70,32 @@ h1 {
 .subtitle {
   color: #888;
   font-size: 1rem;
-  margin-bottom: 8px;
+  margin-bottom: 4px;
+}
+
+.menu-columns {
+  display: flex;
+  gap: 32px;
+  width: 100%;
+  max-width: 820px;
+  justify-content: center;
+}
+
+.menu-left {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
+  width: 260px;
+  flex-shrink: 0;
+}
+
+.menu-right {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 420px;
+  flex-shrink: 0;
 }
 
 input[type="text"] {
@@ -86,6 +111,22 @@ input[type="text"] {
 }
 
 input[type="text"]:focus {
+  border-color: var(--accent);
+}
+
+input[type="password"] {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  padding: 10px 16px;
+  color: #fff;
+  font-size: 1rem;
+  width: 220px;
+  text-align: center;
+  outline: none;
+}
+
+input[type="password"]:focus {
   border-color: var(--accent);
 }
 
@@ -326,43 +367,6 @@ button:active {
   transform: translateX(20px);
 }
 
-.escape-overlay {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  background: rgba(10, 10, 15, 0.85);
-  z-index: 15;
-  gap: 12px;
-}
-
-.escape-overlay.hidden {
-  display: none;
-}
-
-.escape-warning {
-  color: #FF6B6B;
-  font-size: 0.85rem;
-  max-width: 280px;
-  line-height: 1.4;
-  text-align: center;
-  padding: 14px 16px;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 8px;
-}
-
-.escape-actions {
-  display: flex;
-  gap: 8px;
-}
-
-.escape-actions button {
-  flex: 1;
-}
-
 .settings-divider {
   height: 1px;
   background: rgba(255, 255, 255, 0.08);
@@ -378,19 +382,19 @@ button:active {
   margin-bottom: 8px;
 }
 
-#roomListContainer {
-  width: 100%;
-  max-width: 320px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
 #roomList {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  min-height: 40px;
+}
+
+#roomBrowserHeader {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.35);
+  text-align: left;
 }
 
 .room-entry {
@@ -428,6 +432,33 @@ button:active {
   border-color: rgba(255, 255, 255, 0.1);
 }
 
+.room-first-line {
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.room-first-line .room-level {
+  flex-shrink: 0;
+}
+
+.room-first-line .room-name {
+  flex: 1;
+  text-align: center;
+}
+
+.room-first-line .room-players {
+  flex-shrink: 0;
+}
+
+.room-names {
+  font-size: 0.7rem;
+  color: #eee;
+  text-align: left;
+  width: 100%;
+  margin-top: 2px;
+}
+
 .room-name {
   font-weight: 600;
   color: #eee;
@@ -438,21 +469,39 @@ button:active {
   font-size: 0.8rem;
 }
 
+.room-level {
+  color: rgba(255, 255, 255, 0.3);
+  font-size: 0.7rem;
+  text-align: right;
+}
+
 .room-actions {
   display: flex;
-  gap: 8px;
+  gap: 6px;
+  width: 100%;
+  flex-direction: column;
 }
 
 .room-actions button {
   flex: 1;
+  padding: 7px 20px;
+  font-size: 0.85rem;
+}
+
+#signInPrompt {
+  font-size: 0.75rem;
+  color: #FF6B6B;
+  text-align: center;
+  margin-top: 2px;
 }
 
 #authForm {
   width: 100%;
-  max-width: 280px;
+  max-width: 220px;
   display: flex;
   flex-direction: column;
   gap: 8px;
+  align-items: center;
 }
 
 #authForm input {
@@ -469,15 +518,6 @@ button:active {
 
 #authForm input:focus {
   border-color: var(--accent);
-}
-
-.auth-actions {
-  display: flex;
-  gap: 8px;
-}
-
-.auth-actions button {
-  flex: 1;
 }
 
 .auth-toggle {
@@ -501,6 +541,21 @@ button:active {
   margin-top: -4px;
 }
 
+.guest-btn {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.3);
+  font-size: 0.75rem;
+  cursor: pointer;
+  padding: 4px 0;
+  transition: color 0.15s;
+  margin-top: 4px;
+}
+
+.guest-btn:hover {
+  color: rgba(255, 255, 255, 0.6);
+}
+
 .lobby-btn {
   background: none;
   border: 1px solid rgba(255, 255, 255, 0.15);
@@ -516,12 +571,11 @@ button:active {
 
 #welcomePanel {
   width: 100%;
-  max-width: 320px;
+  max-width: 220px;
   padding: 10px 14px;
   background: rgba(var(--accent-rgb), 0.08);
   border: 1px solid rgba(var(--accent-rgb), 0.2);
   border-radius: 8px;
-  margin-bottom: 4px;
 }
 
 #welcomeMsg {
@@ -547,17 +601,46 @@ button:active {
   opacity: 0.6;
 }
 
-.guest-btn {
-  background: none;
-  border: none;
-  color: rgba(255, 255, 255, 0.3);
-  font-size: 0.75rem;
-  cursor: pointer;
-  padding: 4px 0;
-  transition: color 0.15s;
-  margin-top: 4px;
+.lobby-count {
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.35);
+  letter-spacing: 0.05em;
+  text-align: right;
 }
 
-.guest-btn:hover {
-  color: rgba(255, 255, 255, 0.6);
+.escape-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgba(10, 10, 15, 0.85);
+  z-index: 15;
+  gap: 12px;
+}
+
+.escape-overlay.hidden {
+  display: none;
+}
+
+.escape-warning {
+  color: #FF6B6B;
+  font-size: 0.85rem;
+  max-width: 280px;
+  line-height: 1.4;
+  text-align: center;
+  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+}
+
+.escape-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.escape-actions button {
+  flex: 1;
 }
