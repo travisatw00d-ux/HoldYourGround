@@ -103,6 +103,12 @@ class Room {
     playerMod.setCameraZoom(id, this.players, opts);
   }
 
+  toggleGodMode(id) {
+    const p = this.players[id];
+    if (p) p.godMode = !p.godMode;
+    return p ? p.godMode : false;
+  }
+
   emitEvents(events) {
     for (const e of events) {
       switch (e.type) {
@@ -239,11 +245,13 @@ class RoomManager {
   getRoom(roomId) { return this.rooms.get(roomId) || null; }
 
   getRoomList() {
-    return Array.from(this.rooms.values()).map(r => ({
-      id: r.id,
-      playerCount: r.getPlayerCount(),
-      maxPlayers: MAX_PLAYERS
-    }));
+    return Array.from(this.rooms.values())
+      .filter(r => !r.isEmpty())
+      .map(r => ({
+        id: r.id,
+        playerCount: r.getPlayerCount(),
+        maxPlayers: MAX_PLAYERS
+      }));
   }
 
   getPlayerRoom(id) {

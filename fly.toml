@@ -26,3 +26,7 @@ primary_region = 'ord'
   memory = '2gb'
   cpu_kind = 'performance'
   cpus = 1
+
+[[mounts]]
+  source = "data"
+  destination = "/data"

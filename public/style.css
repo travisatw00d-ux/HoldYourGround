@@ -1,3 +1,17 @@
+:root {
+  --accent: #4ECDC4;
+  --accent-rgb: 78, 205, 196;
+  --accent-hover: #45b8b0;
+  --accent-active: #3ca39c;
+}
+
+.admin-mode {
+  --accent: #FFD700;
+  --accent-rgb: 255, 215, 0;
+  --accent-hover: #e6c200;
+  --accent-active: #cca800;
+}
+
 * {
   margin: 0;
   padding: 0;
@@ -40,7 +54,10 @@ body {
   gap: 12px;
 }
 
-.hidden {
+.hidden,
+#authForm.hidden,
+#roomListContainer.hidden,
+.overlay.hidden {
   display: none;
 }
 
@@ -69,11 +86,11 @@ input[type="text"] {
 }
 
 input[type="text"]:focus {
-  border-color: #4ECDC4;
+  border-color: var(--accent);
 }
 
 button {
-  background: #4ECDC4;
+  background: var(--accent);
   border: none;
   border-radius: 6px;
   padding: 10px 28px;
@@ -85,11 +102,11 @@ button {
 }
 
 button:hover {
-  background: #45b8b0;
+  background: var(--accent-hover);
 }
 
 button:active {
-  background: #3ca39c;
+  background: var(--accent-active);
 }
 
 .error {
@@ -162,8 +179,8 @@ button:active {
 }
 
 .hot-slot.active {
-  border-color: #4ECDC4;
-  background: rgba(78, 205, 196, 0.15);
+  border-color: var(--accent);
+  background: rgba(var(--accent-rgb), 0.15);
 }
 
 .hot-key {
@@ -178,7 +195,6 @@ button:active {
   line-height: 1.2;
 }
 
-/* Settings gear button */
 .settings-btn {
   position: absolute;
   top: 12px;
@@ -201,7 +217,6 @@ button:active {
   display: block;
 }
 
-/* Settings panel */
 .settings-panel {
   position: absolute;
   top: 50%;
@@ -226,7 +241,7 @@ button:active {
 .settings-title {
   font-size: 1rem;
   font-weight: 600;
-  color: #4ECDC4;
+  color: var(--accent);
 }
 
 .settings-close {
@@ -267,7 +282,6 @@ button:active {
   font-weight: 500;
 }
 
-/* Toggle switch */
 .toggle-switch {
   position: relative;
   display: inline-block;
@@ -305,11 +319,63 @@ button:active {
 }
 
 .toggle-switch input:checked + .toggle-slider {
-  background: #4ECDC4;
+  background: var(--accent);
 }
 
 .toggle-switch input:checked + .toggle-slider::before {
   transform: translateX(20px);
+}
+
+.escape-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgba(10, 10, 15, 0.85);
+  z-index: 15;
+  gap: 12px;
+}
+
+.escape-overlay.hidden {
+  display: none;
+}
+
+.escape-warning {
+  color: #FF6B6B;
+  font-size: 0.85rem;
+  max-width: 280px;
+  line-height: 1.4;
+  text-align: center;
+  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+}
+
+.escape-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.escape-actions button {
+  flex: 1;
+}
+
+.settings-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.08);
+  margin: 12px 0;
+}
+
+.settings-section-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: #FFD700;
+  margin-bottom: 8px;
 }
 
 #roomListContainer {
@@ -341,13 +407,13 @@ button:active {
 }
 
 .room-entry:hover {
-  background: rgba(78, 205, 196, 0.1);
-  border-color: rgba(78, 205, 196, 0.3);
+  background: rgba(var(--accent-rgb), 0.1);
+  border-color: rgba(var(--accent-rgb), 0.3);
 }
 
 .room-entry.selected {
-  background: rgba(78, 205, 196, 0.15);
-  border-color: #4ECDC4;
+  background: rgba(var(--accent-rgb), 0.15);
+  border-color: var(--accent);
 }
 
 .room-entry.empty {
@@ -379,4 +445,104 @@ button:active {
 
 .room-actions button {
   flex: 1;
+}
+
+#authForm {
+  width: 100%;
+  max-width: 280px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+#authForm input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #eee;
+  font-size: 0.9rem;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+#authForm input:focus {
+  border-color: var(--accent);
+}
+
+.auth-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.auth-actions button {
+  flex: 1;
+}
+
+.auth-toggle {
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.4);
+  margin-top: 4px;
+}
+
+.auth-toggle a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.auth-toggle a:hover {
+  text-decoration: underline;
+}
+
+.auth-note {
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.35);
+  margin-top: -4px;
+}
+
+.lobby-btn {
+  background: none;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 0.8rem;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.lobby-btn:hover {
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+#welcomePanel {
+  width: 100%;
+  max-width: 320px;
+  padding: 10px 14px;
+  background: rgba(var(--accent-rgb), 0.08);
+  border: 1px solid rgba(var(--accent-rgb), 0.2);
+  border-radius: 8px;
+  margin-bottom: 4px;
+}
+
+#welcomeMsg {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--accent);
+  margin-bottom: 2px;
+}
+
+#accountStats {
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+#adminBadge {
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: #FFD700;
+  opacity: 0.6;
 }

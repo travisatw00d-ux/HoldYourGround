@@ -7,6 +7,7 @@ const { PerformanceObserver } = require('perf_hooks');
 const { PORT, COLORS, WORLD_W, WORLD_H, MAX_PLAYERS } = require('./config');
 const roomManager = require('./game-loop');
 const playerMod = require('./player');
+const auth = require('./auth');
 
 const gcObserver = new PerformanceObserver((list) => {
   for (const entry of list.getEntries()) {
@@ -39,7 +40,28 @@ function broadcastRoomList() {
 
 io.on('connection', (socket) => {
   console.log(`[${socket.id}] connected`);
-  socket.emit('roomList', roomManager.getRoomList());
+
+  socket.on('register', ({ username, password, displayName }) => {
+    const result = auth.register(username, password, displayName);
+    if (result.ok) {
+      socket.account = result.account;
+      socket.emit('authSuccess', { account: result.account, rooms: roomManager.getRoomList() });
+      console.log(`[${socket.id}] registered as "${result.account.username}"`);
+    } else {
+      socket.emit('authError', result.error);
+    }
+  });
+
+  socket.on('login', ({ username, password }) => {
+    const result = auth.login(username, password);
+    if (result.ok) {
+      socket.account = result.account;
+      socket.emit('authSuccess', { account: result.account, rooms: roomManager.getRoomList() });
+      console.log(`[${socket.id}] logged in as "${result.account.username}"`);
+    } else {
+      socket.emit('authError', result.error);
+    }
+  });
 
   socket.on('createRoom', ({ name }) => {
     const roomId = roomManager.createRoom();
@@ -96,6 +118,22 @@ io.on('connection', (socket) => {
   socket.on('cameraZoom', (data) => {
     const room = roomManager.getPlayerRoom(socket.id);
     if (room) room.setCameraZoom(socket.id, data);
+  });
+
+  socket.on('toggleGodMode', () => {
+    const room = roomManager.getPlayerRoom(socket.id);
+    if (room) {
+      const enabled = room.toggleGodMode(socket.id);
+      socket.emit('godModeToggled', { enabled });
+    }
+  });
+
+  socket.on('leaveRoom', () => {
+    const roomId = roomManager.removePlayerFromRoom(socket.id);
+    if (roomId) {
+      io.to('room:' + roomId).emit('playerLeft', socket.id);
+      broadcastRoomList();
+    }
   });
 
   socket.on('diagPing', (t) => socket.emit('diagPong', { t }));

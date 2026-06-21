@@ -13,21 +13,43 @@
     <div id="menu" class="overlay">
       <h1>Hold Your Ground</h1>
       <p class="subtitle">Last circle standing wins</p>
-      <input type="text" id="nameInput" placeholder="Enter your name" maxlength="16" autofocus>
-      <div id="roomListContainer">
+
+      <div id="authForm">
+        <input type="text" id="usernameInput" placeholder="Username" maxlength="20" autofocus>
+        <input type="password" id="passwordInput" placeholder="Password" maxlength="100">
+        <div id="loginMode">
+          <button id="loginBtn">Login</button>
+          <p class="auth-toggle">New here? <a href="#" id="showRegisterBtn">Create an account</a></p>
+        </div>
+        <div id="registerMode" class="hidden">
+          <input type="text" id="displayNameInput" placeholder="Display name (shown in game)" maxlength="16">
+          <p class="auth-note">This will be your name shown to other players</p>
+          <button id="registerBtn">Create Account</button>
+          <p class="auth-toggle">Already have an account? <a href="#" id="showLoginBtn">Login here</a></p>
+        </div>
+      </div>
+
+      <div id="roomListContainer" class="hidden">
+        <div id="welcomePanel">
+          <p id="welcomeMsg"></p>
+          <p id="accountStats"></p>
+        </div>
         <div id="roomList"></div>
         <div class="room-actions">
           <button id="createRoomBtn">Start a New Room</button>
           <button id="joinBtn">Join</button>
         </div>
+        <p id="adminBadge" class="hidden">ADMIN</p>
       </div>
-      <p id="errorMsg" class="error"></p>
+
+      <p id="errorMsg" class="error hidden"></p>
     </div>
 
     <div id="eliminated" class="overlay hidden">
       <h1>Eliminated!</h1>
       <p id="elimKills">You were pushed out.</p>
       <button id="respawnBtn">Respawn</button>
+      <button id="lobbyBtn" class="lobby-btn">Return to Lobby</button>
     </div>
 
     <div id="hud" class="hud hidden">
@@ -53,6 +75,30 @@
             <input type="checkbox" id="fullscreenToggle">
             <span class="toggle-slider"></span>
           </label>
+        </div>
+        <div id="adminSettings" class="hidden">
+          <div class="settings-divider"></div>
+          <div class="settings-section-label">Admin</div>
+          <div class="settings-row">
+            <span class="settings-label">God-Mode</span>
+            <label class="toggle-switch">
+              <input type="checkbox" id="godModeToggle">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="escapeMenu" class="escape-overlay hidden">
+      <div id="escapeStep1">
+        <button id="escapeReturnBtn">Return to Lobby</button>
+      </div>
+      <div id="escapeStep2" class="hidden">
+        <p class="escape-warning">-WARNING- if you leave now you wont recieve any gold or experience from this round. Do you want to continue?</p>
+        <div class="escape-actions">
+          <button id="escapeConfirmBtn">Return to Lobby</button>
+          <button id="escapeCancelBtn">Cancel</button>
         </div>
       </div>
     </div>

@@ -76,7 +76,7 @@ function processContactDamage(zombies, grid) {
     }
     if (closestP) {
       const dist = Math.sqrt(closestPD2);
-      if (dist < z.radius + closestP.radius && closestP.alive) {
+      if (dist < z.radius + closestP.radius && closestP.alive && !closestP.godMode) {
         closestP.health -= ZOMBIE_DAMAGE;
         if (closestP.health <= 0 && closestP.alive) {
           closestP.alive = false;

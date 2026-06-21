@@ -63,7 +63,8 @@ function addPlayer(id, name, players, zombies) {
     cameraZoom: 1.0,
     viewW: 800,
     viewH: 600,
-    fullscreen: false
+    fullscreen: false,
+    godMode: false
   };
   recalcStats(players[id]);
 }
@@ -97,6 +98,7 @@ function respawnPlayer(id, players, zombies) {
   p.attackHitIds = [];
   p.prevCf = -1;
   p.lvl = 1;
+  p.godMode = false;
 }
 
 function playerInfoObj(p) {

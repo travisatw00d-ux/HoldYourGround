@@ -78,6 +78,7 @@ function checkSwordHit(p, zombies, players, grid) {
     for (const t of nearbyPlayers) {
       if (t.id === p.id || !t.alive) continue;
       if (p.attackHitIds.includes(t.id)) continue;
+      if (t.godMode) continue;
       const d2 = distToSegSq(t.x, t.y, hiltX, hiltY, tipX, tipY);
       if (d2 < (bladeW + t.radius) * (bladeW + t.radius)) {
         t.health -= p.attackDmg;
