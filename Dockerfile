@@ -1,5 +1,6 @@
 FROM node:20-alpine AS build
 WORKDIR /app
+RUN apk add --no-cache python3 build-base
 COPY package*.json ./
 RUN npm ci --omit=dev
 
