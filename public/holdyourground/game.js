@@ -304,6 +304,22 @@ fullscreenToggle.addEventListener('change', () => {
   }
 });
 
+settingsBtn.addEventListener('click', () => {
+  settingsPanel.classList.remove('hidden');
+});
+
+settingsClose.addEventListener('click', () => {
+  settingsPanel.classList.add('hidden');
+});
+
+document.addEventListener('click', (e) => {
+  if (!settingsPanel.classList.contains('hidden') &&
+      !settingsPanel.contains(e.target) &&
+      !settingsBtn.contains(e.target)) {
+    settingsPanel.classList.add('hidden');
+  }
+});
+
 document.addEventListener('fullscreenchange', () => {
   if (document.fullscreenElement) {
     const w = window.innerWidth;

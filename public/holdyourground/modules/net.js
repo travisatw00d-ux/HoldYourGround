@@ -1,5 +1,5 @@
 import { state } from './state.js';
-import { getInput, setupInput } from './input.js';
+import { getInput, setupInput, resetKeys } from './input.js';
 import { startRender, stopRender, generateBackground, updateLeaderboard, updateHotbar, startAttackAnim } from './render.js';
 
 let socket = null;
@@ -36,10 +36,12 @@ export function connect() {
   const emptyState = () => ({ players: {}, zombies: [] });
 
   socket.on('guestJoined', (data) => {
+    resetKeys();
     if (guestJoinedCallback) guestJoinedCallback(data);
   });
 
   socket.on('authSuccess', (data) => {
+    resetKeys();
     if (authSuccessCallback) authSuccessCallback(data);
   });
 
@@ -72,6 +74,7 @@ export function connect() {
   });
 
   socket.on('joined', () => {
+    resetKeys();
     state.screen = 'playing';
     document.getElementById('menu').classList.add('hidden');
     document.getElementById('eliminated').classList.add('hidden');

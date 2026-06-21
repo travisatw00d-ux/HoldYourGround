@@ -14,6 +14,10 @@ export function getInput() {
   return { dx, dy };
 }
 
+export function resetKeys() {
+  for (const key in keys) keys[key] = false;
+}
+
 export function setupInput(socket, canvas) {
   document.addEventListener('keydown', (e) => {
     keys[e.key] = true;

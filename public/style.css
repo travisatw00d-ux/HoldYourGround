@@ -57,6 +57,8 @@ body {
 .hidden,
 #authForm.hidden,
 #welcomePanel.hidden,
+.settings-panel.hidden,
+#settingsBtn.hidden,
 .overlay.hidden {
   display: none;
 }
