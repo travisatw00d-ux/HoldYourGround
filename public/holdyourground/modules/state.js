@@ -1,6 +1,8 @@
 export const state = {
   myId: null,
   account: null,
+  isGuest: false,
+  guestName: null,
   level: 1,
   exp: 0,
   expToNext: 100,

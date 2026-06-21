@@ -5,10 +5,12 @@ import { startRender, stopRender, generateBackground, updateLeaderboard, updateH
 let socket = null;
 let roomListCallback = null;
 let authSuccessCallback = null;
+let guestJoinedCallback = null;
 
 export function getSocket() { return socket; }
 export function onRoomList(cb) { roomListCallback = cb; }
 export function onAuthSuccess(cb) { authSuccessCallback = cb; }
+export function onGuestJoined(cb) { guestJoinedCallback = cb; }
 
 export function connect() {
   const serverUrl = window.location.hostname === 'iolegends.com' || window.location.hostname === 'www.iolegends.com'
@@ -30,6 +32,10 @@ export function connect() {
   const textDecoder = new TextDecoder();
   const zombieMaxHealth = (lvl) => lvl <= 5 ? 4 + lvl : 12 + lvl;
   const emptyState = () => ({ players: {}, zombies: [] });
+
+  socket.on('guestJoined', (data) => {
+    if (guestJoinedCallback) guestJoinedCallback(data);
+  });
 
   socket.on('authSuccess', (data) => {
     if (authSuccessCallback) authSuccessCallback(data);

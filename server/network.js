@@ -63,6 +63,11 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('playAsGuest', ({ name }) => {
+    socket.emit('guestJoined', { name, rooms: roomManager.getRoomList() });
+    console.log(`[${socket.id}] playing as guest "${name}"`);
+  });
+
   socket.on('createRoom', ({ name }) => {
     const roomId = roomManager.createRoom();
     if (!roomId) { socket.emit('error', 'Server full — no room slots available'); return; }

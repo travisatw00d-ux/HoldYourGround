@@ -1,5 +1,5 @@
 import { state } from './modules/state.js';
-import { connect, onRoomList, onAuthSuccess } from './modules/net.js';
+import { connect, onRoomList, onAuthSuccess, onGuestJoined } from './modules/net.js';
 import { setupInput } from './modules/input.js';
 import { startRender, stopRender, resizeViewport } from './modules/render.js';
 
@@ -17,6 +17,7 @@ const loginBtn = document.getElementById('loginBtn');
 const registerBtn = document.getElementById('registerBtn');
 const showRegisterBtn = document.getElementById('showRegisterBtn');
 const showLoginBtn = document.getElementById('showLoginBtn');
+const guestBtn = document.getElementById('guestBtn');
 const displayNameInput = document.getElementById('displayNameInput');
 const joinBtn = document.getElementById('joinBtn');
 const createRoomBtn = document.getElementById('createRoomBtn');
@@ -142,9 +143,35 @@ onAuthSuccess((data) => {
   renderRoomList(data.rooms);
 });
 
+onGuestJoined((data) => {
+  state.isGuest = true;
+  state.guestName = data.name;
+  state.account = null;
+
+  usernameInput.value = '';
+  passwordInput.value = '';
+  displayNameInput.value = '';
+  errorMsg.textContent = '';
+
+  welcomeMsg.textContent = 'Playing as ' + data.name;
+  accountStats.textContent = '';
+  adminBadge.classList.add('hidden');
+
+  wrapper.classList.remove('admin-mode');
+  authForm.classList.add('hidden');
+  roomListContainer.classList.remove('hidden');
+  renderRoomList(data.rooms);
+});
+
 onRoomList(renderRoomList);
 
 setupInput(socket, canvas);
+
+guestBtn.addEventListener('click', () => {
+  const num = Math.floor(10000 + Math.random() * 90000);
+  const name = 'Guest' + num;
+  socket.emit('playAsGuest', { name });
+});
 
 showRegisterBtn.addEventListener('click', (e) => { e.preventDefault(); showRegisterForm(); });
 showLoginBtn.addEventListener('click', (e) => { e.preventDefault(); showLoginForm(); });
