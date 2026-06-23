@@ -1,14 +1,17 @@
 const {
   WORLD_W, WORLD_H, VIEW_W, VIEW_H, VIEW_MARGIN,
   MAX_PLAYERS, MAX_ROOMS, ROOM_EMPTY_TIMEOUT_MS,
-  TICK_MS, BROADCAST_MS, ATTACK_SPEED_MULT, ANIMATIONS
+  TICK_MS, BROADCAST_MS,   ATTACK_SPEED_MULT, ANIMATIONS, KNIGHT_ANIMATIONS,
+  DAYTIME_MS, NIGHTTIME_MS, INTERMISSION_MS
 } = require('./config');
 const SpatialGrid = require('./spatial-grid');
 const playerMod = require('./player');
 const zombieMod = require('./zombie');
 const physics = require('./physics');
 const sword = require('./sword');
+const expMod = require('./exp');
 const bp = require('./binary-protocol');
+const db = require('./db');
 
 class Room {
   constructor(id) {
@@ -23,6 +26,13 @@ class Room {
     this._playerList = [];
     this._viewZ = [];
     this._emptyTimeout = null;
+    this._roundSaved = false;
+    this._persistedExp = new Map();
+    this.matchPhase = 'waiting';
+    this.phaseTimer = 0;
+    this.currentWave = 0;
+    this.matchStarted = false;
+    this._lobbyOrder = [];
   }
 
   setIo(io) { this.io = io; }
@@ -30,10 +40,19 @@ class Room {
   getPlayerCount() { return Object.keys(this.players).length; }
   isEmpty() { return this.getPlayerCount() === 0; }
 
-  addPlayer(id, name, accountType) {
+  getLobbyPlayers() {
+    return this._lobbyOrder.map(id => {
+      const p = this.players[id];
+      if (!p) return null;
+      return { id, name: p.name, accountType: p.accountType || 'guest', level: p.lvl || 1, exp: p.exp || 0 };
+    }).filter(Boolean);
+  }
+
+  addPlayer(id, name, accountType, accountId) {
     if (this.getPlayerCount() >= MAX_PLAYERS) return false;
-    playerMod.addPlayer(id, name, this.players, this.zombies, accountType);
+    playerMod.addPlayer(id, name, this.players, this.zombies, accountType, accountId);
     zombieMod.recalcAllZombieTargets(this.zombies, this.players);
+    if (!this._lobbyOrder.includes(id)) this._lobbyOrder.push(id);
     if (this._emptyTimeout) { clearTimeout(this._emptyTimeout); this._emptyTimeout = null; }
     return true;
   }
@@ -42,6 +61,7 @@ class Room {
     const p = this.players[id];
     if (!p) return;
     delete this.players[id];
+    this._lobbyOrder = this._lobbyOrder.filter(oid => oid !== id);
     if (this.isEmpty() && !this._emptyTimeout) {
       this._emptyTimeout = setTimeout(() => {
         if (this.isEmpty()) {
@@ -62,12 +82,19 @@ class Room {
   handleAttack(id, facingAngle) {
     const p = this.players[id];
     if (!p || !p.alive || p.attackCooldown > 0 || p.attacking) return;
-    const anim = ANIMATIONS[p.currentItem]?.attack;
-    if (!anim || anim.keyframes.length < 2) return;
+    const anim = p.playerClass === 'knight'
+      ? KNIGHT_ANIMATIONS?.attack
+      : ANIMATIONS[p.currentItem]?.attack;
+    if (!anim) return;
+    const kfData = p.playerClass === 'knight' ? anim.knight_sword : anim;
+    if (!kfData || kfData.keyframes.length < 2) return;
+    const kfAnim = p.playerClass === 'knight'
+      ? { keyframes: kfData.keyframes, segments: anim.segments }
+      : anim;
     if (typeof facingAngle === 'number') p.facingAngle = facingAngle;
     p.attacking = true;
     p.attackFrame = 0;
-    p.attackAnim = anim;
+    p.attackAnim = kfAnim;
     p.attackHitIds = [];
     p.attackLockedAngle = p.facingAngle;
     p.attackStartTime = Date.now();
@@ -87,7 +114,91 @@ class Room {
 
   respawnPlayer(id) {
     playerMod.respawnPlayer(id, this.players, this.zombies);
+    this._roundSaved = false;
     this.io.to(id).emit('respawned');
+  }
+
+  startMatch() {
+    this.matchStarted = true;
+    this.currentWave = 1;
+    this.matchPhase = 'daytime';
+    this.phaseTimer = DAYTIME_MS;
+    this.zombies.length = 0;
+    this.grid.clear();
+    zombieMod.recalcAllZombieTargets(this.zombies, this.players);
+    this.io.to('room:' + this.id).emit('matchPhase', { phase: 'daytime', timer: DAYTIME_MS, wave: 1 });
+  }
+
+  handleStartMatch(socketId) {
+    if (this.matchPhase !== 'waiting') return;
+    this.startMatch();
+  }
+
+  _advancePhase() {
+    switch (this.matchPhase) {
+      case 'daytime':
+        this.matchPhase = 'nighttime';
+        this.phaseTimer = NIGHTTIME_MS;
+        this.io.to('room:' + this.id).emit('matchPhase', { phase: 'nighttime', timer: NIGHTTIME_MS, wave: this.currentWave });
+        break;
+      case 'nighttime': {
+        const anyAlive = Object.values(this.players).some(p => p.alive);
+        if (!anyAlive) {
+          this._endMatch();
+          return;
+        }
+        this.matchPhase = 'waveOver';
+        this.phaseTimer = 0;
+        this.io.to('room:' + this.id).emit('matchPhase', { phase: 'waveOver', timer: 0, wave: this.currentWave });
+        break;
+      }
+      case 'waveOver': {
+        this.matchPhase = 'intermission';
+        this.phaseTimer = INTERMISSION_MS;
+        this.io.to('room:' + this.id).emit('matchPhase', { phase: 'intermission', timer: INTERMISSION_MS, wave: this.currentWave });
+        break;
+      }
+      case 'intermission': {
+        for (const id in this.players) {
+          const p = this.players[id];
+          if (!p.alive) {
+            playerMod.respawnPlayer(id, this.players, this.zombies);
+            this.io.to(id).emit('respawned');
+          }
+        }
+        this.currentWave++;
+        this.matchPhase = 'daytime';
+        this.phaseTimer = DAYTIME_MS;
+        this.io.to('room:' + this.id).emit('matchPhase', { phase: 'daytime', timer: DAYTIME_MS, wave: this.currentWave });
+        break;
+      }
+    }
+  }
+
+  _endMatch() {
+    this.matchPhase = 'ended';
+    this.phaseTimer = 0;
+    this._roundSaved = false;
+    this._saveRound();
+    this._roundSaved = true;
+    this.io.to('room:' + this.id).emit('matchEnd', { wave: this.currentWave });
+  }
+
+  resetMatch() {
+    this.matchPhase = 'waiting';
+    this.phaseTimer = 0;
+    this.currentWave = 0;
+    this.matchStarted = false;
+    this._roundSaved = false;
+    this._lobbyOrder = Object.keys(this.players);
+    this.zombies = zombieMod.initZombies(this.players);
+    this.grid.clear();
+    for (const id in this.players) {
+      if (!this.players[id].alive) {
+        playerMod.respawnPlayer(id, this.players, this.zombies);
+      }
+    }
+    this.io.to('room:' + this.id).emit('matchReset');
   }
 
   getPlayerInfoObj(id) {
@@ -125,12 +236,79 @@ class Room {
         case 'zombieMerge':
           this.io.to('room:' + this.id).emit('zombieMerge', { x: e.x, y: e.y });
           break;
+        case 'zombieKilled':
+          this._awardExp(e.playerId, e.zombieLvl);
+          break;
+        case 'zombieAttackStart':
+          this.io.to(e.to).emit('zombieAttackStart', { zombieId: e.zombieId });
+          break;
       }
+    }
+  }
+
+  _awardExp(playerId, zombieLvl) {
+    const p = this.players[playerId];
+    if (!p || !p.alive) return;
+
+    const expGain = expMod.getExpForKill(zombieLvl);
+    p.exp += expGain;
+
+    const goldGain = expMod.getGoldForKill(zombieLvl);
+    p.gold += goldGain;
+
+    let leveled = false;
+    let expToNext = expMod.getExpToNext(p.lvl);
+    while (p.exp >= expToNext) {
+      p.exp -= expToNext;
+      p.lvl++;
+      expToNext = expMod.getExpToNext(p.lvl);
+      leveled = true;
+    }
+
+    this.io.to(playerId).emit('accountUpdate', {
+      exp: p.exp,
+      level: p.lvl,
+      expToNext,
+      gold: p.gold
+    });
+  }
+
+  _saveRound() {
+    const getStmt = db.prepare('SELECT level, exp FROM accounts WHERE id = ?');
+    const updateStmt = db.prepare('UPDATE accounts SET level = ?, exp = ? WHERE id = ?');
+    for (const id in this.players) {
+      const p = this.players[id];
+      if (!p.accountId || p.exp <= 0) continue;
+
+      const alreadyPersisted = this._persistedExp.get(p.id) || 0;
+      const sessionGain = p.exp - alreadyPersisted;
+      if (sessionGain <= 0) continue;
+
+      const row = getStmt.get(p.accountId);
+      if (!row) continue;
+
+      const existingCumulative = expMod.cumulativeExp(row.level || 1, row.exp || 0);
+      const newCumulative = existingCumulative + sessionGain;
+      const result = expMod.fromCumulativeExp(newCumulative);
+      updateStmt.run(result.level, result.exp, p.accountId);
+      this._persistedExp.set(p.id, p.exp);
     }
   }
 
   gameTick() {
     const tickStart = Date.now();
+
+    if (this.matchPhase !== 'waiting' && this.matchPhase !== 'ended' && this.phaseTimer > 0) {
+      this.phaseTimer -= TICK_MS;
+      if (this.phaseTimer <= 0) {
+        this.phaseTimer = 0;
+        this._advancePhase();
+        if (this.matchPhase === 'ended') return;
+      }
+    }
+
+    if (this.matchPhase === 'ended') return;
+
     const ids = Object.keys(this.players);
     if (ids.length === 0) return;
 
@@ -144,16 +322,29 @@ class Room {
     for (const z of this.zombies) { if (z.alive) this.grid.insertZombie(z); }
     for (const id in this.players) { const p = this.players[id]; if (p.alive) this.grid.insertPlayer(p); }
 
-    zombieMod.tickTargeting(this.zombies, this.players);
-    zombieMod.moveAll(this.zombies);
+    if (this.matchPhase === 'nighttime' || this.matchPhase === 'waveOver') {
+      zombieMod.tickTargeting(this.zombies, this.players);
+      zombieMod.moveAll(this.zombies);
 
-    this.grid.clearZombies();
-    for (const z of this.zombies) { if (z.alive) this.grid.insertZombie(z); }
+      this.grid.clearZombies();
+      for (const z of this.zombies) { if (z.alive) this.grid.insertZombie(z); }
 
-    const contactEvents = physics.processContactDamage(this.zombies, this.grid);
-    this.emitEvents(contactEvents);
+      const attackEvents = zombieMod.processZombieAttacks(this.zombies, this.players, this.grid, this.id);
+      this.emitEvents(attackEvents);
 
-    physics.processPlayerCollision(this.players);
+      physics.processPlayerCollision(this.players);
+
+      if (this.matchPhase === 'nighttime') {
+        zombieMod.ensureCount(this.zombies, this.players);
+        zombieMod.reviveDead(this.zombies, this.players);
+      }
+
+      const anyAlive = Object.values(this.players).some(p => p.alive);
+      if (!anyAlive) {
+        this._endMatch();
+        return;
+      }
+    }
 
     for (const id of ids) {
       const p = this.players[id];
@@ -172,11 +363,14 @@ class Room {
       }
     }
 
-    const mergeEvents = zombieMod.processMerge(this.zombies, this.grid);
-    this.emitEvents(mergeEvents);
+    if (this.matchPhase === 'nighttime' || this.matchPhase === 'waveOver') {
+      const mergeEvents = zombieMod.processMerge(this.zombies, this.grid);
+      this.emitEvents(mergeEvents);
+    }
 
-    zombieMod.ensureCount(this.zombies, this.players);
-    zombieMod.reviveDead(this.zombies, this.players);
+    if (this.matchPhase === 'waveOver' && this.zombies.every(z => !z.alive)) {
+      this._advancePhase();
+    }
 
     if (tickStart - this.lastBroadcast < BROADCAST_MS) return;
     this.lastBroadcast = tickStart;
@@ -278,11 +472,11 @@ class RoomManager {
     return this.rooms.get(roomId) || null;
   }
 
-  addPlayerToRoom(roomId, playerId, name, accountType) {
+  addPlayerToRoom(roomId, playerId, name, accountType, accountId) {
     const room = this.rooms.get(roomId);
     if (!room) return false;
     if (room.getPlayerCount() >= MAX_PLAYERS) return false;
-    room.addPlayer(playerId, name, accountType);
+    room.addPlayer(playerId, name, accountType, accountId);
     this.playerRoom.set(playerId, roomId);
     this.ensureSpareRoom();
     return true;

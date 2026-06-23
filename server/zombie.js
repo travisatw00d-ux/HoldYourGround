@@ -1,6 +1,8 @@
 const {
   WORLD_W, WORLD_H, ZOMBIE_RADIUS, ZOMBIE_COUNT,
-  ZOMBIE_MARGIN, SPAWN_MIN_DIST, getZombieStats
+  ZOMBIE_MARGIN, SPAWN_MIN_DIST, getZombieStats,
+  ZOMBIE_DAMAGE, ZOMBIE_ATTACK_RANGE, ZOMBIE_ATTACK_DURATION,
+  ZOMBIE_ATTACK_STRIKE, ZOMBIE_ATTACK_COOLDOWN
 } = require('./config');
 
 function randomZombieSpawn(players) {
@@ -39,7 +41,10 @@ function createZombie(lvl, players, x, y) {
     recalcTimer: Math.floor(Math.random() * 90),
     isStray: Math.random() < 0.2,
     strayCalled: false,
-    lvl
+    lvl,
+    attacking: false,
+    attackTimer: 0,
+    attackCooldown: 0
   };
 }
 
@@ -119,7 +124,7 @@ function tickTargeting(zombies, players) {
 
 function moveAll(zombies) {
   for (const z of zombies) {
-    if (!z.alive || z.headingAngle === undefined) continue;
+    if (!z.alive || z.attacking || z.headingAngle === undefined) continue;
     const mx = Math.cos(z.headingAngle) * z.speed;
     const my = Math.sin(z.headingAngle) * z.speed;
     z.x += mx;
@@ -133,7 +138,9 @@ function processMerge(zombies, grid) {
   const events = [];
   const mergeToRemove = new Set();
   let mergeCount = 0;
-  for (const z of zombies) {
+  const initialCount = zombies.length;
+  for (let i = 0; i < initialCount; i++) {
+    const z = zombies[i];
     if (!z.alive || mergeToRemove.has(z.id) || mergeCount >= 8) continue;
     const nearby = grid.getNearbyZombies(z.x, z.y);
     for (const other of nearby) {
@@ -164,7 +171,10 @@ function processMerge(zombies, grid) {
           recalcTimer: 0,
           isStray: (z.isStray || other.isStray) ? Math.random() < 0.5 : false,
           strayCalled: false,
-          lvl: newLvl
+          lvl: newLvl,
+          attacking: false,
+          attackTimer: 0,
+          attackCooldown: 0
         });
         events.push({ type: 'zombieMerge', x: mx, y: my });
         mergeCount++;
@@ -202,13 +212,80 @@ function reviveDead(zombies, players) {
       z.isStray = Math.random() < 0.2;
       z.strayCalled = false;
       z.alive = true;
+      z.attacking = false;
+      z.attackTimer = 0;
+      z.attackCooldown = 0;
       recalcZombieTarget(z, players, zombies);
       z.recalcTimer = Math.floor(Math.random() * 90);
     }
   }
 }
 
+function processZombieAttacks(zombies, players, grid, roomId) {
+  const events = [];
+  for (const z of zombies) {
+    if (!z.alive) continue;
+
+    if (z.attacking) {
+      // Track target player during attack
+      if (z.targetPlayerId && players[z.targetPlayerId] && players[z.targetPlayerId].alive) {
+        const p = players[z.targetPlayerId];
+        z.headingAngle = Math.atan2(p.y - z.y, p.x - z.x);
+      }
+      z.attackTimer++;
+      if (z.attackTimer === ZOMBIE_ATTACK_STRIKE) {
+        const nearby = grid.getNearbyPlayers(z.x, z.y);
+        let closestP = null, closestPD2 = Infinity;
+        for (const p of nearby) {
+          if (!p.alive || p.godMode) continue;
+          const dx = p.x - z.x, dy = p.y - z.y;
+          const d2 = dx * dx + dy * dy;
+          if (d2 < closestPD2) { closestPD2 = d2; closestP = p; }
+        }
+        if (closestP) {
+          const dist = Math.sqrt(closestPD2);
+          if (dist < z.radius + closestP.radius + ZOMBIE_ATTACK_RANGE) {
+            closestP.health -= ZOMBIE_DAMAGE;
+            events.push({ type: 'gotHit', to: closestP.id, attackerId: z.id, dmg: ZOMBIE_DAMAGE, health: closestP.health });
+            if (closestP.health <= 0 && closestP.alive) {
+              closestP.alive = false;
+              events.push({ type: 'eliminated', to: closestP.id, kills: closestP.kills });
+            }
+          }
+        }
+      }
+      if (z.attackTimer >= ZOMBIE_ATTACK_DURATION) {
+        z.attacking = false;
+        z.attackTimer = 0;
+        z.attackCooldown = ZOMBIE_ATTACK_COOLDOWN;
+      }
+      continue;
+    }
+
+    if (z.attackCooldown > 0) {
+      z.attackCooldown--;
+      continue;
+    }
+
+    // Check if close enough to start an attack
+    if (z.targetPlayerId && players[z.targetPlayerId]) {
+      const p = players[z.targetPlayerId];
+      if (p.alive) {
+        const dx = p.x - z.x, dy = p.y - z.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < z.radius + p.radius + ZOMBIE_ATTACK_RANGE) {
+          z.attacking = true;
+          z.attackTimer = 0;
+          events.push({ type: 'zombieAttackStart', to: 'room:' + roomId, zombieId: z.id });
+        }
+      }
+    }
+  }
+  return events;
+}
+
 module.exports = {
   initZombies, recalcZombieTarget, recalcAllZombieTargets,
-  tickTargeting, moveAll, processMerge, ensureCount, reviveDead
+  tickTargeting, moveAll, processMerge, processZombieAttacks,
+  ensureCount, reviveDead
 };

@@ -51,6 +51,7 @@ button:active { background: #3ca39c; }
   <div class="controls">
     <div class="slot-row">
       <button class="slot-btn active" data-mode="hands">Zombie Hands</button>
+      <button class="slot-btn" data-mode="knight">Knight Items</button>
       <button class="slot-btn" data-mode="screen">Server Level</button>
     </div>
     <h2 id="modeTitle">Zombie Hand Positioner</h2>
@@ -64,9 +65,16 @@ button:active { background: #3ca39c; }
       <button id="symBtn" style="width:100%;padding:8px 12px;border-radius:6px;border:1px solid #4ECDC4;background:transparent;color:#4ECDC4;font-size:0.85rem;cursor:pointer;font-weight:600;transition:all 0.15s;">Mirror Other Hand</button>
     </div>
 
+    <div id="knightUI" style="display:none">
+      <div class="slot-row">
+        <button class="slot-btn active" data-slot="knight_sword">Sword</button>
+        <button class="slot-btn" data-slot="knight_hand">Left Hand</button>
+      </div>
+    </div>
+
     <div class="ctrl-group" id="scaleGroup">
       <label>Scale: <span class="val" id="scaleVal">0.05</span></label>
-      <input type="range" id="scale" min="0.005" max="0.3" step="0.001" value="0.05">
+      <input type="range" id="scale" min="0.005" max="1.0" step="0.001" value="0.05">
     </div>
 
     <div class="ctrl-group" id="rotGroup">
@@ -94,14 +102,18 @@ let W = 800, H = 600;
 let CX = W / 2, CY = H / 2;
 let mode = 'hands';
 
-// hands state
 const hands = {
-  left_hand:  { offsetX: 16, offsetY: -20, scale: 0.05, rotation: -1.55 },
-  right_hand: { offsetX: 16, offsetY: 20, scale: 0.05, rotation: -1.55 }
+  left_hand:  { offsetX: 16, offsetY: -20, scale: 0.230, rotation: -1.55 },
+  right_hand: { offsetX: 16, offsetY: 20, scale: 0.230, rotation: -1.55 }
 };
 let activeHand = 'left_hand';
 
-// screen ui state
+const knightItems = {
+  knight_sword: { offsetX: 23, offsetY: 24, scale: 0.43, rotation: 0.76 },
+  knight_hand:  { offsetX: 16, offsetY: -28, scale: 0.35, rotation: -1.55 }
+};
+let activeKnightItem = 'knight_sword';
+
 const screenUI = { x: 53, y: 56, scale: 0.4, ty: 0 };
 
 let dragging = false;
@@ -112,15 +124,33 @@ const leftImg = new Image(); leftImg.src = '/images/zombielefthand.png';
 const rightImg = new Image(); rightImg.src = '/images/zombierighthand.png';
 const serverLevelImg = new Image(); serverLevelImg.src = '/images/ServerLevel.png';
 
-let imagesLoaded = 0;
-function onImgLoad() {
-  imagesLoaded++;
-  if (imagesLoaded >= 4) document.fonts.load('32px "Lilita One"').then(() => draw());
+const knightSheet = new Image();
+let knightFrames = null;
+knightSheet.src = '/images/KnightSheet.png';
+fetch('/images/KnightSheet.json').then(r => r.json()).then(data => { knightFrames = data.frames; if (knightSheet.complete) draw(); });
+
+const _spriteCache = new Map();
+function getSpriteFromSheet(sheet, drawW, drawH, frame) {
+  drawW = Math.max(1, Math.round(drawW * 2) / 2);
+  drawH = Math.max(1, Math.round(drawH * 2) / 2);
+  const key = `${frame.x}_${frame.y}_${frame.w}x${frame.h}_${drawW}x${drawH}`;
+  let cached = _spriteCache.get(key);
+  if (!cached) {
+    const m = 2;
+    cached = document.createElement('canvas');
+    cached.width = Math.round(drawW * m);
+    cached.height = Math.round(drawH * m);
+    cached.getContext('2d').drawImage(sheet, frame.x, frame.y, frame.w, frame.h, 0, 0, cached.width, cached.height);
+    _spriteCache.set(key, cached);
+  }
+  return cached;
 }
-headImg.onload = onImgLoad;
-leftImg.onload = onImgLoad;
-rightImg.onload = onImgLoad;
-serverLevelImg.onload = onImgLoad;
+
+let imagesLoaded = 0;
+let totalImages = 0;
+const allImages = [headImg, leftImg, rightImg, serverLevelImg, knightSheet];
+allImages.forEach(img => { totalImages++; img.onload = () => { imagesLoaded++; if (imagesLoaded >= totalImages) draw(); }; img.onerror = () => { imagesLoaded++; if (imagesLoaded >= totalImages) draw(); }; });
+setTimeout(draw, 1000);
 
 const scaleSlider = document.getElementById('scale');
 const rotSlider = document.getElementById('rotation');
@@ -134,6 +164,7 @@ const copyBtn = document.getElementById('copyBtn');
 const modeTitle = document.getElementById('modeTitle');
 const modeNote = document.getElementById('modeNote');
 const handsUI = document.getElementById('handsUI');
+const knightUI = document.getElementById('knightUI');
 
 document.getElementById('symBtn').addEventListener('click', () => {
   const otherKey = activeHand === 'left_hand' ? 'right_hand' : 'left_hand';
@@ -152,10 +183,18 @@ document.querySelectorAll('[data-slot]').forEach(btn => {
   btn.addEventListener('click', () => {
     document.querySelectorAll('[data-slot]').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
-    activeHand = btn.dataset.slot;
-    const nh = hands[activeHand];
-    scaleSlider.value = nh.scale;
-    rotSlider.value = nh.rotation;
+    const slot = btn.dataset.slot;
+    if (slot === 'left_hand' || slot === 'right_hand') {
+      activeHand = slot;
+      const nh = hands[activeHand];
+      scaleSlider.value = nh.scale;
+      rotSlider.value = nh.rotation;
+    } else {
+      activeKnightItem = slot;
+      const item = knightItems[activeKnightItem];
+      scaleSlider.value = item.scale;
+      rotSlider.value = item.rotation;
+    }
     draw();
   });
 });
@@ -172,18 +211,34 @@ document.querySelectorAll('[data-mode]').forEach(btn => {
       modeTitle.textContent = 'Server Level Positioner';
       modeNote.textContent = 'Drag the icon. Use X/Y sliders to position the text relative to the icon center.';
       handsUI.style.display = 'none';
+      knightUI.style.display = 'none';
       document.getElementById('rotGroup').style.display = 'none';
       textOffsetGroup.style.display = '';
       scaleSlider.min = '0.1'; scaleSlider.max = '3'; scaleSlider.step = '0.1';
       scaleSlider.value = screenUI.scale;
       tySlider.value = screenUI.ty;
+    } else if (mode === 'knight') {
+      W = 400; H = 400; CX = W / 2; CY = H / 2;
+      canvas.width = W; canvas.height = H;
+      modeTitle.textContent = 'Knight Item Positioner';
+      modeNote.textContent = 'The player faces right (→). Drag the sword and hand to position them around the player body.';
+      handsUI.style.display = 'none';
+      knightUI.style.display = '';
+      document.getElementById('rotGroup').style.display = '';
+      textOffsetGroup.style.display = 'none';
+      scaleSlider.min = '0.005'; scaleSlider.max = '1.0'; scaleSlider.step = '0.001';
+      const item = knightItems[activeKnightItem];
+      scaleSlider.value = item.scale;
+      rotSlider.value = item.rotation;
     } else {
       W = 400; H = 400; CX = W / 2; CY = H / 2;
       canvas.width = W; canvas.height = H;
       modeTitle.textContent = 'Zombie Hand Positioner';
       modeNote.textContent = 'The zombie faces right (→). Drag each hand to position it around the zombie body.';
       handsUI.style.display = '';
+      knightUI.style.display = 'none';
       document.getElementById('rotGroup').style.display = '';
+      textOffsetGroup.style.display = 'none';
       scaleSlider.min = '0.005'; scaleSlider.max = '0.3'; scaleSlider.step = '0.001';
       const ah = hands[activeHand];
       scaleSlider.value = ah.scale;
@@ -198,26 +253,103 @@ function draw() {
 
   if (mode === 'hands') {
     drawHandsMode();
+  } else if (mode === 'knight') {
+    drawKnightMode();
   } else {
     drawScreenMode();
   }
 }
 
-function drawHandsMode() {
-  const CX = W / 2, CY = H / 2;
-
+function drawGrid(cx, cy, cellSize, w, h) {
   ctx.strokeStyle = 'rgba(0,0,0,0.04)'; ctx.lineWidth = 1;
-  for (let x = 0; x <= W; x += 40) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
-  for (let y = 0; y <= H; y += 40) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+  for (let x = 0; x <= w; x += cellSize) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke(); }
+  for (let y = 0; y <= h; y += cellSize) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke(); }
 
   ctx.strokeStyle = 'rgba(0,0,0,0.12)'; ctx.lineWidth = 1.5;
   ctx.setLineDash([6, 6]);
-  ctx.beginPath(); ctx.moveTo(CX + 10, CY); ctx.lineTo(CX + 80, CY); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cx + 10, cy); ctx.lineTo(cx + 80, cy); ctx.stroke();
   ctx.setLineDash([]);
-  ctx.beginPath(); ctx.moveTo(CX + 80, CY); ctx.lineTo(CX + 73, CY - 4); ctx.moveTo(CX + 80, CY); ctx.lineTo(CX + 73, CY + 4); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cx + 80, cy); ctx.lineTo(cx + 73, cy - 4); ctx.moveTo(cx + 80, cy); ctx.lineTo(cx + 73, cy + 4); ctx.stroke();
 
   ctx.strokeStyle = 'rgba(0,0,0,0.08)'; ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(CX - 28, CY); ctx.lineTo(CX + 28, CY); ctx.moveTo(CX, CY - 28); ctx.lineTo(CX, CY + 28); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cx - 28, cy); ctx.lineTo(cx + 28, cy); ctx.moveTo(cx, cy - 28); ctx.lineTo(cx, cy + 28); ctx.stroke();
+}
+
+function drawKnightMode() {
+  const CX = W / 2, CY = H / 2;
+
+  drawGrid(CX, CY, 40, W, H);
+
+  // player body (circle)
+  ctx.beginPath(); ctx.arc(CX, CY, 20, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(78, 205, 196, 0.15)'; ctx.fill();
+  ctx.strokeStyle = 'rgba(78, 205, 196, 0.3)'; ctx.lineWidth = 1.5; ctx.stroke();
+
+  // Knight head
+  const headFrame = knightFrames ? knightFrames['T1KnightHead.png'] : null;
+  if (headFrame) {
+    const hsz = 56 / Math.max(headFrame.sourceSize.w, headFrame.sourceSize.h);
+    const hw = headFrame.sourceSize.w * hsz;
+    const hh = headFrame.sourceSize.h * hsz;
+    ctx.save();
+    ctx.translate(CX, CY);
+    ctx.rotate(-Math.PI / 2);
+    ctx.drawImage(getSpriteFromSheet(knightSheet, hw, hh, headFrame.frame), -hw / 2, -hh / 2, hw, hh);
+    ctx.restore();
+  }
+
+  // Knight sword
+  const ks = knightItems.knight_sword;
+  const isSwordActive = activeKnightItem === 'knight_sword';
+  const swordFrame = knightFrames ? knightFrames['T1KnightSword.png'] : null;
+  if (swordFrame) {
+    const sw = swordFrame.sourceSize.w * ks.scale;
+    const sh = swordFrame.sourceSize.h * ks.scale;
+    ctx.save();
+    ctx.globalAlpha = isSwordActive ? 1 : 0.25;
+    ctx.translate(CX + ks.offsetX, CY + ks.offsetY);
+    ctx.rotate(ks.rotation);
+    ctx.drawImage(getSpriteFromSheet(knightSheet, sw, sh, swordFrame.frame), -sw / 2, -sh / 2, sw, sh);
+    ctx.restore();
+  }
+  ctx.fillStyle = isSwordActive ? 'rgba(78,205,196,0.8)' : 'rgba(255,255,255,0.2)';
+  ctx.font = '10px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('sword', CX + ks.offsetX, CY + ks.offsetY + 30);
+
+  // Knight hand
+  const kh = knightItems.knight_hand;
+  const isHandActive = activeKnightItem === 'knight_hand';
+  const handFrame = knightFrames ? knightFrames['T1KnightLeftHand.png'] : null;
+  if (handFrame) {
+    const sw = handFrame.sourceSize.w * kh.scale;
+    const sh = handFrame.sourceSize.h * kh.scale;
+    ctx.save();
+    ctx.globalAlpha = isHandActive ? 1 : 0.25;
+    ctx.translate(CX + kh.offsetX, CY + kh.offsetY);
+    ctx.rotate(kh.rotation);
+    ctx.drawImage(getSpriteFromSheet(knightSheet, sw, sh, handFrame.frame), -sw / 2, -sh / 2, sw, sh);
+    ctx.restore();
+  }
+  ctx.fillStyle = isHandActive ? 'rgba(78,205,196,0.8)' : 'rgba(255,255,255,0.2)';
+  ctx.font = '10px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('hand', CX + kh.offsetX, CY + kh.offsetY + 30);
+
+  const item = knightItems[activeKnightItem];
+  scaleVal.textContent = item.scale.toFixed(3);
+  rotVal.textContent = item.rotation.toFixed(2);
+
+  output.textContent =
+    `// Paste into shared/data.js → KNIGHT_VISUALS\n` +
+    `knight_sword: {\n  offsetX: ${knightItems.knight_sword.offsetX},\n  offsetY: ${knightItems.knight_sword.offsetY},\n  scale: ${knightItems.knight_sword.scale.toFixed(3)},\n  rotation: ${knightItems.knight_sword.rotation.toFixed(2)}\n},\n` +
+    `knight_hand: {\n  offsetX: ${knightItems.knight_hand.offsetX},\n  offsetY: ${knightItems.knight_hand.offsetY},\n  scale: ${knightItems.knight_hand.scale.toFixed(3)},\n  rotation: ${knightItems.knight_hand.rotation.toFixed(2)}\n}`;
+}
+
+function drawHandsMode() {
+  const CX = W / 2, CY = H / 2;
+
+  drawGrid(CX, CY, 40, W, H);
 
   ctx.beginPath(); ctx.arc(CX, CY, 20, 0, Math.PI * 2);
   ctx.fillStyle = 'rgba(200,60,60,0.15)'; ctx.fill();
@@ -265,20 +397,16 @@ function drawHandsMode() {
 }
 
 function drawScreenMode() {
-  // grid
   ctx.strokeStyle = 'rgba(0,0,0,0.04)'; ctx.lineWidth = 1;
   for (let x = 0; x <= W; x += 80) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
   for (let y = 0; y <= H; y += 80) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
 
-  // viewport border
   ctx.strokeStyle = 'rgba(0,0,0,0.15)'; ctx.lineWidth = 2;
   ctx.strokeRect(0, 0, W, H);
 
-  // labels
   ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.font = '11px monospace'; ctx.textAlign = 'left';
   ctx.fillText('800×600 viewport', 10, 20);
 
-  // server level image
   const ui = screenUI;
   if (serverLevelImg.complete && serverLevelImg.naturalWidth > 0) {
     const sw = serverLevelImg.naturalWidth * ui.scale;
@@ -288,37 +416,30 @@ function drawScreenMode() {
     ctx.drawImage(serverLevelImg, -sw / 2, -sh / 2, sw, sh);
     ctx.restore();
 
-    // drag handle indicator
     ctx.strokeStyle = 'rgba(78,205,196,0.4)'; ctx.lineWidth = 1; ctx.setLineDash([4, 4]);
     ctx.strokeRect(ui.x - sw / 2, ui.y - sh / 2, sw, sh);
     ctx.setLineDash([]);
   }
 
-  // server level text preview (centered on image x, y offset only)
   const tx = ui.x, ty = ui.y + ui.ty;
   ctx.font = '32px "Lilita One", "Segoe UI", sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.lineJoin = 'round';
   ctx.miterLimit = 2;
-  // shadow
   ctx.fillStyle = 'rgba(0,0,0,0.4)';
   ctx.fillText('12', tx + 2, ty + 3);
-  // thick black outline
   ctx.strokeStyle = '#000';
   ctx.lineWidth = 10;
   ctx.strokeText('12', tx, ty);
-  // thin white highlight
   ctx.strokeStyle = 'rgba(255,255,255,0.5)';
   ctx.lineWidth = 2;
   ctx.strokeText('12', tx - 1, ty - 1);
-  // gradient fill
   const grad = ctx.createLinearGradient(tx, ty - 16, tx, ty + 16);
   grad.addColorStop(0, '#ffffff');
   grad.addColorStop(1, '#b0b0b0');
   ctx.fillStyle = grad;
   ctx.fillText('12', tx, ty);
-  // vertical guide line
   ctx.strokeStyle = 'rgba(78,205,196,0.2)';
   ctx.lineWidth = 1;
   ctx.setLineDash([4, 4]);
@@ -326,11 +447,11 @@ function drawScreenMode() {
   ctx.setLineDash([]);
 
   scaleVal.textContent = ui.scale.toFixed(1);
-  rotVal.textContent = '—';
+  rotVal.textContent = '\u2014';
   tyVal.textContent = ui.ty;
 
   output.textContent =
-    `// Paste into shared/data.js → SCREEN_UI\n` +
+    `// Paste into shared/data.js \u2192 SCREEN_UI\n` +
     `serverLevel: {\n  x: ${ui.x},\n  y: ${ui.y},\n  scale: ${ui.scale.toFixed(1)},\n  ty: ${ui.ty}\n}`;
 }
 
@@ -347,6 +468,19 @@ canvas.addEventListener('mousedown', (e) => {
     const dx = p.x - ui.x;
     const dy = p.y - ui.y;
     if (Math.sqrt(dx * dx + dy * dy) < sz / 2 + 15) {
+      dragging = true;
+      dragOffX = dx;
+      dragOffY = dy;
+      canvas.style.cursor = 'grabbing';
+    }
+  } else if (mode === 'knight') {
+    const item = knightItems[activeKnightItem];
+    const frameKey = activeKnightItem === 'knight_sword' ? 'T1KnightSword.png' : 'T1KnightLeftHand.png';
+    const frame = knightFrames ? knightFrames[frameKey] : null;
+    const sz = frame ? Math.max(frame.sourceSize.w, frame.sourceSize.h) * item.scale : 30;
+    const dx = p.x - (CX + item.offsetX);
+    const dy = p.y - (CY + item.offsetY);
+    if (Math.sqrt(dx * dx + dy * dy) < sz / 2 + 20) {
       dragging = true;
       dragOffX = dx;
       dragOffY = dy;
@@ -373,6 +507,10 @@ canvas.addEventListener('mousemove', (e) => {
     if (mode === 'screen') {
       screenUI.x = Math.round(p.x - dragOffX);
       screenUI.y = Math.round(p.y - dragOffY);
+    } else if (mode === 'knight') {
+      const item = knightItems[activeKnightItem];
+      item.offsetX = Math.round(p.x - W / 2 - dragOffX);
+      item.offsetY = Math.round(p.y - H / 2 - dragOffY);
     } else {
       const h = hands[activeHand];
       h.offsetX = Math.round(p.x - W / 2 - dragOffX);
@@ -386,6 +524,14 @@ canvas.addEventListener('mousemove', (e) => {
       const dx = p.x - ui.x;
       const dy = p.y - ui.y;
       canvas.style.cursor = Math.sqrt(dx * dx + dy * dy) < sz / 2 + 15 ? 'grab' : 'default';
+    } else if (mode === 'knight') {
+      const item = knightItems[activeKnightItem];
+      const frameKey = activeKnightItem === 'knight_sword' ? 'T1KnightSword.png' : 'T1KnightLeftHand.png';
+      const frame = knightFrames ? knightFrames[frameKey] : null;
+      const sz = frame ? Math.max(frame.sourceSize.w, frame.sourceSize.h) * item.scale : 30;
+      const dx = p.x - (W / 2 + item.offsetX);
+      const dy = p.y - (H / 2 + item.offsetY);
+      canvas.style.cursor = Math.sqrt(dx * dx + dy * dy) < sz / 2 + 20 ? 'grab' : 'default';
     } else {
       const h = hands[activeHand];
       const img = activeHand === 'left_hand' ? leftImg : rightImg;
@@ -403,13 +549,19 @@ canvas.addEventListener('mouseleave', () => { dragging = false; canvas.style.cur
 scaleSlider.addEventListener('input', () => {
   if (mode === 'screen') {
     screenUI.scale = parseFloat(scaleSlider.value);
+  } else if (mode === 'knight') {
+    knightItems[activeKnightItem].scale = parseFloat(scaleSlider.value);
   } else {
     hands[activeHand].scale = parseFloat(scaleSlider.value);
   }
   draw();
 });
 rotSlider.addEventListener('input', () => {
-  if (mode === 'hands') hands[activeHand].rotation = parseFloat(rotSlider.value);
+  if (mode === 'knight') {
+    knightItems[activeKnightItem].rotation = parseFloat(rotSlider.value);
+  } else if (mode !== 'screen') {
+    hands[activeHand].rotation = parseFloat(rotSlider.value);
+  }
   draw();
 });
 tySlider.addEventListener('input', () => {
@@ -421,6 +573,8 @@ copyBtn.addEventListener('click', () => {
   let text;
   if (mode === 'screen') {
     text = `// SCREEN_UI\nserverLevel: {\n  x: ${screenUI.x},\n  y: ${screenUI.y},\n  scale: ${screenUI.scale.toFixed(1)},\n  ty: ${screenUI.ty}\n}`;
+  } else if (mode === 'knight') {
+    text = `// KNIGHT_VISUALS\nknight_sword: {\n  offsetX: ${knightItems.knight_sword.offsetX},\n  offsetY: ${knightItems.knight_sword.offsetY},\n  scale: ${knightItems.knight_sword.scale.toFixed(3)},\n  rotation: ${knightItems.knight_sword.rotation.toFixed(2)}\n},\nknight_hand: {\n  offsetX: ${knightItems.knight_hand.offsetX},\n  offsetY: ${knightItems.knight_hand.offsetY},\n  scale: ${knightItems.knight_hand.scale.toFixed(3)},\n  rotation: ${knightItems.knight_hand.rotation.toFixed(2)}\n}`;
   } else {
     text = `// ZOMBIE_VISUALS\nleft_hand: {\n  offsetX: ${hands.left_hand.offsetX},\n  offsetY: ${hands.left_hand.offsetY},\n  scale: ${hands.left_hand.scale.toFixed(3)},\n  rotation: ${hands.left_hand.rotation.toFixed(2)}\n},\nright_hand: {\n  offsetX: ${hands.right_hand.offsetX},\n  offsetY: ${hands.right_hand.offsetY},\n  scale: ${hands.right_hand.scale.toFixed(3)},\n  rotation: ${hands.right_hand.rotation.toFixed(2)}\n}`;
   }

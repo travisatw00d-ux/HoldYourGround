@@ -31,7 +31,7 @@ function recalcStats(p) {
 
 let colorIndex = 0;
 
-function addPlayer(id, name, players, zombies, accountType) {
+function addPlayer(id, name, players, zombies, accountType, accountId) {
   const spawn = randomSpawn(zombies, SPAWN_MIN_DIST);
   const ci = colorIndex++ % COLORS.length;
   players[id] = {
@@ -39,6 +39,7 @@ function addPlayer(id, name, players, zombies, accountType) {
     _idBytes: Buffer.from(id, 'utf8'),
     name: name || 'Player',
     accountType: accountType || 'guest',
+    accountId: accountId || null,
     x: spawn.x, y: spawn.y,
     velX: 0, velY: 0,
     radius: PLAYER_RADIUS,
@@ -61,6 +62,9 @@ function addPlayer(id, name, players, zombies, accountType) {
     attackStartTime: 0,
     prevCf: -1,
     lvl: 1,
+    exp: 0,
+    gold: 0,
+    playerClass: 'knight',
     cameraZoom: 1.0,
     viewW: 800,
     viewH: 600,
@@ -98,7 +102,6 @@ function respawnPlayer(id, players, zombies) {
   p.attackAnim = null;
   p.attackHitIds = [];
   p.prevCf = -1;
-  p.lvl = 1;
   p.godMode = false;
 }
 
@@ -107,7 +110,8 @@ function playerInfoObj(p) {
     id: p.id, name: p.name, color: p.color,
     currentItem: p.currentItem, inventory: p.inventory,
     maxHealth: p.maxHealth, speed: p.speed, attackDmg: p.attackDmg, attackSpeed: p.attackSpeed,
-    lvl: p.lvl || 1
+    lvl: p.lvl || 1,
+    playerClass: p.playerClass || 'knight'
   };
 }
 

@@ -9,16 +9,170 @@ let guestJoinedCallback = null;
 let lobbyCountCallback = null;
 
 export function getSocket() { return socket; }
+
+function updateXPBar(level, currentXP, xpToNextLevel) {
+  const xpBar = document.getElementById('xpBar');
+  if (!xpBar || xpBar.classList.contains('hidden')) return;
+  const percent = Math.max(0, Math.min(100, (currentXP / xpToNextLevel) * 100));
+  document.getElementById("levelBadge").textContent = level;
+  document.getElementById("xpFill").style.width = `${percent}%`;
+  document.getElementById("xpText").textContent = `${currentXP.toLocaleString()} / ${xpToNextLevel.toLocaleString()} XP`;
+  document.getElementById("xpPercent").textContent = `${Math.round(percent)}%`;
+}
+
+function loadImage(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = src;
+  });
+}
+
+async function loadGameAssets() {
+  const [sheet, meta, kSheet, kMeta] = await Promise.all([
+    loadImage('/images/spritesheet.png'),
+    fetch('/images/spritesheet.json').then(r => r.json()),
+    loadImage('/images/KnightSheet.png'),
+    fetch('/images/KnightSheet.json').then(r => r.json())
+  ]);
+  state.spriteSheet = sheet;
+  state.spriteFrames = meta.frames;
+  state.knightSheet = kSheet;
+  state.knightFrames = kMeta.frames;
+
+  // Extract settings gear from sprite sheet onto the <img>
+  const gearFrame = state.spriteFrames?.['settingsgear.png']?.frame;
+  if (gearFrame) {
+    const c = document.createElement('canvas');
+    c.width = gearFrame.w;
+    c.height = gearFrame.h;
+    const cx = c.getContext('2d');
+    cx.drawImage(state.spriteSheet, gearFrame.x, gearFrame.y, gearFrame.w, gearFrame.h, 0, 0, gearFrame.w, gearFrame.h);
+    const img = document.getElementById('settingsGearImg');
+    if (img) img.src = c.toDataURL();
+  }
+}
 export function onRoomList(cb) { roomListCallback = cb; }
 export function onAuthSuccess(cb) { authSuccessCallback = cb; }
 export function onGuestJoined(cb) { guestJoinedCallback = cb; }
 export function onLobbyCount(cb) { lobbyCountCallback = cb; }
+
+let assetsLoaded = false;
+let assetsPromise = null;
+
+function ensureAssets() {
+  if (assetsLoaded) return Promise.resolve();
+  if (!assetsPromise) {
+    assetsPromise = loadGameAssets().then(() => {
+      assetsLoaded = true;
+    }).catch(e => {
+      assetsPromise = null;
+      console.error('[HYG] asset load failed:', e);
+      throw e;
+    });
+  }
+  return assetsPromise;
+}
+
+function drawKnightPreview(ctx, cw, ch) {
+  const cx = cw / 2;
+  const cy = ch / 2;
+
+  const headKey = 'T1KnightHead.png';
+  const headFrame = state.knightFrames?.[headKey]?.frame;
+  if (headFrame) {
+    const sz = 48 / Math.max(headFrame.w, headFrame.h);
+    const w = headFrame.w * sz;
+    const h = headFrame.h * sz;
+    ctx.drawImage(state.knightSheet, headFrame.x, headFrame.y, headFrame.w, headFrame.h, cx - w / 2, cy - h / 2, w, h);
+  }
+
+  const swordEntry = state.knightFrames?.['T1KnightSword.png'];
+  const swordFrame = swordEntry?.frame;
+  const swordVis = window.KNIGHT_VISUALS?.knight_sword;
+  if (swordFrame && swordVis) {
+    ctx.save();
+    ctx.translate(cx + swordVis.offsetX, cy + swordVis.offsetY);
+    ctx.rotate(swordVis.rotation || 0);
+    const sw = (swordEntry.sourceSize?.w || 128) * swordVis.scale;
+    const sh = (swordEntry.sourceSize?.h || 128) * swordVis.scale;
+    ctx.drawImage(state.knightSheet, swordFrame.x, swordFrame.y, swordFrame.w, swordFrame.h, -sw / 2, -sh / 2, sw, sh);
+    ctx.restore();
+  }
+
+  const handEntry = state.knightFrames?.['T1KnightLeftHand.png'];
+  const handFrame = handEntry?.frame;
+  const handVis = window.KNIGHT_VISUALS?.knight_hand;
+  if (handFrame && handVis) {
+    ctx.save();
+    ctx.translate(cx + handVis.offsetX, cy + handVis.offsetY);
+    ctx.rotate(handVis.rotation || 0);
+    const hw = (handEntry.sourceSize?.w || 96) * handVis.scale;
+    const hh = (handEntry.sourceSize?.h || 96) * handVis.scale;
+    ctx.drawImage(state.knightSheet, handFrame.x, handFrame.y, handFrame.w, handFrame.h, -hw / 2, -hh / 2, hw, hh);
+    ctx.restore();
+  }
+}
+
+function renderLobbyCards() {
+  const players = state.lobbyPlayers;
+  const hasAssets = state.knightSheet && state.knightFrames;
+  for (let i = 0; i < 10; i++) {
+    const card = document.querySelector(`.lobby-card[data-slot="${i}"]`);
+    if (!card) continue;
+    const nameEl = card.querySelector('.lobby-card-name');
+    const expEl = card.querySelector('.lobby-card-exp');
+    const canvas = card.querySelector('.lobby-card-preview');
+    const ctx = canvas.getContext('2d');
+
+    if (i < players.length) {
+      const p = players[i];
+      card.classList.remove('empty');
+      nameEl.textContent = p.name;
+      expEl.textContent = 'Exp: ' + (p.exp || 0);
+      if (hasAssets) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        drawKnightPreview(ctx, canvas.width, canvas.height);
+      }
+    } else {
+      card.classList.add('empty');
+      nameEl.textContent = 'Waiting...';
+      expEl.textContent = '';
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+  }
+}
+
+async function enterGame(socket) {
+  try {
+    await ensureAssets();
+  } catch (e) {
+    document.getElementById('loadingOverlay').classList.add('hidden');
+    socket.emit('leaveRoom');
+    return;
+  }
+  if (!state.backgroundCanvas) {
+    state.backgroundCanvas = generateBackground(state.worldW, state.worldH);
+    state.backgroundCanvasLight = generateBackground(state.worldW, state.worldH, '#e8e4d8');
+  }
+  state.screen = 'playing';
+  document.getElementById('eliminated').classList.add('hidden');
+  document.getElementById('hud').classList.remove('hidden');
+  document.getElementById('hotbarInventory').classList.remove('hidden');
+  document.getElementById('settingsBtn').classList.remove('hidden');
+  document.getElementById('xpBar').classList.remove('hidden');
+  updateXPBar(state.level, state.exp, state.expToNext);
+  startRender(socket);
+}
 
 export function connect() {
   const serverUrl = window.location.hostname === 'iolegends.com' || window.location.hostname === 'www.iolegends.com'
     ? 'wss://server.iolegends.com'
     : undefined;
   socket = io(serverUrl, { transports: ['websocket'] });
+
+  ensureAssets();
 
   const MY_BUILD = window.BUILD || '';
   setInterval(() => {
@@ -70,21 +224,15 @@ export function connect() {
     state.myId = id;
     state.worldW = arenaWidth;
     state.worldH = arenaHeight;
-    state.backgroundCanvas = generateBackground(state.worldW, state.worldH);
   });
 
-  socket.on('joined', () => {
+  socket.on('joined', async () => {
     resetKeys();
-    state.screen = 'playing';
     document.getElementById('menu').classList.add('hidden');
-    document.getElementById('eliminated').classList.add('hidden');
-    document.getElementById('hud').classList.remove('hidden');
-    document.getElementById('hotbarInventory').classList.remove('hidden');
-    document.getElementById('settingsBtn').classList.remove('hidden');
     document.getElementById('errorMsg').textContent = '';
     state.cameraZoom = 1.0;
     socket.emit('cameraZoom', { zoom: 1.0, viewW: state.viewW, viewH: state.viewH });
-    startRender(socket);
+    state.screen = 'joining';
   });
 
   socket.on('state', (msg) => {
@@ -151,7 +299,7 @@ export function connect() {
         const zlvl = dv.getUint8(o); o += 1;
         const zalive = dv.getUint8(o) === 1; o += 1;
         const old = oldZ[zid];
-        const maxHealth = old ? old.maxHealth : zombieMaxHealth(zlvl);
+        const maxHealth = zombieMaxHealth(zlvl);
         const z = {
           id: zid, x: zx, y: zy, health: zhealth, maxHealth,
           headingAngle: zheading, lvl: zlvl, alive: zalive
@@ -200,14 +348,21 @@ export function connect() {
 
   socket.on('eliminated', ({ kills }) => {
     stopRender();
-    document.getElementById('elimKills').textContent = `Kills: ${kills}`;
+    const active = state.matchPhase === 'daytime' || state.matchPhase === 'nighttime' || state.matchPhase === 'intermission' || state.matchPhase === 'waveOver';
+    if (active) {
+      document.getElementById('waitingRespawn').classList.remove('hidden');
+      document.getElementById('eliminated').classList.add('hidden');
+    } else {
+      document.getElementById('elimKills').textContent = `Kills: ${kills}`;
+      document.getElementById('eliminated').classList.remove('hidden');
+    }
     document.getElementById('menu').classList.add('hidden');
-    document.getElementById('eliminated').classList.remove('hidden');
     document.getElementById('hud').classList.add('hidden');
     document.getElementById('hotbarInventory').classList.add('hidden');
     document.getElementById('settingsBtn').classList.add('hidden');
     document.getElementById('settingsPanel').classList.add('hidden');
-    state.screen = 'eliminated';
+    document.getElementById('xpBar').classList.add('hidden');
+    state.screen = active ? 'waitingRespawn' : 'eliminated';
   });
 
   socket.on('respawned', () => {
@@ -215,9 +370,11 @@ export function connect() {
     state.screen = 'playing';
     document.getElementById('menu').classList.add('hidden');
     document.getElementById('eliminated').classList.add('hidden');
+    document.getElementById('waitingRespawn').classList.add('hidden');
     document.getElementById('hud').classList.remove('hidden');
     document.getElementById('hotbarInventory').classList.remove('hidden');
     document.getElementById('settingsBtn').classList.remove('hidden');
+    document.getElementById('xpBar').classList.remove('hidden');
     state.cameraZoom = 1.0;
     socket.emit('cameraZoom', { zoom: 1.0, viewW: state.viewW, viewH: state.viewH });
     startRender(socket);
@@ -227,7 +384,87 @@ export function connect() {
   socket.on('hitConfirm', ({ dmg, x, y }) => { state.dmgNumbers.push({ x, y, dmg, timer: 1.2, duration: 1.2 }); });
   socket.on('zombieMerge', ({ x, y }) => { state.mergeSmokes.push({ x, y, timer: 1.0 }); });
 
+  socket.on('accountUpdate', ({ exp, level, expToNext, gold }) => {
+    state.exp = exp;
+    state.level = level;
+    state.expToNext = expToNext;
+    state.gold = gold;
+    updateXPBar(level, exp, expToNext);
+  });
+
   socket.on('attackStart', ({ lockedAngle }) => { startAttackAnim(lockedAngle); });
+
+  socket.on('zombieAttackStart', ({ zombieId }) => {
+    const anim = window.ZOMBIE_ANIMATIONS?.attack;
+    if (anim) {
+      state.zombieAnims[zombieId] = {
+        startTime: performance.now()
+      };
+    }
+  });
+
+  socket.on('matchPhase', ({ phase, timer, wave }) => {
+    state.matchPhase = phase;
+    state.phaseTimer = timer;
+    state.phaseTimerStart = timer;
+    state.phaseStartedAt = performance.now();
+    state.currentWave = wave;
+    document.getElementById('startNowBtn').classList.toggle('hidden', phase !== 'waiting');
+    document.getElementById('phaseDisplay').classList.toggle('hidden', phase === 'waiting' || phase === 'ended');
+    const names = { daytime: 'Daytime', nighttime: 'Nighttime', waveOver: 'Clean Up', intermission: 'Intermission' };
+    document.getElementById('phaseName').textContent = names[phase] || phase;
+
+    if (phase !== 'waiting' && (state.screen === 'lobby' || state.screen === 'joining')) {
+      document.getElementById('lobbyScreen').classList.add('hidden');
+      document.getElementById('startNowBtn').classList.add('hidden');
+      enterGame(socket);
+    } else if (phase === 'waiting' && (state.screen === 'lobby' || state.screen === 'joining')) {
+      document.getElementById('lobbyScreen').classList.remove('hidden');
+      state.screen = 'lobby';
+    }
+  });
+
+  socket.on('matchEnd', ({ wave }) => {
+    stopRender();
+    state.matchPhase = 'ended';
+    document.getElementById('phaseDisplay').classList.add('hidden');
+    document.getElementById('startNowBtn').classList.add('hidden');
+    document.getElementById('waitingRespawn').classList.add('hidden');
+    document.getElementById('matchOver').classList.remove('hidden');
+    document.getElementById('menu').classList.add('hidden');
+    document.getElementById('eliminated').classList.add('hidden');
+    document.getElementById('hud').classList.add('hidden');
+    document.getElementById('hotbarInventory').classList.add('hidden');
+    document.getElementById('settingsBtn').classList.add('hidden');
+    document.getElementById('settingsPanel').classList.add('hidden');
+    document.getElementById('xpBar').classList.add('hidden');
+    document.getElementById('matchWaveReached').textContent = wave;
+    state.screen = 'matchOver';
+  });
+
+  socket.on('matchReset', () => {
+    state.matchPhase = 'waiting';
+    state.phaseTimer = 0;
+    state.phaseTimerStart = 0;
+    state.phaseStartedAt = 0;
+    state.currentWave = 0;
+    state.screen = 'lobby';
+    document.getElementById('phaseDisplay').classList.add('hidden');
+    document.getElementById('startNowBtn').classList.add('hidden');
+    document.getElementById('matchOver').classList.add('hidden');
+    document.getElementById('waitingRespawn').classList.add('hidden');
+    document.getElementById('eliminated').classList.add('hidden');
+    document.getElementById('hud').classList.add('hidden');
+    document.getElementById('hotbarInventory').classList.add('hidden');
+    document.getElementById('settingsBtn').classList.add('hidden');
+    document.getElementById('xpBar').classList.add('hidden');
+    document.getElementById('lobbyScreen').classList.remove('hidden');
+  });
+
+  socket.on('lobbyUpdate', ({ players }) => {
+    state.lobbyPlayers = players;
+    renderLobbyCards();
+  });
 
   socket.on('diagPong', (t) => {
     state.ping = Date.now() - t;

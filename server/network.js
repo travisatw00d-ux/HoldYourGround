@@ -44,6 +44,12 @@ function broadcastLobbyCount() {
   io.emit('lobbyCount', { count: lobbySockets.size });
 }
 
+function broadcastLobbyUpdate(room) {
+  if (room.matchPhase === 'waiting') {
+    io.to('room:' + room.id).emit('lobbyUpdate', { players: room.getLobbyPlayers() });
+  }
+}
+
 function joinLobby(socket) {
   lobbySockets.add(socket.id);
   broadcastLobbyCount();
@@ -102,9 +108,10 @@ io.on('connection', (socket) => {
     if (!room) { socket.emit('error', 'Room not found'); return; }
     if (room.getPlayerCount() >= MAX_PLAYERS) { socket.emit('roomFull'); return; }
     const accountType = socket.account ? socket.account.accountType || 'basic' : 'guest';
+    const accountId = socket.account ? socket.account.id : null;
 
     leaveLobby(socket);
-    roomManager.addPlayerToRoom(roomId, socket.id, name, accountType);
+    roomManager.addPlayerToRoom(roomId, socket.id, name, accountType, accountId);
     socket.join('room:' + roomId);
     console.log(`[${socket.id}] joined room ${roomId} as "${name}"`);
     socket.emit('init', { id: socket.id, arenaWidth: WORLD_W, arenaHeight: WORLD_H });
@@ -112,12 +119,14 @@ io.on('connection', (socket) => {
       socket.emit('playerInfo', room.getPlayerInfoObj(oid));
     }
     socket.emit('joined');
+    socket.emit('matchPhase', { phase: room.matchPhase, timer: room.phaseTimer, wave: room.currentWave });
     broadcastRoomList();
+    broadcastLobbyUpdate(room);
   }
 
   socket.on('respawn', () => {
     const room = roomManager.getPlayerRoom(socket.id);
-    if (room) room.respawnPlayer(socket.id);
+    if (room && room.matchPhase === 'intermission') room.respawnPlayer(socket.id);
   });
 
   socket.on('input', ({ dx, dy, angle }) => {
@@ -156,21 +165,38 @@ io.on('connection', (socket) => {
   socket.on('leaveRoom', () => {
     const roomId = roomManager.removePlayerFromRoom(socket.id);
     if (roomId) {
+      const room = roomManager.getRoom(roomId);
       io.to('room:' + roomId).emit('playerLeft', socket.id);
       broadcastRoomList();
+      if (room) broadcastLobbyUpdate(room);
     }
     joinLobby(socket);
   });
 
   socket.on('diagPing', (t) => socket.emit('diagPong', { t }));
 
+  socket.on('startMatch', () => {
+    const room = roomManager.getPlayerRoom(socket.id);
+    if (room) room.handleStartMatch(socket.id);
+  });
+
+  socket.on('playAgain', () => {
+    const room = roomManager.getPlayerRoom(socket.id);
+    if (room) {
+      room.resetMatch();
+      broadcastLobbyUpdate(room);
+    }
+  });
+
   socket.on('disconnect', () => {
     console.log(`[${socket.id}] disconnected`);
     leaveLobby(socket);
     const roomId = roomManager.removePlayerFromRoom(socket.id);
     if (roomId) {
+      const room = roomManager.getRoom(roomId);
       io.to('room:' + roomId).emit('playerLeft', socket.id);
       broadcastRoomList();
+      if (room) broadcastLobbyUpdate(room);
     }
   });
 });

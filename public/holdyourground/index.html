@@ -55,12 +55,122 @@
       <p id="errorMsg" class="error hidden"></p>
     </div>
 
+    <div id="lobbyScreen" class="overlay hidden">
+      <h1>Game Lobby</h1>
+      <div id="lobbyGrid">
+        <div class="lobby-card empty" data-slot="0">
+          <div class="lobby-card-name">Waiting...</div>
+          <canvas class="lobby-card-preview" width="120" height="140"></canvas>
+          <div class="lobby-card-stats">
+            <span class="lobby-card-exp"></span>
+            <span class="lobby-card-rank">Void</span>
+          </div>
+        </div>
+        <div class="lobby-card empty" data-slot="1">
+          <div class="lobby-card-name">Waiting...</div>
+          <canvas class="lobby-card-preview" width="120" height="140"></canvas>
+          <div class="lobby-card-stats">
+            <span class="lobby-card-exp"></span>
+            <span class="lobby-card-rank">Void</span>
+          </div>
+        </div>
+        <div class="lobby-card empty" data-slot="2">
+          <div class="lobby-card-name">Waiting...</div>
+          <canvas class="lobby-card-preview" width="120" height="140"></canvas>
+          <div class="lobby-card-stats">
+            <span class="lobby-card-exp"></span>
+            <span class="lobby-card-rank">Void</span>
+          </div>
+        </div>
+        <div class="lobby-card empty" data-slot="3">
+          <div class="lobby-card-name">Waiting...</div>
+          <canvas class="lobby-card-preview" width="120" height="140"></canvas>
+          <div class="lobby-card-stats">
+            <span class="lobby-card-exp"></span>
+            <span class="lobby-card-rank">Void</span>
+          </div>
+        </div>
+        <div class="lobby-card empty" data-slot="4">
+          <div class="lobby-card-name">Waiting...</div>
+          <canvas class="lobby-card-preview" width="120" height="140"></canvas>
+          <div class="lobby-card-stats">
+            <span class="lobby-card-exp"></span>
+            <span class="lobby-card-rank">Void</span>
+          </div>
+        </div>
+        <div class="lobby-card empty" data-slot="5">
+          <div class="lobby-card-name">Waiting...</div>
+          <canvas class="lobby-card-preview" width="120" height="140"></canvas>
+          <div class="lobby-card-stats">
+            <span class="lobby-card-exp"></span>
+            <span class="lobby-card-rank">Void</span>
+          </div>
+        </div>
+        <div class="lobby-card empty" data-slot="6">
+          <div class="lobby-card-name">Waiting...</div>
+          <canvas class="lobby-card-preview" width="120" height="140"></canvas>
+          <div class="lobby-card-stats">
+            <span class="lobby-card-exp"></span>
+            <span class="lobby-card-rank">Void</span>
+          </div>
+        </div>
+        <div class="lobby-card empty" data-slot="7">
+          <div class="lobby-card-name">Waiting...</div>
+          <canvas class="lobby-card-preview" width="120" height="140"></canvas>
+          <div class="lobby-card-stats">
+            <span class="lobby-card-exp"></span>
+            <span class="lobby-card-rank">Void</span>
+          </div>
+        </div>
+        <div class="lobby-card empty" data-slot="8">
+          <div class="lobby-card-name">Waiting...</div>
+          <canvas class="lobby-card-preview" width="120" height="140"></canvas>
+          <div class="lobby-card-stats">
+            <span class="lobby-card-exp"></span>
+            <span class="lobby-card-rank">Void</span>
+          </div>
+        </div>
+        <div class="lobby-card empty" data-slot="9">
+          <div class="lobby-card-name">Waiting...</div>
+          <canvas class="lobby-card-preview" width="120" height="140"></canvas>
+          <div class="lobby-card-stats">
+            <span class="lobby-card-exp"></span>
+            <span class="lobby-card-rank">Void</span>
+          </div>
+        </div>
+      </div>
+      <div class="lobby-actions">
+        <button id="lobbyStartBtn">Start Match</button>
+        <button id="lobbyLeaveBtn" class="lobby-btn">Leave</button>
+      </div>
+    </div>
+
     <div id="eliminated" class="overlay hidden">
       <h1>Eliminated!</h1>
       <p id="elimKills">You were pushed out.</p>
       <button id="respawnBtn">Respawn</button>
       <button id="lobbyBtn" class="lobby-btn">Return to Lobby</button>
     </div>
+
+    <div id="matchOver" class="overlay hidden">
+      <h1>Match Over</h1>
+      <p>You survived until Wave <span id="matchWaveReached">0</span></p>
+      <button id="playAgainBtn">Play Again</button>
+      <button id="matchOverLobbyBtn" class="lobby-btn">Return to Lobby</button>
+    </div>
+
+    <div id="waitingRespawn" class="overlay hidden">
+      <h1>Waiting for Next Wave...</h1>
+      <p>You will respawn when this wave ends.</p>
+      <button id="waitingLobbyBtn" class="lobby-btn">Return to Lobby</button>
+    </div>
+
+    <div id="phaseDisplay" class="hidden">
+      <span id="phaseName"></span>
+      <span id="phaseTimer"></span>
+    </div>
+
+    <button id="startNowBtn" class="hidden">Start Now</button>
 
     <div id="hud" class="hud hidden">
       <div class="lb-title">Leaderboard</div>
@@ -69,8 +179,24 @@
 
     <div id="hotbarInventory" class="hotbar hidden"></div>
 
+    <div class="xp-hud hidden" id="xpBar">
+      <div class="xp-level-badge" id="levelBadge">1</div>
+      <div class="xp-bar-frame">
+        <div class="xp-bar-inner">
+          <div class="xp-fill" id="xpFill"></div>
+          <div class="xp-text" id="xpText">0 / 100 XP</div>
+        </div>
+      </div>
+      <div class="xp-percent" id="xpPercent">0%</div>
+    </div>
+
+    <div id="loadingOverlay" class="loading-overlay hidden">
+      <div class="loading-spinner"></div>
+      <div class="loading-text">Loading...</div>
+    </div>
+
     <div id="settingsBtn" class="settings-btn hidden">
-      <img src="/images/settingsgear.png" alt="Settings">
+      <img id="settingsGearImg" src="" alt="Settings">
     </div>
 
     <div id="settingsPanel" class="settings-panel hidden">

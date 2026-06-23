@@ -1,4 +1,4 @@
-const { BLADE_TIP_X, BLADE_TIP_Y, BLADE_HILT_X, BLADE_HILT_Y, ATTACK_SPEED_MULT, ATTACK_KNOCKBACK } = require('./config');
+const { BLADE_TIP_X, BLADE_TIP_Y, BLADE_HILT_X, BLADE_HILT_Y, ATTACK_SPEED_MULT, ATTACK_KNOCKBACK, KNIGHT_BLADE_TIP_X, KNIGHT_BLADE_TIP_Y, KNIGHT_BLADE_HILT_X, KNIGHT_BLADE_HILT_Y } = require('./config');
 
 function animTotal(anim) {
   return anim._total || (anim._total = anim.segments.reduce((a, b) => a + b, 0));
@@ -56,13 +56,17 @@ function checkSwordHit(p, zombies, players, grid) {
   }
   p.prevCf = currentCf;
 
-  const nearbyPlayers = grid.getNearbyPlayers(p.x, p.y);
   const nearbyZombies = grid.getNearbyZombies(p.x, p.y);
 
   for (let si = 0; si < cfs.length; si++) {
     const cf = cfs[si];
     const vis = interpHitbox(p.attackAnim, cf);
     if (!vis) continue;
+    const isKnight = p.playerClass === 'knight';
+    const btX = isKnight ? KNIGHT_BLADE_TIP_X : BLADE_TIP_X;
+    const btY = isKnight ? KNIGHT_BLADE_TIP_Y : BLADE_TIP_Y;
+    const bhX = isKnight ? KNIGHT_BLADE_HILT_X : BLADE_HILT_X;
+    const bhY = isKnight ? KNIGHT_BLADE_HILT_Y : BLADE_HILT_Y;
     const cos = Math.cos(angle), sin = Math.sin(angle);
     const rx = vis.offsetX * cos - vis.offsetY * sin;
     const ry = vis.offsetX * sin + vis.offsetY * cos;
@@ -70,32 +74,10 @@ function checkSwordHit(p, zombies, players, grid) {
     const scale = vis.scale;
     const rot = angle + (vis.rotation || 0);
     const cosR = Math.cos(rot), sinR = Math.sin(rot);
-    const tipX = sx + (BLADE_TIP_X * cosR - BLADE_TIP_Y * sinR) * scale;
-    const tipY = sy + (BLADE_TIP_X * sinR + BLADE_TIP_Y * cosR) * scale;
-    const hiltX = sx + (BLADE_HILT_X * cosR - BLADE_HILT_Y * sinR) * scale;
-    const hiltY = sy + (BLADE_HILT_X * sinR + BLADE_HILT_Y * cosR) * scale;
-
-    for (const t of nearbyPlayers) {
-      if (t.id === p.id || !t.alive) continue;
-      if (p.attackHitIds.includes(t.id)) continue;
-      if (t.godMode) continue;
-      const d2 = distToSegSq(t.x, t.y, hiltX, hiltY, tipX, tipY);
-      if (d2 < (bladeW + t.radius) * (bladeW + t.radius)) {
-        t.health -= p.attackDmg;
-        const kx = t.x - p.x, ky = t.y - p.y;
-        const kd = Math.sqrt(kx * kx + ky * ky) || 1;
-        t.velX += (kx / kd) * ATTACK_KNOCKBACK;
-        t.velY += (ky / kd) * ATTACK_KNOCKBACK;
-        p.attackHitIds.push(t.id);
-        events.push({ type: 'hitConfirm', to: p.id, targetId: t.id, dmg: p.attackDmg, x: t.x, y: t.y });
-        if (t.health <= 0) {
-          t.alive = false;
-          p.kills++;
-          events.push({ type: 'eliminated', to: t.id, kills: t.kills });
-        }
-        events.push({ type: 'gotHit', to: t.id, attackerId: p.id, dmg: p.attackDmg, health: Math.max(0, t.health) });
-      }
-    }
+    const tipX = sx + (btX * cosR - btY * sinR) * scale;
+    const tipY = sy + (btX * sinR + btY * cosR) * scale;
+    const hiltX = sx + (bhX * cosR - bhY * sinR) * scale;
+    const hiltY = sy + (bhX * sinR + bhY * cosR) * scale;
 
     for (const z of nearbyZombies) {
       if (!z.alive) continue;
@@ -111,6 +93,7 @@ function checkSwordHit(p, zombies, players, grid) {
         if (z.health <= 0) {
           z.alive = false;
           p.kills++;
+          events.push({ type: 'zombieKilled', playerId: p.id, zombieLvl: z.lvl });
         }
         events.push({ type: 'hitConfirm', to: p.id, targetId: z.id, dmg: p.attackDmg, x: z.x, y: z.y });
       }
