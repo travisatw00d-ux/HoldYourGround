@@ -436,16 +436,34 @@ function drawKnightHand(ctx, p, sx, sy) {
 
 function updateLeaderboard() {
   const sorted = Object.values(state.players).sort((a, b) => b.kills - a.kills);
+  const queued = state.queuedPlayers || [];
   let sig = '';
   for (let i = 0; i < sorted.length; i++) sig += sorted[i].name + ':' + sorted[i].kills + '|';
+  for (const q of queued) sig += 'q:' + q.id + '|';
   if (sig === state.lbSig) return;
   state.lbSig = sig;
+
+  const maxVisible = 10;
   let html = '';
-  for (let i = 0; i < sorted.length; i++) {
+  let remaining = maxVisible;
+
+  for (let i = 0; i < sorted.length && remaining > 0; i++, remaining--) {
     const p = sorted[i];
     const cls = i === 0 ? 'lb-entry top' : 'lb-entry';
     html += `<div class="${cls}"><span>${p.name}</span><span class="lb-kills">${p.kills}</span></div>`;
   }
+
+  for (let i = 0; i < queued.length && remaining > 0; i++, remaining--) {
+    const qp = queued[i];
+    const posText = !qp.pos || qp.pos === 0 ? 'waiting...' : (qp.pos === 1 ? '1st in queue' : 'in queue (' + (qp.pos - 1) + ' ahead)');
+    html += `<div class="lb-entry"><span>${qp.name}</span><span class="lb-kills">${posText}</span></div>`;
+  }
+
+  const hidden = sorted.length + queued.length - maxVisible;
+  if (hidden > 0) {
+    html += `<div class="lb-entry" style="opacity:0.5"><span></span><span class="lb-kills">${hidden} in queue</span></div>`;
+  }
+
   document.getElementById('lbEntries').innerHTML = html;
 }
 
@@ -502,6 +520,16 @@ function render() {
 
   // Local player facing angle
   const me = state.players[state.myId];
+
+  const spectatingTarget = (() => {
+    if (!state.isDeadSpectating) return null;
+    const ids = Object.keys(state.players).filter(id => state.players[id].alive);
+    ids.sort((a, b) => state.players[b].lvl - state.players[a].lvl);
+    if (ids.length === 0) return null;
+    const idx = Math.min(state.spectatingTargetIndex, ids.length - 1);
+    return state.players[ids[idx]];
+  })();
+
   if (me && me.alive) {
     const mex = me.px + (me.x - me.px) * alpha;
     const mey = me.py + (me.y - me.py) * alpha;
@@ -681,12 +709,13 @@ function render() {
   // --- End game world ---
 
   // Stat HUD
-  if (me) {
+  const hudTarget = state.isDeadSpectating && spectatingTarget ? spectatingTarget : me;
+  if (hudTarget) {
     ctx.fillStyle = 'rgba(0,0,0,0.6)';
     ctx.font = '12px "Segoe UI", system-ui, sans-serif';
     ctx.textAlign = 'left';
-    ctx.fillText(`Spd: ${me.speed || window.BASE_STATS.speed}  Atk: ${me.attackDmg || window.BASE_STATS.attackDmg}  SpdAtk: ${me.attackSpeed || window.BASE_STATS.attackSpeed}ms`, 10, 18);
-    ctx.fillText(`HP: ${Math.max(0, me.health)}/${me.maxHealth}`, 10, 34);
+    ctx.fillText(`Spd: ${hudTarget.speed || window.BASE_STATS.speed}  Atk: ${hudTarget.attackDmg || window.BASE_STATS.attackDmg}  SpdAtk: ${hudTarget.attackSpeed || window.BASE_STATS.attackSpeed}ms`, 10, 18);
+    ctx.fillText(`HP: ${Math.max(0, hudTarget.health)}/${hudTarget.maxHealth}`, 10, 34);
     if (state.debugHitbox) {
       ctx.fillStyle = 'rgba(255,200,0,0.8)';
       ctx.font = 'bold 12px "Segoe UI", system-ui, sans-serif';
@@ -696,8 +725,54 @@ function render() {
     ctx.textBaseline = 'bottom';
     ctx.fillStyle = 'rgba(0,0,0,0.6)';
     ctx.font = '12px "Segoe UI", system-ui, sans-serif';
-    ctx.fillText(`X: ${Math.round(me.x)}  Y: ${Math.round(me.y)}`, state.viewW - 10, state.viewH - 10);
+    ctx.fillText(`X: ${Math.round(hudTarget.x)}  Y: ${Math.round(hudTarget.y)}`, state.viewW - 10, state.viewH - 10);
     ctx.textBaseline = 'alphabetic';
+  }
+
+  // End-game spectator label
+  if (state.isSpectator) {
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.font = '14px "Segoe UI", system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('SPECTATING', state.viewW / 2, state.viewH - 20);
+    ctx.textAlign = 'left';
+  }
+
+  // Dead spectator label
+  if (state.isDeadSpectating && spectatingTarget) {
+    document.getElementById('levelBadge').textContent = spectatingTarget.lvl || 1;
+    document.getElementById('xpFill').style.width = '0%';
+    document.getElementById('xpText').textContent = 'Spectating';
+    document.getElementById('xpPercent').textContent = '';
+    ctx.fillStyle = 'rgba(255,200,100,0.8)';
+    ctx.font = '14px "Segoe UI", system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('SPECTATING: ' + spectatingTarget.name, state.viewW / 2, state.viewH - 50);
+    ctx.textAlign = 'left';
+  }
+
+  // Update join button text
+  if (state.isSpectator) {
+    const btn = document.getElementById('joinGameBtn');
+    if (btn && !btn.classList.contains('hidden')) {
+      const inQueue = state.queuedPlayers && state.queuedPlayers.some(q => q.id === state.myId);
+      if (inQueue) {
+        const entry = state.queuedPlayers.find(q => q.id === state.myId);
+        if (!entry || !entry.pos || entry.pos === 0) {
+          btn.textContent = 'Waiting for next daytime...';
+        } else {
+          const pos = entry.pos;
+          let suffix = 'th';
+          if (pos === 1) suffix = 'st';
+          else if (pos === 2) suffix = 'nd';
+          else if (pos === 3) suffix = 'rd';
+          btn.textContent = 'You are ' + pos + suffix + ' in queue';
+        }
+      } else {
+        const count = state.activePlayerCount || Object.keys(state.players || {}).length;
+        btn.textContent = count < 10 ? 'Join Game' : 'Join Queue';
+      }
+    }
   }
 
   // Server level

@@ -2,7 +2,7 @@ const {
   WORLD_W, WORLD_H, VIEW_W, VIEW_H, VIEW_MARGIN,
   MAX_PLAYERS, MAX_ROOMS, ROOM_EMPTY_TIMEOUT_MS,
   TICK_MS, BROADCAST_MS,   ATTACK_SPEED_MULT, ANIMATIONS, KNIGHT_ANIMATIONS,
-  DAYTIME_MS, NIGHTTIME_MS, INTERMISSION_MS
+  DAYTIME_MS, NIGHTTIME_MS, INTERMISSION_MS, END_GAME_MS
 } = require('./config');
 const SpatialGrid = require('./spatial-grid');
 const playerMod = require('./player');
@@ -33,6 +33,10 @@ class Room {
     this.currentWave = 0;
     this.matchStarted = false;
     this._lobbyOrder = [];
+    this._endGameReady = new Set();
+    this._lastEndGameBroadcast = 0;
+    this._joinQueue = [];
+    this._postGameWaiting = false;
   }
 
   setIo(io) { this.io = io; }
@@ -49,8 +53,14 @@ class Room {
   }
 
   addPlayer(id, name, accountType, accountId) {
-    if (this.getPlayerCount() >= MAX_PLAYERS) return false;
+    const isActive = this.matchPhase !== 'waiting' && this.matchPhase !== 'ended';
+    if (!isActive && this.getPlayerCount() >= MAX_PLAYERS) return false;
     playerMod.addPlayer(id, name, this.players, this.zombies, accountType, accountId);
+    if (isActive) {
+      const p = this.players[id];
+      p.isSpectator = true;
+      p.alive = false;
+    }
     zombieMod.recalcAllZombieTargets(this.zombies, this.players);
     if (!this._lobbyOrder.includes(id)) this._lobbyOrder.push(id);
     if (this._emptyTimeout) { clearTimeout(this._emptyTimeout); this._emptyTimeout = null; }
@@ -62,6 +72,8 @@ class Room {
     if (!p) return;
     delete this.players[id];
     this._lobbyOrder = this._lobbyOrder.filter(oid => oid !== id);
+    this._joinQueue = this._joinQueue.filter(qid => qid !== id);
+    this._broadcastQueueUpdate();
     if (this.isEmpty() && !this._emptyTimeout) {
       this._emptyTimeout = setTimeout(() => {
         if (this.isEmpty()) {
@@ -74,14 +86,14 @@ class Room {
 
   handleInput(id, data) {
     const p = this.players[id];
-    if (!p) return;
+    if (!p || p.isSpectator) return;
     p.input = { dx: data.dx, dy: data.dy };
     if (typeof data.angle === 'number') p.facingAngle = data.angle;
   }
 
   handleAttack(id, facingAngle) {
     const p = this.players[id];
-    if (!p || !p.alive || p.attackCooldown > 0 || p.attacking) return;
+    if (!p || !p.alive || p.isSpectator || p.attackCooldown > 0 || p.attacking) return;
     const anim = p.playerClass === 'knight'
       ? KNIGHT_ANIMATIONS?.attack
       : ANIMATIONS[p.currentItem]?.attack;
@@ -118,20 +130,51 @@ class Room {
     this.io.to(id).emit('respawned');
   }
 
-  startMatch() {
+  startMatch(fromEnded) {
     this.matchStarted = true;
+    this._postGameWaiting = false;
     this.currentWave = 1;
     this.matchPhase = 'daytime';
     this.phaseTimer = DAYTIME_MS;
     this.zombies.length = 0;
     this.grid.clear();
+    const readySet = this._endGameReady || new Set();
+    let firstReady = null;
+    for (const id in this.players) {
+      if (readySet.has(id)) { firstReady = this.players[id]; break; }
+    }
+    for (const id in this.players) {
+      const p = this.players[id];
+      if (readySet.size > 0 && !readySet.has(id)) {
+        p.isSpectator = true;
+        p.alive = false;
+        if (firstReady) { p.x = firstReady.x; p.y = firstReady.y; }
+      } else {
+        p.isSpectator = false;
+        p.lvl = 1;
+        p.exp = 0;
+        p.gold = 0;
+        this._persistedExp.delete(p.id);
+        playerMod.recalcStats(p);
+        if (!p.alive) {
+          playerMod.respawnPlayer(id, this.players, this.zombies);
+        }
+      }
+    }
     zombieMod.recalcAllZombieTargets(this.zombies, this.players);
-    this.io.to('room:' + this.id).emit('matchPhase', { phase: 'daytime', timer: DAYTIME_MS, wave: 1 });
+    const matchData = { phase: 'daytime', timer: DAYTIME_MS, wave: 1 };
+    if (readySet.size > 0) matchData.readyPlayers = Array.from(readySet);
+    for (const id in this.players) {
+      if (!this.players[id].isSpectator) {
+        this.io.to('room:' + this.id).emit('playerInfo', playerMod.playerInfoObj(this.players[id]));
+      }
+    }
+    this.io.to('room:' + this.id).emit('matchPhase', matchData);
   }
 
   handleStartMatch(socketId) {
-    if (this.matchPhase !== 'waiting') return;
-    this.startMatch();
+    if (this.matchPhase !== 'waiting' && !(this.matchPhase === 'ended' && this._allPlayersReady())) return;
+    this.startMatch(this.matchPhase === 'ended');
   }
 
   _advancePhase() {
@@ -166,6 +209,7 @@ class Room {
             this.io.to(id).emit('respawned');
           }
         }
+        this._promoteFromQueue();
         this.currentWave++;
         this.matchPhase = 'daytime';
         this.phaseTimer = DAYTIME_MS;
@@ -177,11 +221,19 @@ class Room {
 
   _endMatch() {
     this.matchPhase = 'ended';
-    this.phaseTimer = 0;
+    this.phaseTimer = END_GAME_MS;
+    this._endGameReady = new Set();
+    this._postGameWaiting = true;
     this._roundSaved = false;
     this._saveRound();
     this._roundSaved = true;
-    this.io.to('room:' + this.id).emit('matchEnd', { wave: this.currentWave });
+    this.io.to('room:' + this.id).emit('matchEnd', {
+      wave: this.currentWave,
+      timer: END_GAME_MS,
+      serverLevel: this._computeServerLevel(),
+      playerStats: this._getSortedPlayerStats(),
+      lobbyPlayers: this.getLobbyPlayers()
+    });
   }
 
   resetMatch() {
@@ -190,6 +242,8 @@ class Room {
     this.currentWave = 0;
     this.matchStarted = false;
     this._roundSaved = false;
+    this._endGameReady = new Set();
+    this._lastEndGameBroadcast = 0;
     this._lobbyOrder = Object.keys(this.players);
     this.zombies = zombieMod.initZombies(this.players);
     this.grid.clear();
@@ -221,6 +275,12 @@ class Room {
     return p ? p.godMode : false;
   }
 
+  killAllMobs() {
+    for (const z of this.zombies) {
+      z.alive = false;
+    }
+  }
+
   emitEvents(events) {
     for (const e of events) {
       switch (e.type) {
@@ -248,7 +308,7 @@ class Room {
 
   _awardExp(playerId, zombieLvl) {
     const p = this.players[playerId];
-    if (!p || !p.alive) return;
+    if (!p || !p.alive || p.isSpectator) return;
 
     const expGain = expMod.getExpForKill(zombieLvl);
     p.exp += expGain;
@@ -256,17 +316,12 @@ class Room {
     const goldGain = expMod.getGoldForKill(zombieLvl);
     p.gold += goldGain;
 
-    let leveled = false;
-    let expToNext = expMod.getExpToNext(p.lvl);
-    while (p.exp >= expToNext) {
-      p.exp -= expToNext;
-      p.lvl++;
-      expToNext = expMod.getExpToNext(p.lvl);
-      leveled = true;
-    }
+    const result = expMod.fromCumulativeExp(p.exp);
+    p.lvl = result.level;
+    const expToNext = expMod.getExpToNext(p.lvl);
 
     this.io.to(playerId).emit('accountUpdate', {
-      exp: p.exp,
+      exp: result.exp,
       level: p.lvl,
       expToNext,
       gold: p.gold
@@ -274,47 +329,166 @@ class Room {
   }
 
   _saveRound() {
-    const getStmt = db.prepare('SELECT level, exp FROM accounts WHERE id = ?');
-    const updateStmt = db.prepare('UPDATE accounts SET level = ?, exp = ? WHERE id = ?');
+    const updateStmt = db.prepare('UPDATE accounts SET cumulative_exp = cumulative_exp + ? WHERE id = ?');
     for (const id in this.players) {
       const p = this.players[id];
-      if (!p.accountId || p.exp <= 0) continue;
+      if (p.isSpectator || !p.accountId || p.exp <= 0) continue;
 
       const alreadyPersisted = this._persistedExp.get(p.id) || 0;
       const sessionGain = p.exp - alreadyPersisted;
       if (sessionGain <= 0) continue;
 
-      const row = getStmt.get(p.accountId);
-      if (!row) continue;
-
-      const existingCumulative = expMod.cumulativeExp(row.level || 1, row.exp || 0);
-      const newCumulative = existingCumulative + sessionGain;
-      const result = expMod.fromCumulativeExp(newCumulative);
-      updateStmt.run(result.level, result.exp, p.accountId);
+      updateStmt.run(sessionGain, p.accountId);
       this._persistedExp.set(p.id, p.exp);
     }
+  }
+
+  _allPlayersReady() {
+    return this._endGameReady.size === Object.keys(this.players).length && Object.keys(this.players).length > 0;
+  }
+
+  _computeServerLevel() {
+    let total = 0;
+    for (const id in this.players) total += this.players[id].lvl || 1;
+    return total;
+  }
+
+  _getSortedPlayerStats() {
+    return Object.values(this.players)
+      .filter(p => !p.isSpectator)
+      .map(p => ({ name: p.name, level: p.lvl || 1, kills: p.kills || 0 }))
+      .sort((a, b) => b.level - a.level);
+  }
+
+  handleEndGameReady(id) {
+    this._endGameReady.add(id);
+    this._broadcastEndGameUpdate();
+  }
+
+  handleEndGameLeave(id) {
+    this._endGameReady.delete(id);
+    this._broadcastEndGameUpdate();
+  }
+
+  _broadcastEndGameUpdate() {
+    const players = this.getLobbyPlayers();
+    const ready = Array.from(this._endGameReady);
+    const allReady = this._allPlayersReady();
+    this.io.to('room:' + this.id).emit('endGameLobby', { players, ready, timer: Math.ceil(this.phaseTimer), allReady });
+  }
+
+  _timerEndReset() {
+    const readySnapshot = Array.from(this._endGameReady);
+    this.matchPhase = 'waiting';
+    this.phaseTimer = 0;
+    this.currentWave = 0;
+    this.matchStarted = false;
+    this._roundSaved = false;
+    this._lastEndGameBroadcast = 0;
+    this._lobbyOrder = Object.keys(this.players);
+    this.zombies = zombieMod.initZombies(this.players);
+    this.grid.clear();
+    this._endGameReady = new Set(readySnapshot);
+    for (const id in this.players) {
+      if (readySnapshot.includes(id) && !this.players[id].alive) {
+        playerMod.respawnPlayer(id, this.players, this.zombies);
+      }
+    }
+    this.io.to('room:' + this.id).emit('matchReset', { readyPlayers: readySnapshot });
+    this._joinQueue.length = 0;
+    this._broadcastQueueUpdate();
+  }
+
+  getActivePlayerCount() {
+    let count = 0;
+    for (const id in this.players) {
+      if (!this.players[id].isSpectator) count++;
+    }
+    return count;
+  }
+
+  handleJoinGame(id) {
+    if (!this._joinQueue.includes(id)) {
+      this._joinQueue.push(id);
+      this._broadcastQueueUpdate(id);
+      this.lastBroadcast = 0;
+    }
+  }
+
+  _broadcastQueueUpdate(directTargetId) {
+    const activeCount = this.getActivePlayerCount();
+    const waitingCount = Math.max(0, MAX_PLAYERS - activeCount);
+    let queuePos = 0;
+    const queued = this._joinQueue.map((id, idx) => {
+      const p = this.players[id];
+      if (!p) return null;
+      const pos = idx >= waitingCount ? ++queuePos : 0;
+      return { id, name: p.name, pos };
+    }).filter(Boolean);
+    const data = { queued, playerCount: activeCount };
+    if (directTargetId) {
+      this.io.to(directTargetId).emit('queueUpdate', data);
+    }
+    this.io.to('room:' + this.id).emit('queueUpdate', data);
+  }
+
+  _promoteFromQueue() {
+    const activeCount = this.getActivePlayerCount();
+    const waitingCount = Math.max(0, MAX_PLAYERS - activeCount);
+    for (let i = 0; i < waitingCount && this._joinQueue.length > 0; i++) {
+      const qid = this._joinQueue.shift();
+      const qp = this.players[qid];
+      if (qp && qp.isSpectator) {
+        qp.isSpectator = false;
+        qp.lvl = 1; qp.exp = 0; qp.gold = 0;
+        playerMod.respawnPlayer(qid, this.players, this.zombies);
+        playerMod.recalcStats(qp);
+        this.io.to(qid).emit('playerInfo', playerMod.playerInfoObj(qp));
+        this.io.to(qid).emit('joinedGame');
+        this.io.to('room:' + this.id).emit('playerInfo', playerMod.playerInfoObj(qp));
+        for (const oid in this.players) {
+          if (oid !== qid) {
+            this.io.to(oid).emit('playerInfo', playerMod.playerInfoObj(qp));
+          }
+        }
+      }
+    }
+    this._broadcastQueueUpdate();
+    this.lastBroadcast = 0;
   }
 
   gameTick() {
     const tickStart = Date.now();
 
-    if (this.matchPhase !== 'waiting' && this.matchPhase !== 'ended' && this.phaseTimer > 0) {
+    if (this.matchPhase !== 'waiting' && this.phaseTimer > 0) {
       this.phaseTimer -= TICK_MS;
       if (this.phaseTimer <= 0) {
         this.phaseTimer = 0;
+        if (this.matchPhase === 'ended') {
+          this._timerEndReset();
+          return;
+        }
         this._advancePhase();
-        if (this.matchPhase === 'ended') return;
       }
     }
 
-    if (this.matchPhase === 'ended') return;
+    if (this.matchPhase === 'ended') {
+      if (tickStart - this._lastEndGameBroadcast < BROADCAST_MS) return;
+      this._lastEndGameBroadcast = tickStart;
+      this._broadcastEndGameUpdate();
+      return;
+    }
+
+    if (this.matchPhase === 'daytime') {
+      this._promoteFromQueue();
+    }
 
     const ids = Object.keys(this.players);
     if (ids.length === 0) return;
 
     for (const id of ids) {
       const p = this.players[id];
-      if (!p.alive) continue;
+      if (!p.alive || p.isSpectator) continue;
       physics.processPlayerMovement(p);
     }
 
@@ -348,7 +522,7 @@ class Room {
 
     for (const id of ids) {
       const p = this.players[id];
-      if (!p.alive || !p.attacking) continue;
+      if (!p.alive || p.isSpectator || !p.attacking) continue;
       const events = sword.checkSwordHit(p, this.zombies, this.players, this.grid);
       this.emitEvents(events);
       p.attackFrame++;
@@ -379,6 +553,7 @@ class Room {
     let serverLevelSum = 0;
     for (const id in this.players) {
       const p = this.players[id];
+      if (p.isSpectator) continue;
       serverLevelSum += p.lvl || 1;
       this._playerList.push(p);
     }
@@ -402,7 +577,7 @@ class Room {
       for (let i = 0; i < this.zombies.length; i++) {
         const z = this.zombies[i];
         if (!z.alive) continue;
-        if (!p.fullscreen) {
+        if (!p.fullscreen && !p.isSpectator) {
           const dzx = z.x - p.x; if (dzx < -pHalfVW || dzx > pHalfVW) continue;
           const dzy = z.y - p.y; if (dzy < -pHalfVH || dzy > pHalfVH) continue;
         }
@@ -475,7 +650,6 @@ class RoomManager {
   addPlayerToRoom(roomId, playerId, name, accountType, accountId) {
     const room = this.rooms.get(roomId);
     if (!room) return false;
-    if (room.getPlayerCount() >= MAX_PLAYERS) return false;
     room.addPlayer(playerId, name, accountType, accountId);
     this.playerRoom.set(playerId, roomId);
     this.ensureSpareRoom();

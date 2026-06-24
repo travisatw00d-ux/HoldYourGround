@@ -3,6 +3,8 @@ import { state } from './state.js';
 const keys = {};
 
 export function getInput() {
+  const me = state.players[state.myId];
+  if (!me || me.isSpectator || state.isDeadSpectating) return { dx: 0, dy: 0 };
   let dx = 0;
   let dy = 0;
   if (keys['w'] || keys['W'] || keys['ArrowUp']) dy = -1;
@@ -20,6 +22,14 @@ export function resetKeys() {
 
 export function setupInput(socket, canvas) {
   document.addEventListener('keydown', (e) => {
+    if ((state.isSpectator || state.isDeadSpectating) && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+      const ids = Object.keys(state.players).filter(id => state.players[id].alive);
+      ids.sort((a, b) => state.players[b].lvl - state.players[a].lvl);
+      if (ids.length === 0) return;
+      const dir = e.key === 'ArrowRight' ? 1 : -1;
+      state.spectatingTargetIndex = (state.spectatingTargetIndex + dir + ids.length) % ids.length;
+      return;
+    }
     keys[e.key] = true;
     if (e.key >= '1' && e.key <= '9') {
       const slot = parseInt(e.key) - 1;

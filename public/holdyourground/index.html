@@ -152,11 +152,16 @@
       <button id="lobbyBtn" class="lobby-btn">Return to Lobby</button>
     </div>
 
-    <div id="matchOver" class="overlay hidden">
-      <h1>Match Over</h1>
-      <p>You survived until Wave <span id="matchWaveReached">0</span></p>
-      <button id="playAgainBtn">Play Again</button>
-      <button id="matchOverLobbyBtn" class="lobby-btn">Return to Lobby</button>
+    <div id="resultsOverlay" class="hidden">
+      <h1>Results</h1>
+      <p id="resultsServerLevel"></p>
+      <p id="resultsWaveText">Wave <span id="resultsWave">0</span></p>
+      <p id="resultsTimer">Next game in: <span id="resultsTimerValue">30</span>s</p>
+      <div id="resultsPlayerList"></div>
+      <div class="results-actions">
+        <button id="resultsPlayAgainBtn">Play Again</button>
+        <button id="resultsLobbyBtn">Back To Lobby</button>
+      </div>
     </div>
 
     <div id="waitingRespawn" class="overlay hidden">
@@ -173,11 +178,13 @@
     <button id="startNowBtn" class="hidden">Start Now</button>
 
     <div id="hud" class="hud hidden">
-      <div class="lb-title">Leaderboard</div>
+      <div class="lb-title">Players</div>
       <div id="lbEntries"></div>
     </div>
 
     <div id="hotbarInventory" class="hotbar hidden"></div>
+
+    <button id="joinGameBtn" class="hidden">Join Game</button>
 
     <div class="xp-hud hidden" id="xpBar">
       <div class="xp-level-badge" id="levelBadge">1</div>
@@ -222,6 +229,10 @@
               <span class="toggle-slider"></span>
             </label>
           </div>
+          <div class="settings-row" style="margin-top:8px">
+            <span class="settings-label">Kill All Mobs</span>
+            <button id="killMobsBtn" style="padding:6px 16px;font-size:0.85rem">Kill</button>
+          </div>
         </div>
       </div>
     </div>
@@ -240,9 +251,9 @@
     </div>
   </div>
 
-  <script src="/shared/data.js?v=1"></script>
-  <script src="/socket.io/socket.io.js?v=1"></script>
-  <script type="module" src="/holdyourground/game.js?v=1"></script>
+  <script src="/shared/data.js?v=4"></script>
+  <script src="/socket.io/socket.io.js?v=4"></script>
+  <script type="module" src="/holdyourground/game.js?v=4"></script>
   <link href="https://fonts.googleapis.com/css2?family=Lilita+One&display=swap" rel="stylesheet">
 </body>
 </html>

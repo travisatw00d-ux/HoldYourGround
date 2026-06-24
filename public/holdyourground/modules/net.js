@@ -157,12 +157,18 @@ async function enterGame(socket) {
     state.backgroundCanvasLight = generateBackground(state.worldW, state.worldH, '#e8e4d8');
   }
   state.screen = 'playing';
+  state.level = 1;
+  state.exp = 0;
+  state.expToNext = 100;
+  state.gold = 0;
   document.getElementById('eliminated').classList.add('hidden');
   document.getElementById('hud').classList.remove('hidden');
   document.getElementById('hotbarInventory').classList.remove('hidden');
   document.getElementById('settingsBtn').classList.remove('hidden');
-  document.getElementById('xpBar').classList.remove('hidden');
-  updateXPBar(state.level, state.exp, state.expToNext);
+  if (!state.isSpectator) {
+    document.getElementById('xpBar').classList.remove('hidden');
+    updateXPBar(state.level, state.exp, state.expToNext);
+  }
   startRender(socket);
 }
 
@@ -228,6 +234,24 @@ export function connect() {
 
   socket.on('joined', async () => {
     resetKeys();
+    state.players = {};
+    state.zombies = [];
+    state.activePlayerCount = 0;
+    state.lobbyPlayers = [];
+    state.lbSig = '';
+    state.matchPhase = null;
+    state.phaseTimer = 0;
+    state.isSpectator = false;
+    state.isDeadSpectating = false;
+    state.queuedPlayers = [];
+    state.spectatingTargetIndex = 0;
+    state.localAnim = null;
+    state.currentWave = 0;
+    state.serverLevel = 0;
+    state.dmgNumbers = [];
+    state.mergeSmokes = [];
+    state.zombieAnims = {};
+    document.getElementById('joinGameBtn').classList.add('hidden');
     document.getElementById('menu').classList.add('hidden');
     document.getElementById('errorMsg').textContent = '';
     state.cameraZoom = 1.0;
@@ -264,12 +288,14 @@ export function connect() {
         const attackStartTime = dv.getFloat64(o, true); o += 8;
         const kills = dv.getInt16(o, true); o += 2;
         const lvl = dv.getUint8(o); o += 1;
+        const nameLen = dv.getUint8(o); o += 1;
+        const name = textDecoder.decode(u8.subarray(o, o + nameLen)); o += nameLen;
+        const isSpectator = dv.getUint8(o) === 1; o += 1;
 
         const old = oldP[id];
         const meta = state.playerMeta[id] || {};
         const p = {
-          id, x, y, health, alive, attacking, facingAngle, attackLockedAngle, attackStartTime, kills, lvl,
-          name: meta.name || 'Player',
+          id, x, y, health, alive, attacking, facingAngle, attackLockedAngle, attackStartTime, kills, lvl, name, isSpectator,
           color: meta.color || '#888888',
           currentItem: meta.currentItem || 'wooden_sword',
           inventory: meta.inventory || ['wooden_sword'],
@@ -286,6 +312,7 @@ export function connect() {
         map[id] = p;
       }
       state.players = map;
+      state.activePlayerCount = Object.keys(map).length;
 
       const oldZ = {};
       for (let i = 0; i < state.zombies.length; i++) oldZ[state.zombies[i].id] = state.zombies[i];
@@ -343,30 +370,48 @@ export function connect() {
     }
   });
 
-  socket.on('playerInfo', (info) => { state.playerMeta[info.id] = info; });
+  socket.on('playerInfo', (info) => {
+    state.playerMeta[info.id] = info;
+    if (state.players[info.id]) {
+      state.players[info.id].name = info.name;
+      state.players[info.id].color = info.color || '#888888';
+      state.players[info.id].currentItem = info.currentItem || 'wooden_sword';
+      state.players[info.id].maxHealth = info.maxHealth || 100;
+      state.players[info.id].speed = info.speed != null ? info.speed : 13;
+      state.players[info.id].attackDmg = info.attackDmg != null ? info.attackDmg : 5;
+      state.players[info.id].attackSpeed = info.attackSpeed != null ? info.attackSpeed : 800;
+      state.lbSig = '';
+      updateLeaderboard();
+    }
+  });
   socket.on('playerLeft', (id) => { delete state.playerMeta[id]; });
 
   socket.on('eliminated', ({ kills }) => {
-    stopRender();
     const active = state.matchPhase === 'daytime' || state.matchPhase === 'nighttime' || state.matchPhase === 'intermission' || state.matchPhase === 'waveOver';
     if (active) {
-      document.getElementById('waitingRespawn').classList.remove('hidden');
-      document.getElementById('eliminated').classList.add('hidden');
+      state.isDeadSpectating = true;
+  state.screen = 'playing';
+  state.level = 1;
+  state.exp = 0;
+  state.expToNext = 100;
+  state.gold = 0;
     } else {
+      stopRender();
       document.getElementById('elimKills').textContent = `Kills: ${kills}`;
       document.getElementById('eliminated').classList.remove('hidden');
+      document.getElementById('menu').classList.add('hidden');
+      document.getElementById('hud').classList.add('hidden');
+      document.getElementById('hotbarInventory').classList.add('hidden');
+      document.getElementById('settingsBtn').classList.add('hidden');
+      document.getElementById('settingsPanel').classList.add('hidden');
+      document.getElementById('xpBar').classList.add('hidden');
+      state.screen = 'eliminated';
     }
-    document.getElementById('menu').classList.add('hidden');
-    document.getElementById('hud').classList.add('hidden');
-    document.getElementById('hotbarInventory').classList.add('hidden');
-    document.getElementById('settingsBtn').classList.add('hidden');
-    document.getElementById('settingsPanel').classList.add('hidden');
-    document.getElementById('xpBar').classList.add('hidden');
-    state.screen = active ? 'waitingRespawn' : 'eliminated';
   });
 
   socket.on('respawned', () => {
     state.localAnim = null;
+    state.isDeadSpectating = false;
     state.screen = 'playing';
     document.getElementById('menu').classList.add('hidden');
     document.getElementById('eliminated').classList.add('hidden');
@@ -375,6 +420,7 @@ export function connect() {
     document.getElementById('hotbarInventory').classList.remove('hidden');
     document.getElementById('settingsBtn').classList.remove('hidden');
     document.getElementById('xpBar').classList.remove('hidden');
+    updateXPBar(state.level, state.exp, state.expToNext);
     state.cameraZoom = 1.0;
     socket.emit('cameraZoom', { zoom: 1.0, viewW: state.viewW, viewH: state.viewH });
     startRender(socket);
@@ -392,6 +438,35 @@ export function connect() {
     updateXPBar(level, exp, expToNext);
   });
 
+  socket.on('spectatorAssigned', () => {
+    state.isSpectator = true;
+    document.getElementById('joinGameBtn').classList.remove('hidden');
+    document.getElementById('xpBar').classList.add('hidden');
+  });
+
+  socket.on('joinedGame', () => {
+    state.isSpectator = false;
+    state.isDeadSpectating = false;
+    state.queuedPlayers = (state.queuedPlayers || []).filter(q => q.id !== state.myId);
+    state.screen = 'playing';
+    state.level = 1;
+    state.exp = 0;
+    state.expToNext = 100;
+    state.gold = 0;
+    document.getElementById('joinGameBtn').classList.add('hidden');
+    document.getElementById('xpBar').classList.remove('hidden');
+    updateXPBar(1, 0, 100);
+    stopRender();
+    startRender(socket);
+  });
+
+  socket.on('queueUpdate', ({ queued, playerCount }) => {
+    state.queuedPlayers = queued || [];
+    if (playerCount != null) state.activePlayerCount = playerCount;
+    state.lbSig = '';
+    updateLeaderboard();
+  });
+
   socket.on('attackStart', ({ lockedAngle }) => { startAttackAnim(lockedAngle); });
 
   socket.on('zombieAttackStart', ({ zombieId }) => {
@@ -403,34 +478,66 @@ export function connect() {
     }
   });
 
-  socket.on('matchPhase', ({ phase, timer, wave }) => {
+  socket.on('matchPhase', ({ phase, timer, wave, readyPlayers }) => {
     state.matchPhase = phase;
     state.phaseTimer = timer;
     state.phaseTimerStart = timer;
     state.phaseStartedAt = performance.now();
     state.currentWave = wave;
+    if (readyPlayers) {
+      state.isSpectator = !readyPlayers.includes(state.myId);
+    }
     document.getElementById('startNowBtn').classList.toggle('hidden', phase !== 'waiting');
     document.getElementById('phaseDisplay').classList.toggle('hidden', phase === 'waiting' || phase === 'ended');
     const names = { daytime: 'Daytime', nighttime: 'Nighttime', waveOver: 'Clean Up', intermission: 'Intermission' };
     document.getElementById('phaseName').textContent = names[phase] || phase;
 
-    if (phase !== 'waiting' && (state.screen === 'lobby' || state.screen === 'joining')) {
+    if (phase === 'ended' && (state.screen === 'lobby' || state.screen === 'joining' || state.screen === 'results')) {
+      document.getElementById('lobbyScreen').classList.remove('hidden');
+      document.getElementById('startNowBtn').classList.add('hidden');
+      document.getElementById('resultsOverlay').classList.remove('hidden');
+      document.getElementById('resultsTimerValue').textContent = Math.ceil(timer / 1000);
+      state.screen = 'results';
+    } else if (phase !== 'waiting' && (state.screen === 'lobby' || state.screen === 'joining' || state.screen === 'results')) {
       document.getElementById('lobbyScreen').classList.add('hidden');
+      if (state.screen !== 'results') {
+        document.getElementById('resultsOverlay').classList.add('hidden');
+      }
       document.getElementById('startNowBtn').classList.add('hidden');
       enterGame(socket);
-    } else if (phase === 'waiting' && (state.screen === 'lobby' || state.screen === 'joining')) {
+    } else if (phase === 'waiting' && (state.screen === 'lobby' || state.screen === 'joining' || state.screen === 'results')) {
       document.getElementById('lobbyScreen').classList.remove('hidden');
+      document.getElementById('resultsOverlay').classList.add('hidden');
       state.screen = 'lobby';
     }
   });
 
-  socket.on('matchEnd', ({ wave }) => {
+  function renderResults({ serverLevel, playerStats, wave }) {
+    document.getElementById('resultsServerLevel').textContent = 'Server Level: ' + (serverLevel || 0);
+    document.getElementById('resultsWave').textContent = wave || 0;
+    const listEl = document.getElementById('resultsPlayerList');
+    listEl.innerHTML = '';
+    (playerStats || []).forEach((r, i) => {
+      const row = document.createElement('div');
+      row.className = 'result-row' + (i === 0 ? ' top-player' : '');
+      row.innerHTML =
+        '<span class="result-rank">#' + (i + 1) + '</span>' +
+        '<span class="result-name">' + r.name + '</span>' +
+        '<span class="result-stat">Lvl ' + r.level + '</span>' +
+        '<span class="result-stat">' + r.kills + ' kills</span>';
+      listEl.appendChild(row);
+    });
+  }
+
+  socket.on('matchEnd', ({ wave, timer, serverLevel, playerStats, lobbyPlayers }) => {
     stopRender();
     state.matchPhase = 'ended';
+    state.isDeadSpectating = false;
+    document.getElementById('lobbyScreen').classList.remove('hidden');
+    document.getElementById('resultsOverlay').classList.remove('hidden');
     document.getElementById('phaseDisplay').classList.add('hidden');
     document.getElementById('startNowBtn').classList.add('hidden');
     document.getElementById('waitingRespawn').classList.add('hidden');
-    document.getElementById('matchOver').classList.remove('hidden');
     document.getElementById('menu').classList.add('hidden');
     document.getElementById('eliminated').classList.add('hidden');
     document.getElementById('hud').classList.add('hidden');
@@ -438,11 +545,26 @@ export function connect() {
     document.getElementById('settingsBtn').classList.add('hidden');
     document.getElementById('settingsPanel').classList.add('hidden');
     document.getElementById('xpBar').classList.add('hidden');
-    document.getElementById('matchWaveReached').textContent = wave;
-    state.screen = 'matchOver';
+    document.getElementById('resultsTimerValue').textContent = Math.ceil((timer || 30000) / 1000);
+    document.getElementById('lobbyStartBtn').classList.add('hidden');
+    state.lobbyPlayers = [];
+    renderLobbyCards();
+    renderResults({ serverLevel, playerStats, wave });
+    if (state.isSpectator) {
+      document.getElementById('resultsPlayAgainBtn').textContent = 'Join Queue';
+    } else {
+      document.getElementById('resultsPlayAgainBtn').textContent = 'Play Again';
+    }
+    state.screen = 'results';
   });
 
-  socket.on('matchReset', () => {
+  socket.on('matchReset', ({ readyPlayers }) => {
+    const isReady = readyPlayers && readyPlayers.includes(state.myId);
+
+    if (state.screen === 'results' && !isReady) {
+      return;
+    }
+
     state.matchPhase = 'waiting';
     state.phaseTimer = 0;
     state.phaseTimerStart = 0;
@@ -451,7 +573,7 @@ export function connect() {
     state.screen = 'lobby';
     document.getElementById('phaseDisplay').classList.add('hidden');
     document.getElementById('startNowBtn').classList.add('hidden');
-    document.getElementById('matchOver').classList.add('hidden');
+    document.getElementById('resultsOverlay').classList.add('hidden');
     document.getElementById('waitingRespawn').classList.add('hidden');
     document.getElementById('eliminated').classList.add('hidden');
     document.getElementById('hud').classList.add('hidden');
@@ -459,11 +581,23 @@ export function connect() {
     document.getElementById('settingsBtn').classList.add('hidden');
     document.getElementById('xpBar').classList.add('hidden');
     document.getElementById('lobbyScreen').classList.remove('hidden');
+    document.getElementById('lobbyStartBtn').classList.remove('hidden');
   });
 
   socket.on('lobbyUpdate', ({ players }) => {
     state.lobbyPlayers = players;
     renderLobbyCards();
+  });
+
+  socket.on('endGameLobby', ({ players, ready, timer, allReady }) => {
+    const readySet = new Set(ready || []);
+    state.lobbyPlayers = (players || []).filter(p => readySet.has(p.id));
+    renderLobbyCards();
+    document.getElementById('resultsTimerValue').textContent = Math.max(0, Math.ceil(timer / 1000));
+    const startBtn = document.getElementById('lobbyStartBtn');
+    if (startBtn) {
+      startBtn.classList.toggle('hidden', !allReady);
+    }
   });
 
   socket.on('diagPong', (t) => {

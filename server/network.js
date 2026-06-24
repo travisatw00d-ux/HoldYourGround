@@ -4,7 +4,7 @@ const path = require('path');
 const { Server } = require('socket.io');
 const { PerformanceObserver } = require('perf_hooks');
 
-const { PORT, COLORS, WORLD_W, WORLD_H, MAX_PLAYERS } = require('./config');
+const { PORT, COLORS, WORLD_W, WORLD_H, MAX_PLAYERS, END_GAME_MS } = require('./config');
 const roomManager = require('./game-loop');
 const playerMod = require('./player');
 const auth = require('./auth');
@@ -46,7 +46,11 @@ function broadcastLobbyCount() {
 
 function broadcastLobbyUpdate(room) {
   if (room.matchPhase === 'waiting') {
-    io.to('room:' + room.id).emit('lobbyUpdate', { players: room.getLobbyPlayers() });
+    let players = room.getLobbyPlayers();
+    if (room._postGameWaiting) {
+      players = players.filter(p => room._endGameReady && room._endGameReady.has(p.id));
+    }
+    io.to('room:' + room.id).emit('lobbyUpdate', { players });
   }
 }
 
@@ -106,7 +110,6 @@ io.on('connection', (socket) => {
   function joinRoom(socket, roomId, name) {
     const room = roomManager.getRoom(roomId);
     if (!room) { socket.emit('error', 'Room not found'); return; }
-    if (room.getPlayerCount() >= MAX_PLAYERS) { socket.emit('roomFull'); return; }
     const accountType = socket.account ? socket.account.accountType || 'basic' : 'guest';
     const accountId = socket.account ? socket.account.id : null;
 
@@ -120,6 +123,27 @@ io.on('connection', (socket) => {
     }
     socket.emit('joined');
     socket.emit('matchPhase', { phase: room.matchPhase, timer: room.phaseTimer, wave: room.currentWave });
+    if (room.matchPhase === 'ended') {
+      socket.emit('matchEnd', {
+        wave: room.currentWave,
+        timer: room.phaseTimer,
+        serverLevel: room._computeServerLevel(),
+        playerStats: room._getSortedPlayerStats(),
+        lobbyPlayers: room.getLobbyPlayers()
+      });
+    } else if (room.matchPhase !== 'waiting') {
+      socket.emit('spectatorAssigned');
+      const activeCount = room.getActivePlayerCount();
+      const waitingCount = Math.max(0, MAX_PLAYERS - activeCount);
+      let queuePos = 0;
+      const queued = room._joinQueue.map((id, idx) => {
+        const p = room.players[id];
+        if (!p) return null;
+        const pos = idx >= waitingCount ? ++queuePos : 0;
+        return { id, name: p.name, pos };
+      }).filter(Boolean);
+      socket.emit('queueUpdate', { queued, playerCount: activeCount });
+    }
     broadcastRoomList();
     broadcastLobbyUpdate(room);
   }
@@ -162,13 +186,23 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('killAllMobs', () => {
+    const room = roomManager.getPlayerRoom(socket.id);
+    if (room) room.killAllMobs();
+  });
+
   socket.on('leaveRoom', () => {
+    const room = roomManager.getPlayerRoom(socket.id);
+    if (room && room.matchPhase === 'ended') {
+      room.handleEndGameLeave(socket.id);
+    }
     const roomId = roomManager.removePlayerFromRoom(socket.id);
     if (roomId) {
-      const room = roomManager.getRoom(roomId);
+      socket.leave('room:' + roomId);
+      const found = roomManager.getRoom(roomId);
       io.to('room:' + roomId).emit('playerLeft', socket.id);
       broadcastRoomList();
-      if (room) broadcastLobbyUpdate(room);
+      if (found) broadcastLobbyUpdate(found);
     }
     joinLobby(socket);
   });
@@ -182,21 +216,54 @@ io.on('connection', (socket) => {
 
   socket.on('playAgain', () => {
     const room = roomManager.getPlayerRoom(socket.id);
-    if (room) {
-      room.resetMatch();
+    if (!room) return;
+    if (room.matchPhase === 'ended') {
+      room.handleEndGameReady(socket.id);
+    } else if (room.matchPhase === 'waiting') {
+      room._endGameReady.add(socket.id);
+      if (!room.players[socket.id]?.alive) {
+        playerMod.respawnPlayer(socket.id, room.players, room.zombies);
+      }
       broadcastLobbyUpdate(room);
+      io.to(socket.id).emit('matchReset', { readyPlayers: [socket.id] });
+    } else {
+      const p = room.players[socket.id];
+      if (!p || !p.isSpectator) return;
+      p.isSpectator = false;
+      p.lvl = 1;
+      p.exp = 0;
+      p.gold = 0;
+      playerMod.respawnPlayer(socket.id, room.players, room.zombies);
+      playerMod.recalcStats(p);
+      room._endGameReady.add(socket.id);
+      io.to(socket.id).emit('joinedGame');
     }
+  });
+
+  socket.on('joinGame', () => {
+    const room = roomManager.getPlayerRoom(socket.id);
+    if (room) room.handleJoinGame(socket.id);
+  });
+
+  socket.on('joinQueue', () => {
+    const room = roomManager.getPlayerRoom(socket.id);
+    if (room) room.handleJoinGame(socket.id);
   });
 
   socket.on('disconnect', () => {
     console.log(`[${socket.id}] disconnected`);
     leaveLobby(socket);
+    const room = roomManager.getPlayerRoom(socket.id);
+    if (room && room.matchPhase === 'ended') {
+      room.handleEndGameLeave(socket.id);
+    }
     const roomId = roomManager.removePlayerFromRoom(socket.id);
     if (roomId) {
-      const room = roomManager.getRoom(roomId);
+      socket.leave('room:' + roomId);
+      const found = roomManager.getRoom(roomId);
       io.to('room:' + roomId).emit('playerLeft', socket.id);
       broadcastRoomList();
-      if (room) broadcastLobbyUpdate(room);
+      if (found) broadcastLobbyUpdate(found);
     }
   });
 });

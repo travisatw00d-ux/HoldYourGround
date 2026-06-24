@@ -30,5 +30,16 @@ try { db.exec('ALTER TABLE accounts ADD COLUMN level INTEGER DEFAULT 1'); } catc
 try { db.exec('ALTER TABLE accounts ADD COLUMN exp INTEGER DEFAULT 0'); } catch (e) {}
 try { db.exec('ALTER TABLE accounts ADD COLUMN gold INTEGER DEFAULT 0'); } catch (e) {}
 try { db.exec('ALTER TABLE accounts ADD COLUMN account_type TEXT DEFAULT \'basic\''); } catch (e) {}
+try { db.exec('ALTER TABLE accounts ADD COLUMN cumulative_exp INTEGER DEFAULT 0'); } catch (e) {}
+
+// One-time migration: backfill cumulative_exp from existing level/exp
+try {
+  const rows = db.prepare('SELECT id, level, exp FROM accounts WHERE cumulative_exp = 0 AND (level > 1 OR exp > 0)').all();
+  const { cumulativeExp } = require('./exp');
+  for (const row of rows) {
+    const c = cumulativeExp(row.level, row.exp);
+    db.prepare('UPDATE accounts SET cumulative_exp = ? WHERE id = ?').run(c, row.id);
+  }
+} catch (e) {}
 
 module.exports = db;

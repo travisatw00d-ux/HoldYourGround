@@ -34,6 +34,7 @@ const settingsPanel = document.getElementById('settingsPanel');
 const settingsClose = document.getElementById('settingsClose');
 const fullscreenToggle = document.getElementById('fullscreenToggle');
 const godModeToggle = document.getElementById('godModeToggle');
+const killMobsBtn = document.getElementById('killMobsBtn');
 const adminSettings = document.getElementById('adminSettings');
 const escapeMenu = document.getElementById('escapeMenu');
 const escapeStep1 = document.getElementById('escapeStep1');
@@ -45,14 +46,14 @@ const errorMsg = document.getElementById('errorMsg');
 const signInPrompt = document.getElementById('signInPrompt');
 const wrapper = document.getElementById('wrapper');
 const startNowBtn = document.getElementById('startNowBtn');
-const matchOver = document.getElementById('matchOver');
-const playAgainBtn = document.getElementById('playAgainBtn');
-const matchOverLobbyBtn = document.getElementById('matchOverLobbyBtn');
 const waitingRespawn = document.getElementById('waitingRespawn');
 const waitingLobbyBtn = document.getElementById('waitingLobbyBtn');
 const lobbyScreen = document.getElementById('lobbyScreen');
 const lobbyStartBtn = document.getElementById('lobbyStartBtn');
 const lobbyLeaveBtn = document.getElementById('lobbyLeaveBtn');
+const resultsPlayAgainBtn = document.getElementById('resultsPlayAgainBtn');
+const resultsLobbyBtn = document.getElementById('resultsLobbyBtn');
+const joinGameBtn = document.getElementById('joinGameBtn');
 
 let selectedRoomId = null;
 let currentRooms = [];
@@ -60,7 +61,6 @@ let currentRooms = [];
 function showScreen(id) {
   menu.classList.add('hidden');
   eliminated.classList.add('hidden');
-  matchOver.classList.add('hidden');
   waitingRespawn.classList.add('hidden');
   lobbyScreen.classList.add('hidden');
   hud.classList.add('hidden');
@@ -71,7 +71,6 @@ function showScreen(id) {
   state.screen = id;
   if (id === 'menu') menu.classList.remove('hidden');
   if (id === 'eliminated') eliminated.classList.remove('hidden');
-  if (id === 'matchOver') matchOver.classList.remove('hidden');
   if (id === 'waitingRespawn') waitingRespawn.classList.remove('hidden');
   if (id === 'lobby') lobbyScreen.classList.remove('hidden');
   if (id === 'playing') { hud.classList.remove('hidden'); hotbarEl.classList.remove('hidden'); settingsBtn.classList.remove('hidden'); document.getElementById('xpBar').classList.remove('hidden'); }
@@ -273,6 +272,10 @@ godModeToggle.addEventListener('change', () => {
   socket.emit('toggleGodMode');
 });
 
+killMobsBtn.addEventListener('click', () => {
+  socket.emit('killAllMobs');
+});
+
 function hideEscapeMenu() {
   escapeMenu.classList.add('hidden');
   escapeStep2.classList.add('hidden');
@@ -334,21 +337,34 @@ startNowBtn.addEventListener('click', () => {
   socket.emit('startMatch');
 });
 
-playAgainBtn.addEventListener('click', () => {
-  matchOver.classList.add('hidden');
-  socket.emit('playAgain');
+resultsPlayAgainBtn.addEventListener('click', () => {
+  document.getElementById('resultsOverlay').classList.add('hidden');
+  document.getElementById('joinGameBtn').classList.add('hidden');
+  if (state.isSpectator) {
+    socket.emit('joinQueue');
+  } else {
+    state.isSpectator = false;
+    socket.emit('playAgain');
+  }
 });
 
-matchOverLobbyBtn.addEventListener('click', () => {
+resultsLobbyBtn.addEventListener('click', () => {
   stopRender();
   socket.emit('leaveRoom');
-  matchOver.classList.add('hidden');
+  document.getElementById('resultsOverlay').classList.add('hidden');
   lobbyScreen.classList.add('hidden');
   menu.classList.remove('hidden');
   document.getElementById('xpBar').classList.add('hidden');
   welcomeMsg.textContent = 'Ready For Battle?';
   state.screen = 'menu';
   selectedRoomId = null;
+});
+
+joinGameBtn.addEventListener('click', () => {
+  const count = Object.keys(state.players).length;
+  socket.emit(count < 10 ? 'joinGame' : 'joinQueue');
+  const name = state.account?.displayName || state.guestName || 'Player';
+  state.queuedPlayers = [...(state.queuedPlayers || []), { id: state.myId, name, pos: 0 }];
 });
 
 waitingLobbyBtn.addEventListener('click', () => {

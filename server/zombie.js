@@ -82,7 +82,7 @@ function recalcZombieTarget(z, players, zombies) {
     let closestD2 = Infinity;
     for (const id in players) {
       const p = players[id];
-      if (!p.alive) continue;
+      if (!p.alive || p.isSpectator) continue;
       const dx = p.x - z.x, dy = p.y - z.y;
       const d2 = dx * dx + dy * dy;
       if (d2 < closestD2) { closestD2 = d2; target = p; }
@@ -111,7 +111,7 @@ function tickTargeting(zombies, players) {
     z.recalcTimer--;
     if (z.recalcTimer <= 0) {
       recalcZombieTarget(z, players, zombies);
-      if (z.targetPlayerId && players[z.targetPlayerId] && players[z.targetPlayerId].alive) {
+      if (z.targetPlayerId && players[z.targetPlayerId] && players[z.targetPlayerId].alive && !players[z.targetPlayerId].isSpectator) {
         const tp = players[z.targetPlayerId];
         const dx = z.x - tp.x, dy = z.y - tp.y;
         z.recalcTimer = (dx * dx + dy * dy) < 700 * 700 ? 15 : 90;
@@ -237,7 +237,7 @@ function processZombieAttacks(zombies, players, grid, roomId) {
         const nearby = grid.getNearbyPlayers(z.x, z.y);
         let closestP = null, closestPD2 = Infinity;
         for (const p of nearby) {
-          if (!p.alive || p.godMode) continue;
+          if (!p.alive || p.godMode || p.isSpectator) continue;
           const dx = p.x - z.x, dy = p.y - z.y;
           const d2 = dx * dx + dy * dy;
           if (d2 < closestPD2) { closestPD2 = d2; closestP = p; }

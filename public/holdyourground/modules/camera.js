@@ -7,7 +7,15 @@ function clamp(v, min, max) {
 const _cam = { x: 0, y: 0 };
 
 export function getCamera(alpha) {
-  const me = state.players[state.myId];
+  let me = state.players[state.myId];
+  if (!me || state.isDeadSpectating) {
+    const ids = Object.keys(state.players).filter(id => state.players[id].alive);
+    ids.sort((a, b) => state.players[b].lvl - state.players[a].lvl);
+    if (ids.length > 0) {
+      const idx = Math.min(state.spectatingTargetIndex, ids.length - 1);
+      me = state.players[ids[idx]];
+    }
+  }
   if (!me) { _cam.x = 0; _cam.y = 0; return _cam; }
   if (alpha === undefined) alpha = 1;
   const mx = (me.px === undefined ? me.x : me.px + (me.x - me.px) * alpha);

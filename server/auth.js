@@ -1,16 +1,19 @@
 const db = require('./db');
 const bcrypt = require('bcryptjs');
+const { getExpToNext, fromCumulativeExp } = require('./exp');
 
 const SALT_ROUNDS = 10;
 
 function formatAccount(row) {
-  const expToNext = (row.level || 1) * 100;
+  const cumulative = row.cumulative_exp || 0;
+  const result = fromCumulativeExp(cumulative);
+  const expToNext = getExpToNext(result.level);
   return {
     id: row.id,
     username: row.username,
     displayName: row.display_name || row.username,
-    level: row.level || 1,
-    exp: row.exp || 0,
+    level: result.level,
+    exp: result.exp,
     expToNext,
     gold: row.gold || 0,
     accountType: row.account_type || 'basic',

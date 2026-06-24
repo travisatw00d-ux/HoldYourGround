@@ -60,7 +60,8 @@ body {
 .settings-panel.hidden,
 #settingsBtn.hidden,
 .overlay.hidden,
-#xpBar.hidden {
+#xpBar.hidden,
+#resultsOverlay.hidden {
   display: none;
 }
 
@@ -913,4 +914,94 @@ button:active {
 
 .lobby-actions button {
   padding: 10px 30px;
+}
+
+#resultsOverlay {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 10;
+  width: 480px;
+  max-height: 480px;
+  background: #1a1a28;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 12px;
+  padding: 24px 28px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  overflow-y: auto;
+}
+
+#resultsPlayerList {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 4px 0;
+}
+
+.result-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 0.85rem;
+}
+
+.result-row .result-rank {
+  width: 28px;
+  color: #888;
+  font-size: 0.75rem;
+}
+
+.result-row .result-name {
+  flex: 1;
+  text-align: left;
+  font-weight: 600;
+  color: #eee;
+}
+
+.result-row .result-stat {
+  color: rgba(255,255,255,0.45);
+  font-size: 0.75rem;
+  margin-left: 12px;
+  white-space: nowrap;
+}
+
+.result-row.top-player {
+  border-color: #FFD700;
+  background: rgba(255,215,0,0.06);
+}
+
+.results-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-top: 4px;
+}
+
+.lobby-card.ready {
+  border-color: #4ECDC4;
+}
+
+.lobby-card.ready .lobby-card-name::after {
+  content: ' \u2713';
+  color: #4ECDC4;
+  font-weight: bold;
+}
+
+#joinGameBtn {
+  position: absolute;
+  bottom: 16px;
+  right: 100px;
+  z-index: 5;
+  padding: 8px 18px;
+  font-size: 0.85rem;
 }

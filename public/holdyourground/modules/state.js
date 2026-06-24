@@ -32,6 +32,7 @@ export const state = {
   phaseTimerStart: 0,
   phaseStartedAt: 0,
   currentWave: 0,
+  activePlayerCount: 0,
   lobbyPlayers: [],
   lbSig: '',
   hotSig: '',
@@ -44,6 +45,10 @@ export const state = {
   knightSheet: null,
   knightFrames: null,
   zombieAnims: {},
+  isSpectator: false,
+  isDeadSpectating: false,
+  queuedPlayers: [],
+  spectatingTargetIndex: 0,
 
   // Diagnostics
   showDiag: false,

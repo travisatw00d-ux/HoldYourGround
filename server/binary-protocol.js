@@ -2,7 +2,7 @@ const { WORLD_W, WORLD_H } = require('./config');
 
 function buildPlayerBlock(list) {
   let size = 0;
-  for (let i = 0; i < list.length; i++) size += 1 + list[i]._idBytes.length + 31;
+  for (let i = 0; i < list.length; i++) size += 1 + list[i]._idBytes.length + 31 + 1 + Buffer.byteLength(list[i].name || '', 'utf8') + 1;
   const buf = Buffer.allocUnsafe(size);
   let o = 0;
   for (let i = 0; i < list.length; i++) {
@@ -20,6 +20,10 @@ function buildPlayerBlock(list) {
     buf.writeDoubleLE(p.attackStartTime || 0, o); o += 8;
     buf.writeInt16LE(p.kills || 0, o); o += 2;
     buf[o++] = p.lvl || 1;
+    const nameBytes = Buffer.from(p.name || '', 'utf8');
+    buf[o++] = nameBytes.length;
+    nameBytes.copy(buf, o); o += nameBytes.length;
+    buf[o++] = p.isSpectator ? 1 : 0;
   }
   return buf;
 }
