@@ -1,5 +1,6 @@
 import { state } from './modules/state.js';
-import { connect, onRoomList, onAuthSuccess, onGuestJoined, onLobbyCount } from './modules/net.js';
+import { connect } from './modules/net.js';
+import { onRoomList, onAuthSuccess, onGuestJoined, onLobbyCount } from './modules/callback-registry.js';
 import { setupInput } from './modules/input.js';
 import { startRender, stopRender, resizeViewport } from './modules/render.js';
 
