@@ -56,7 +56,7 @@ class RoomManager {
   addPlayerToRoom(roomId, playerId, name, accountType, accountId) {
     const room = this.rooms.get(roomId);
     if (!room) return false;
-    room.addPlayer(playerId, name, accountType, accountId);
+    if (!room.addPlayer(playerId, name, accountType, accountId)) return false;
     this.playerRoom.set(playerId, roomId);
     this.ensureSpareRoom();
     return true;

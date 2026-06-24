@@ -55,7 +55,7 @@ function updateJoinButton() {
     btn.classList.add('hidden');
     return;
   }
-  if (state.screen === 'playing' && !state.isSpectator) {
+  if (state.screen === 'playing' && !state.isSpectator && !state.isDeadSpectating) {
     btn.classList.add('hidden');
     return;
   }
@@ -65,7 +65,7 @@ function updateJoinButton() {
     btn.textContent = 'In queue: ' + myEntry.pos + ' people ahead';
   } else if (myEntry) {
     btn.textContent = 'In queue: waiting for slot...';
-  } else if (state.matchPhase === 'waiting') {
+  } else if (state.isDeadSpectating) {
     btn.textContent = 'Waiting for daytime...';
   } else if (state.isSpectator) {
     btn.textContent = 'Join Game';
@@ -97,10 +97,14 @@ export function registerEvents(socket) {
     state.localAnim = null; state.currentWave = 0; state.serverLevel = 0;
     state.dmgNumbers = []; state.mergeSmokes = []; state.zombieAnims = {};
     document.getElementById('menu').classList.add('hidden');
+    document.getElementById('lobbyScreen').classList.add('hidden');
+    document.getElementById('resultsOverlay').classList.add('hidden');
+    document.getElementById('loadingOverlay').classList.remove('hidden');
     document.getElementById('errorMsg').textContent = '';
     state.cameraZoom = 1.0;
     socket.emit('cameraZoom', { zoom: 1.0, viewW: state.viewW, viewH: state.viewH });
     state.screen = 'joining';
+    state._joinedEnded = true;
   });
 
   socket.on('state', (msg) => {
@@ -287,43 +291,63 @@ export function registerEvents(socket) {
     if (anim) state.zombieAnims[zombieId] = { startTime: performance.now() };
   });
 
-  socket.on('matchPhase', ({ phase, timer, wave, readyPlayers }) => {
+  socket.on('matchPhase', async ({ phase, timer, wave, readyPlayers }) => {
     state.matchPhase = phase;
     state.phaseTimer = timer;
     state.phaseTimerStart = timer;
     state.phaseStartedAt = performance.now();
     state.currentWave = wave;
     if (readyPlayers) state.isSpectator = !readyPlayers.includes(state.myId);
-    document.getElementById('startNowBtn').classList.toggle('hidden', phase !== 'waiting');
     document.getElementById('phaseDisplay').classList.toggle('hidden', phase === 'waiting' || phase === 'ended');
     const names = { daytime: 'Daytime', nighttime: 'Nighttime', waveOver: 'Clean Up', intermission: 'Intermission' };
     document.getElementById('phaseName').textContent = names[phase] || phase;
 
     if (phase === 'ended' && (state.screen === 'lobby' || state.screen === 'joining' || state.screen === 'results')) {
+      document.getElementById('loadingOverlay').classList.add('hidden');
+      if (state._joinedEnded) {
+        document.getElementById('loadingOverlay').classList.remove('hidden');
+        await ensureAssets();
+        document.getElementById('loadingOverlay').classList.add('hidden');
+        document.getElementById('lobbyScreen').classList.remove('hidden');
+        document.getElementById('resultsOverlay').classList.add('hidden');
+        document.getElementById('lobbyTimer').classList.remove('hidden');
+        document.getElementById('lobbyTimerValue').textContent = Math.ceil(timer / 1000);
+        document.getElementById('lobbyStartBtn').classList.add('hidden');
+        state.screen = 'lobby';
+        return;
+      }
       document.getElementById('lobbyScreen').classList.remove('hidden');
-      document.getElementById('startNowBtn').classList.add('hidden');
       document.getElementById('resultsOverlay').classList.remove('hidden');
       document.getElementById('resultsTimerValue').textContent = Math.ceil(timer / 1000);
       state.screen = 'results';
     } else if (phase !== 'waiting' && (state.screen === 'lobby' || state.screen === 'joining' || state.screen === 'results')) {
       document.getElementById('lobbyScreen').classList.add('hidden');
       if (state.screen !== 'results') document.getElementById('resultsOverlay').classList.add('hidden');
-      document.getElementById('startNowBtn').classList.add('hidden');
       enterGame(socket);
     } else if (phase === 'waiting' && (state.screen === 'lobby' || state.screen === 'joining' || state.screen === 'results')) {
+      await ensureAssets();
+      document.getElementById('loadingOverlay').classList.add('hidden');
+      ['eliminated', 'waitingRespawn', 'settingsPanel', 'phaseDisplay', 'hud', 'hotbarInventory', 'xpBar'].forEach(id => document.getElementById(id).classList.add('hidden'));
       document.getElementById('lobbyScreen').classList.remove('hidden');
+      document.getElementById('lobbyStartBtn').classList.remove('hidden');
       document.getElementById('resultsOverlay').classList.add('hidden');
       state.screen = 'lobby';
+      renderLobbyCards();
     }
     updateJoinButton();
   });
 
   socket.on('matchEnd', ({ wave, timer, serverLevel, playerStats, lobbyPlayers }) => {
+    if (state._joinedEnded) {
+      state._joinedEnded = false;
+      return;
+    }
     stopRender();
     state.matchPhase = 'ended'; state.isDeadSpectating = false;
+    document.getElementById('loadingOverlay').classList.add('hidden');
     document.getElementById('lobbyScreen').classList.remove('hidden');
     document.getElementById('resultsOverlay').classList.remove('hidden');
-    ['phaseDisplay', 'startNowBtn', 'waitingRespawn'].forEach(id => document.getElementById(id).classList.add('hidden'));
+    ['phaseDisplay', 'waitingRespawn'].forEach(id => document.getElementById(id).classList.add('hidden'));
     ['menu', 'eliminated'].forEach(id => document.getElementById(id).classList.add('hidden'));
     document.getElementById('joinGameBtn').classList.add('hidden');
     ['hud', 'hotbarInventory', 'settingsBtn', 'settingsPanel', 'xpBar'].forEach(id => document.getElementById(id).classList.add('hidden'));
@@ -339,10 +363,12 @@ export function registerEvents(socket) {
   socket.on('matchReset', ({ readyPlayers }) => {
     const isReady = readyPlayers && readyPlayers.includes(state.myId);
     if (state.screen === 'results' && !isReady) return;
+    document.getElementById('loadingOverlay').classList.add('hidden');
     state.matchPhase = 'waiting'; state.phaseTimer = 0; state.phaseTimerStart = 0; state.phaseStartedAt = 0;
     state.currentWave = 0; state.screen = 'lobby';
     document.getElementById('phaseDisplay').classList.add('hidden');
-    ['startNowBtn', 'resultsOverlay', 'waitingRespawn', 'eliminated'].forEach(id => document.getElementById(id).classList.add('hidden'));
+    ['resultsOverlay', 'waitingRespawn', 'eliminated'].forEach(id => document.getElementById(id).classList.add('hidden'));
+    document.getElementById('lobbyTimer').classList.add('hidden');
     ['hud', 'hotbarInventory', 'settingsBtn', 'xpBar'].forEach(id => document.getElementById(id).classList.add('hidden'));
     document.getElementById('lobbyScreen').classList.remove('hidden');
     document.getElementById('lobbyStartBtn').classList.remove('hidden');
@@ -356,9 +382,12 @@ export function registerEvents(socket) {
 
   socket.on('endGameLobby', ({ players, ready, timer, allReady }) => {
     const readySet = new Set(ready || []);
+    if (state.myId) readySet.add(state.myId);
     state.lobbyPlayers = (players || []).filter(p => readySet.has(p.id));
     renderLobbyCards();
     document.getElementById('resultsTimerValue').textContent = Math.max(0, Math.ceil(timer / 1000));
+    document.getElementById('lobbyTimerValue').textContent = Math.max(0, Math.ceil(timer / 1000));
+    document.getElementById('lobbyTimer').classList.remove('hidden');
     const startBtn = document.getElementById('lobbyStartBtn');
     if (startBtn) startBtn.classList.toggle('hidden', !allReady);
   });
@@ -438,9 +467,11 @@ async function enterGame(socket) {
     state.backgroundCanvas = generateBackground(state.worldW, state.worldH);
     state.backgroundCanvasLight = generateBackground(state.worldW, state.worldH, '#e8e4d8');
   }
+  state._joinedEnded = false;
   state.screen = 'playing';
   state.level = 1; state.exp = 0; state.expToNext = 100; state.gold = 0;
   document.getElementById('eliminated').classList.add('hidden');
+  document.getElementById('loadingOverlay').classList.add('hidden');
   updateJoinButton();
   ['hud', 'hotbarInventory', 'settingsBtn'].forEach(id => document.getElementById(id).classList.remove('hidden'));
   if (!state.isSpectator) {

@@ -3,68 +3,32 @@
 ## Import Chain
 
 ```
-index.html → game.js (entry)
-  → modules/state.js        — shared state singleton (players, zombies, phase, timer)
-  → modules/net.js           — Socket.IO connection, `connectToServer`, sends inputs
-  → modules/callback-registry.js  — setter functions to avoid circular imports
-  → modules/net-events.js    — socket event handlers, asset loading, UI flow
-  → modules/input.js         — keyboard + mouse input buffering and interpolation
-  → modules/render.js        — main render loop, background, night/day swap
-  → modules/render-entity.js — drawPlayer, drawZombie, blade/hand sprites
-  → modules/render-ui.js     — HUD (health bar, XP, hotbar), leaderboard, phase timer
-  → modules/camera.js        — viewport transform (follow player, screen shake)
-  → modules/diag.js          — diagnostics overlay (FPS, ping, packet stats)
+index.html → game.js
+  → net.js (Socket.IO)
+  → net-events.js (event handlers, button logic, asset loading)
+  → state.js (shared state singleton)
+  → input.js (keyboard/mouse buffering + interpolation)
+  → render.js (rAF loop, background, night/day swap)
+  → render-entity.js (drawPlayer, drawZombie, blade sprites)
+  → render-ui.js (HUD, hotbar, leaderboard, phase timer)
+  → camera.js (viewport transform, follow player)
+  → diag.js (FPS, ping, packet stats overlay)
 ```
 
-## Render Loop
+## Render Loop (`render.js` via requestAnimationFrame)
 
-`render.js` runs at display refresh via `requestAnimationFrame`:
 1. Clear and apply camera transform
 2. Draw background (light `#e8e4d8` / dark `#2a2a35` per phase)
-3. Draw zombies via `drawZombie()` (render-entity.js)
-4. Draw players via `drawPlayer()` (render-entity.js)
-5. Draw UI via `renderUI()` (render-ui.js) — health, XP, hotbar, leaderboard, phase timer
+3. Draw zombies via `drawZombie()` then players via `drawPlayer()`
+4. Draw UI via `renderUI()` — health, XP, hotbar, leaderboard, phase timer
 
-## Interpolation
+Inputs: `input.js` → `net.js` emit → server tick loop.
+Socket events: `net-events.js` → update `state.js` → render picks up changes.
 
-`input.js` buffers player actions with timestamps. Client-side interpolation smooths position/angle rendering between binary state snapshots. Zombie positions are also interpolated client-side.
+## Join Button / Queue / Results
 
-## Sprite Caching
-
-Images are loaded in `net-events.js` via `ensureAssets()` and cached as `Image` objects in state. Sprites (hands, body parts, items) are drawn from these cached images using sprite sheet coordinates from `shared/data.js`.
-
-## Join Button State Machine
-
-`net-events.js:52` — `updateJoinButton()` drives `#joinGameBtn` based on `state`:
-
-```
-screen = menu/eliminated/results          → HIDE
-screen = playing AND !isSpectator          → HIDE
-────────────────────────────────────────
-SHOW the button
-  queuedPlayers has myId, pos > 0   → "In queue: X people ahead"
-  queuedPlayers has myId, pos = 0   → "In queue: waiting for slot..."
-  matchPhase === 'waiting'          → "Waiting for daytime..."
-  isSpectator                       → "Join Game"
-  else                              → HIDE
-```
-
-Called from 7 event handlers: `spectatorAssigned`, `joinedGame`, `queueUpdate`, `matchPhase`, `matchReset`, `enterGame`, `joined`.
+See [join-queue.md](./join-queue.md) (`updateJoinButton`, join flows, queue rules) and [results-rejoin.md](./results-rejoin.md) (`_joinedEnded` flag, Play Again routing).
 
 ## URL Param Auto-Sign-In
 
-`game.js:129-133` — If URL contains `?guest=Name`, the client auto-emits `playAsGuest` 100ms after page load, bypassing the auth form entirely:
-
-```js
-const params = new URLSearchParams(window.location.search);
-const guestName = params.get('guest');
-if (guestName) {
-  setTimeout(() => socket.emit('playAsGuest', { name: guestName }), 100);
-}
-```
-
-Used by `launch_12_guests.bat` to open multiple test tabs at once with unique names.
-
-## Event Pipeline
-
-Socket events → `net-events.js` → update `state.js` → render loop picks up changes. Inputs go the other way: `input.js` → `net.js` emit → server processes in tick loop.
+`game.js:129` — `?guest=Name` auto-emits `playAsGuest` 100ms after load, bypassing the auth form. Used by `launch_12_guests.bat` and scenario tests.

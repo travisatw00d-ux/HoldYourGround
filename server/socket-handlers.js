@@ -53,14 +53,18 @@ module.exports = function registerSocket(socket, { io, broadcastRoomList, broadc
     const accountId = socket.account ? socket.account.id : null;
 
     leaveLobby(socket);
-    roomManager.addPlayerToRoom(roomId, socket.id, name, accountType, accountId);
+    if (!roomManager.addPlayerToRoom(roomId, socket.id, name, accountType, accountId)) {
+      socket.emit('error', 'Room is full');
+      return;
+    }
     socket.join('room:' + roomId);
     console.log(`[${socket.id}] joined room ${roomId} as "${name}"`);
-    socket.emit('init', { id: socket.id, arenaWidth: WORLD_W, arenaHeight: WORLD_H });
+    socket.emit('init', { id: socket.id, arenaWidth: WORLD_W, arenaHeight: WORLD_H, roomId: room.id });
     for (const oid in room.players) {
       socket.emit('playerInfo', room.getPlayerInfoObj(oid));
     }
     socket.emit('joined');
+    socket.emit('lobbyUpdate', { players: room.getLobbyPlayers() });
     socket.emit('matchPhase', { phase: room.matchPhase, timer: room.phaseTimer, wave: room.currentWave });
     if (room.matchPhase === 'ended') {
       socket.emit('matchEnd', {
@@ -89,7 +93,10 @@ module.exports = function registerSocket(socket, { io, broadcastRoomList, broadc
 
   socket.on('respawn', () => {
     const room = roomManager.getPlayerRoom(socket.id);
-    if (room && room.matchPhase === 'intermission') room.respawnPlayer(socket.id);
+    if (!room || room.matchPhase !== 'intermission') return;
+    const p = room.players[socket.id];
+    if (!p || p.isSpectator || room.getActivePlayerCount() >= MAX_PLAYERS) return;
+    room.respawnPlayer(socket.id);
   });
 
   socket.on('input', ({ dx, dy, angle }) => {
@@ -166,16 +173,8 @@ module.exports = function registerSocket(socket, { io, broadcastRoomList, broadc
       broadcastLobbyUpdate(room);
       io.to(socket.id).emit('matchReset', { readyPlayers: [socket.id] });
     } else {
-      const p = room.players[socket.id];
-      if (!p || !p.isSpectator) return;
-      p.isSpectator = false;
-      p.lvl = 1;
-      p.exp = 0;
-      p.gold = 0;
-      playerMod.respawnPlayer(socket.id, room.players, room.zombies);
-      playerMod.recalcStats(p);
       room._endGameReady.add(socket.id);
-      io.to(socket.id).emit('joinedGame');
+      room.handleDirectJoin(socket.id);
     }
   });
 
@@ -187,6 +186,15 @@ module.exports = function registerSocket(socket, { io, broadcastRoomList, broadc
   socket.on('joinQueue', () => {
     const room = roomManager.getPlayerRoom(socket.id);
     if (room) room.handleQueueJoin(socket.id);
+  });
+
+  socket.on('__test', ({ action }) => {
+    if (!process.env.TEST_MODE) return;
+    const room = roomManager.getPlayerRoom(socket.id);
+    if (!room) return;
+    if (action === 'advancePhase') room._testAdvancePhase();
+    if (action === 'killAllZombies') room.killAllMobs();
+    if (action === 'endMatch') room._endMatch();
   });
 
   socket.on('disconnect', () => {
