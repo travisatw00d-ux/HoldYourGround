@@ -172,7 +172,7 @@ export function getBladeSegment(p, sx, sy, isKnight) {
   const scale = vis.scale;
   const rot = angle + (vis.rotation || 0);
   const cosR = Math.cos(rot), sinR = Math.sin(rot);
-  return { hiltX: ox + (bhX * cosR - bhY * sinR) * scale, hiltY: ox + (bhX * sinR + bhY * cosR) * scale, tipX: ox + (btX * cosR - btY * sinR) * scale, tipY: ox + (btX * sinR + btY * cosR) * scale };
+  return { hiltX: ox + (bhX * cosR - bhY * sinR) * scale, hiltY: oy + (bhX * sinR + bhY * cosR) * scale, tipX: ox + (btX * cosR - btY * sinR) * scale, tipY: oy + (btX * sinR + btY * cosR) * scale };
 }
 
 export function startAttackAnim(lockedAngle) {

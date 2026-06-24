@@ -70,10 +70,12 @@ class Room {
   removePlayer(id) {
     const p = this.players[id];
     if (!p) return;
+    const wasActive = !p.isSpectator;
     delete this.players[id];
     this._lobbyOrder = this._lobbyOrder.filter(oid => oid !== id);
     this._joinQueue = this._joinQueue.filter(qid => qid !== id);
     this._broadcastQueueUpdate();
+    if (wasActive && this.matchPhase === 'daytime') this._promoteFromQueue();
     if (this.isEmpty() && !this._emptyTimeout) {
       this._emptyTimeout = setTimeout(() => {
         if (this.isEmpty()) {
@@ -166,6 +168,7 @@ class Room {
       }
     }
     this.io.to('room:' + this.id).emit('matchPhase', matchData);
+    this._joinQueue = this._joinQueue.filter(id => this.players[id]?.isSpectator);
   }
 
   handleStartMatch(socketId) {
@@ -196,12 +199,11 @@ class Room {
       }
       case 'intermission': {
         for (const id in this.players) {
-          if (!this.players[id].alive) {
+          if (!this.players[id].alive && !this.players[id].isSpectator) {
             playerMod.respawnPlayer(id, this.players, this.zombies);
             this.io.to(id).emit('respawned');
           }
         }
-        this._promoteFromQueue();
         this.currentWave++;
         this.matchPhase = 'daytime';
         this.phaseTimer = DAYTIME_MS;
@@ -350,7 +352,41 @@ class Room {
     return count;
   }
 
-  handleJoinGame(id) {
+  handleDirectJoin(id) {
+    const p = this.players[id];
+    if (!p || !p.isSpectator) return;
+    const activeCount = this.getActivePlayerCount();
+    if (activeCount >= MAX_PLAYERS) {
+      this.handleQueueJoin(id);
+      return;
+    }
+    p.isSpectator = false;
+    p.lvl = 1; p.exp = 0; p.gold = 0;
+    this._persistedExp.delete(p.id);
+
+    if (this.matchPhase === 'daytime') {
+      playerMod.respawnPlayer(id, this.players, this.zombies);
+      playerMod.recalcStats(p);
+      this.io.to(id).emit('playerInfo', playerMod.playerInfoObj(p));
+      this.io.to(id).emit('joinedGame');
+    } else {
+      p.alive = false;
+      playerMod.recalcStats(p);
+      const living = Object.values(this.players).find(p2 => p2.alive && p2.id !== id);
+      if (living) { p.x = living.x; p.y = living.y; }
+      this.io.to(id).emit('joinedGame', { isDead: true });
+    }
+
+    for (const oid in this.players) {
+      this.io.to(oid).emit('playerInfo', playerMod.playerInfoObj(p));
+    }
+    this._broadcastQueueUpdate();
+    this.lastBroadcast = 0;
+  }
+
+  handleQueueJoin(id) {
+    const p = this.players[id];
+    if (!p || !p.isSpectator) return;
     if (!this._joinQueue.includes(id)) {
       this._joinQueue.push(id);
       this._broadcastQueueUpdate(id);
@@ -375,21 +411,31 @@ class Room {
 
   _promoteFromQueue() {
     const activeCount = this.getActivePlayerCount();
-    const waitingCount = Math.max(0, MAX_PLAYERS - activeCount);
-    for (let i = 0; i < waitingCount && this._joinQueue.length > 0; i++) {
+    let slots = Math.max(0, MAX_PLAYERS - activeCount);
+    while (slots > 0 && this._joinQueue.length > 0) {
       const qid = this._joinQueue.shift();
       const qp = this.players[qid];
-      if (qp && qp.isSpectator) {
-        qp.isSpectator = false;
-        qp.lvl = 1; qp.exp = 0; qp.gold = 0;
+      if (!qp || !qp.isSpectator) continue;
+      qp.isSpectator = false;
+      qp.lvl = 1; qp.exp = 0; qp.gold = 0;
+      this._persistedExp.delete(qp.id);
+      playerMod.recalcStats(qp);
+
+      if (this.matchPhase === 'daytime') {
         playerMod.respawnPlayer(qid, this.players, this.zombies);
-        playerMod.recalcStats(qp);
         this.io.to(qid).emit('playerInfo', playerMod.playerInfoObj(qp));
         this.io.to(qid).emit('joinedGame');
-        for (const oid in this.players) {
-          this.io.to(oid).emit('playerInfo', playerMod.playerInfoObj(qp));
-        }
+      } else {
+        qp.alive = false;
+        const living = Object.values(this.players).find(p2 => p2.alive && p2.id !== qid);
+        if (living) { qp.x = living.x; qp.y = living.y; }
+        this.io.to(qid).emit('joinedGame', { isDead: true });
       }
+
+      for (const oid in this.players) {
+        this.io.to(oid).emit('playerInfo', playerMod.playerInfoObj(qp));
+      }
+      slots--;
     }
     this._broadcastQueueUpdate();
     this.lastBroadcast = 0;
@@ -413,8 +459,6 @@ class Room {
       this._broadcastEndGameUpdate();
       return;
     }
-
-    if (this.matchPhase === 'daytime') this._promoteFromQueue();
 
     const ids = Object.keys(this.players);
     if (ids.length === 0) return;
@@ -498,7 +542,7 @@ class Room {
       for (let i = 0; i < this.zombies.length; i++) {
         const z = this.zombies[i];
         if (!z.alive) continue;
-        if (!p.fullscreen && !p.isSpectator) {
+        if (!p.fullscreen && !p.isSpectator && p.alive) {
           const dzx = z.x - p.x; if (dzx < -pHalfVW || dzx > pHalfVW) continue;
           const dzy = z.y - p.y; if (dzy < -pHalfVH || dzy > pHalfVH) continue;
         }

@@ -113,7 +113,8 @@ function processMerge(zombies, grid) {
           health: Math.max(1, Math.round(st.health * hpPct)),
           headingtoward: higher.headingtoward,
           headingAngle: higher.headingAngle,
-          isStray: (z.isStray || other.isStray) ? Math.random() < 0.5 : false
+          isStray: (z.isStray || other.isStray) ? Math.random() < 0.5 : false,
+          recalcTimer: 0
         }));
         events.push({ type: 'zombieMerge', x: mx, y: my });
         mergeCount++;

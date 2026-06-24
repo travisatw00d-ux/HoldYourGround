@@ -49,6 +49,31 @@ function renderLobbyCards() {
   }
 }
 
+function updateJoinButton() {
+  const btn = document.getElementById('joinGameBtn');
+  if (state.screen === 'menu' || state.screen === 'eliminated' || state.screen === 'results') {
+    btn.classList.add('hidden');
+    return;
+  }
+  if (state.screen === 'playing' && !state.isSpectator) {
+    btn.classList.add('hidden');
+    return;
+  }
+  btn.classList.remove('hidden');
+  const myEntry = (state.queuedPlayers || []).find(q => q.id === state.myId);
+  if (myEntry && myEntry.pos > 0) {
+    btn.textContent = 'In queue: ' + myEntry.pos + ' people ahead';
+  } else if (myEntry) {
+    btn.textContent = 'In queue: waiting for slot...';
+  } else if (state.matchPhase === 'waiting') {
+    btn.textContent = 'Waiting for daytime...';
+  } else if (state.isSpectator) {
+    btn.textContent = 'Join Game';
+  } else {
+    btn.classList.add('hidden');
+  }
+}
+
 export function registerEvents(socket) {
   socket.on('guestJoined', (data) => { resetKeys(); if (callbacks.guestJoined) callbacks.guestJoined(data); });
   socket.on('authSuccess', (data) => { resetKeys(); if (callbacks.authSuccess) callbacks.authSuccess(data); });
@@ -71,7 +96,6 @@ export function registerEvents(socket) {
     state.isDeadSpectating = false; state.queuedPlayers = []; state.spectatingTargetIndex = 0;
     state.localAnim = null; state.currentWave = 0; state.serverLevel = 0;
     state.dmgNumbers = []; state.mergeSmokes = []; state.zombieAnims = {};
-    document.getElementById('joinGameBtn').classList.add('hidden');
     document.getElementById('menu').classList.add('hidden');
     document.getElementById('errorMsg').textContent = '';
     state.cameraZoom = 1.0;
@@ -232,16 +256,17 @@ export function registerEvents(socket) {
 
   socket.on('spectatorAssigned', () => {
     state.isSpectator = true;
-    document.getElementById('joinGameBtn').classList.remove('hidden');
     document.getElementById('xpBar').classList.add('hidden');
+    updateJoinButton();
   });
 
-  socket.on('joinedGame', () => {
-    state.isSpectator = false; state.isDeadSpectating = false;
+  socket.on('joinedGame', ({ isDead } = {}) => {
+    state.isSpectator = false;
+    state.isDeadSpectating = !!isDead;
     state.queuedPlayers = (state.queuedPlayers || []).filter(q => q.id !== state.myId);
     state.screen = 'playing'; state.level = 1; state.exp = 0; state.expToNext = 100; state.gold = 0;
-    document.getElementById('joinGameBtn').classList.add('hidden');
     document.getElementById('xpBar').classList.remove('hidden');
+    updateJoinButton();
     updateXPBar(1, 0, 100);
     stopRender();
     startRender(socket);
@@ -252,6 +277,7 @@ export function registerEvents(socket) {
     if (playerCount != null) state.activePlayerCount = playerCount;
     state.lbSig = '';
     updateLeaderboard();
+    updateJoinButton();
   });
 
   socket.on('attackStart', ({ lockedAngle }) => { startAttackAnim(lockedAngle); });
@@ -289,6 +315,7 @@ export function registerEvents(socket) {
       document.getElementById('resultsOverlay').classList.add('hidden');
       state.screen = 'lobby';
     }
+    updateJoinButton();
   });
 
   socket.on('matchEnd', ({ wave, timer, serverLevel, playerStats, lobbyPlayers }) => {
@@ -298,6 +325,7 @@ export function registerEvents(socket) {
     document.getElementById('resultsOverlay').classList.remove('hidden');
     ['phaseDisplay', 'startNowBtn', 'waitingRespawn'].forEach(id => document.getElementById(id).classList.add('hidden'));
     ['menu', 'eliminated'].forEach(id => document.getElementById(id).classList.add('hidden'));
+    document.getElementById('joinGameBtn').classList.add('hidden');
     ['hud', 'hotbarInventory', 'settingsBtn', 'settingsPanel', 'xpBar'].forEach(id => document.getElementById(id).classList.add('hidden'));
     document.getElementById('resultsTimerValue').textContent = Math.ceil((timer || 30000) / 1000);
     document.getElementById('lobbyStartBtn').classList.add('hidden');
@@ -318,6 +346,7 @@ export function registerEvents(socket) {
     ['hud', 'hotbarInventory', 'settingsBtn', 'xpBar'].forEach(id => document.getElementById(id).classList.add('hidden'));
     document.getElementById('lobbyScreen').classList.remove('hidden');
     document.getElementById('lobbyStartBtn').classList.remove('hidden');
+    updateJoinButton();
   });
 
   socket.on('lobbyUpdate', ({ players }) => {
@@ -412,6 +441,7 @@ async function enterGame(socket) {
   state.screen = 'playing';
   state.level = 1; state.exp = 0; state.expToNext = 100; state.gold = 0;
   document.getElementById('eliminated').classList.add('hidden');
+  updateJoinButton();
   ['hud', 'hotbarInventory', 'settingsBtn'].forEach(id => document.getElementById(id).classList.remove('hidden'));
   if (!state.isSpectator) {
     document.getElementById('xpBar').classList.remove('hidden');

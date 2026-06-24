@@ -33,6 +33,38 @@ index.html → game.js (entry)
 
 Images are loaded in `net-events.js` via `ensureAssets()` and cached as `Image` objects in state. Sprites (hands, body parts, items) are drawn from these cached images using sprite sheet coordinates from `shared/data.js`.
 
+## Join Button State Machine
+
+`net-events.js:52` — `updateJoinButton()` drives `#joinGameBtn` based on `state`:
+
+```
+screen = menu/eliminated/results          → HIDE
+screen = playing AND !isSpectator          → HIDE
+────────────────────────────────────────
+SHOW the button
+  queuedPlayers has myId, pos > 0   → "In queue: X people ahead"
+  queuedPlayers has myId, pos = 0   → "In queue: waiting for slot..."
+  matchPhase === 'waiting'          → "Waiting for daytime..."
+  isSpectator                       → "Join Game"
+  else                              → HIDE
+```
+
+Called from 7 event handlers: `spectatorAssigned`, `joinedGame`, `queueUpdate`, `matchPhase`, `matchReset`, `enterGame`, `joined`.
+
+## URL Param Auto-Sign-In
+
+`game.js:129-133` — If URL contains `?guest=Name`, the client auto-emits `playAsGuest` 100ms after page load, bypassing the auth form entirely:
+
+```js
+const params = new URLSearchParams(window.location.search);
+const guestName = params.get('guest');
+if (guestName) {
+  setTimeout(() => socket.emit('playAsGuest', { name: guestName }), 100);
+}
+```
+
+Used by `launch_12_guests.bat` to open multiple test tabs at once with unique names.
+
 ## Event Pipeline
 
 Socket events → `net-events.js` → update `state.js` → render loop picks up changes. Inputs go the other way: `input.js` → `net.js` emit → server processes in tick loop.

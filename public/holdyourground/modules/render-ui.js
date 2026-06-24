@@ -1,6 +1,5 @@
 import { state } from './state.js';
 import { getSpriteFromSheet } from './render-entity.js';
-import { drawDiag } from './diag.js';
 
 export function updateLeaderboard() {
   const sorted = Object.values(state.players).sort((a, b) => b.kills - a.kills);

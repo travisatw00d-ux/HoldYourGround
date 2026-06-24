@@ -181,12 +181,12 @@ module.exports = function registerSocket(socket, { io, broadcastRoomList, broadc
 
   socket.on('joinGame', () => {
     const room = roomManager.getPlayerRoom(socket.id);
-    if (room) room.handleJoinGame(socket.id);
+    if (room) room.handleDirectJoin(socket.id);
   });
 
   socket.on('joinQueue', () => {
     const room = roomManager.getPlayerRoom(socket.id);
-    if (room) room.handleJoinGame(socket.id);
+    if (room) room.handleQueueJoin(socket.id);
   });
 
   socket.on('disconnect', () => {

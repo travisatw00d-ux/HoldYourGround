@@ -1,5 +1,5 @@
 const Room = require('./room');
-const { MAX_ROOMS, TICK_MS } = require('./config');
+const { MAX_ROOMS, MAX_PLAYERS, TICK_MS } = require('./config');
 
 const MAX_TICKS_PER_WAKE = 5;
 
@@ -29,7 +29,7 @@ class RoomManager {
     const list = Array.from(this.rooms.values()).map(r => ({
       id: r.id,
       playerCount: r.getPlayerCount(),
-      maxPlayers: MAX_ROOMS,
+      maxPlayers: MAX_PLAYERS,
       serverLevel: r.currentServerLevel,
       playerNames: Object.values(r.players).map(p => ({ name: p.name, type: p.accountType || 'basic' }))
     }));

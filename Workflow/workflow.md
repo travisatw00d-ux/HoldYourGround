@@ -16,20 +16,12 @@ Multiplayer zombie survival IO game. 100 zombies, 3200×2400 arena, last standin
 |---|---|
 | [server-architecture.md](./server-architecture.md) | 13 server files, tick loop, binary broadcast, spatial grid, zombie AI |
 | [client-architecture.md](./client-architecture.md) | 8 client modules, render loop, import chain, sprite caching |
+| [editing.md](./editing.md) | Task-to-file mapping, gotchas, verification checklist |
 | [match-lifecycle.md](./match-lifecycle.md) | Phase state machine, lobby system, zombie gating, spectator/end-game |
 | [deploy.md](./deploy.md) | Two-project sync, backend/frontend deploy, image management |
 | [troubleshooting.md](./troubleshooting.md) | Common issues and fixes |
 
 ## Two-Project Architecture
 
-**`HoldYourGround\`** is the source of truth. Game server + all game client files live here.
-**`IOWebsite\`** mirrors `public/` for the marketing site. After editing frontend code, sync:
-
-```
-HoldYourGround\public\holdyourground\  →  IOWebsite\public\holdyourground\
-HoldYourGround\public\shared\data.js   →  IOWebsite\public\shared\data.js
-HoldYourGround\public\style.css        →  IOWebsite\public\style.css
-HoldYourGround\images\*.png            →  IOWebsite\public\images\
-```
-
-See [deploy.md](./deploy.md) for full instructions.
+**`HoldYourGround\`** is the source of truth. **`IOWebsite\`** mirrors `public\` for the marketing site.
+Sync rules and deploy commands in [deploy.md](./deploy.md).

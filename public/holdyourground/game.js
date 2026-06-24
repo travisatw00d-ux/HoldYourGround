@@ -126,6 +126,12 @@ function renderRoomList(rooms) {
 
 const socket = connect();
 
+const params = new URLSearchParams(window.location.search);
+const guestName = params.get('guest');
+if (guestName) {
+  setTimeout(() => socket.emit('playAsGuest', { name: guestName }), 100);
+}
+
 function showLoginForm() {
   loginMode.classList.remove('hidden');
   registerMode.classList.add('hidden');
@@ -362,8 +368,9 @@ resultsLobbyBtn.addEventListener('click', () => {
 });
 
 joinGameBtn.addEventListener('click', () => {
-  const count = Object.keys(state.players).length;
-  socket.emit(count < 10 ? 'joinGame' : 'joinQueue');
+  if (state.matchPhase === 'waiting') return;
+  socket.emit('joinGame');
+  joinGameBtn.textContent = 'In queue: waiting for slot...';
   const name = state.account?.displayName || state.guestName || 'Player';
   state.queuedPlayers = [...(state.queuedPlayers || []), { id: state.myId, name, pos: 0 }];
 });

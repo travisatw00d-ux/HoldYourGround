@@ -1,8 +1,8 @@
 import { state } from './state.js';
 import { getCamera } from './camera.js';
 import { getInput } from './input.js';
-import { drawPlayer, drawZombie, drawDebugSwordHitbox, getBladeSegment, getSpriteFromSheet } from './render-entity.js';
-import { updateLeaderboard, updateHotbar, drawStatHUD, drawServerLevel, drawSpectatingUI, drawDeadSpectatingUI, drawDmgNumbers, drawMergeSmoke, drawBuildWatermark, drawHitFlash } from './render-ui.js';
+import { drawPlayer, drawZombie, drawDebugSwordHitbox, getBladeSegment } from './render-entity.js';
+import { drawStatHUD, drawServerLevel, drawSpectatingUI, drawDeadSpectatingUI, drawDmgNumbers, drawMergeSmoke, drawBuildWatermark, drawHitFlash } from './render-ui.js';
 import { drawDiag } from './diag.js';
 
 const canvas = document.getElementById('canvas');
