@@ -1,31 +1,35 @@
 # Hold Your Ground — Project Workflow
 
-## What It Is
-A **multiplayer zombie survival IO game**. 100 zombies spawn in a 3200×2400 arena. Last player (or team) standing wins. Earn XP/gold by killing zombies, level up (T1→T2 at lvl 10, T2→T3 at lvl 20), and top the leaderboard.
+Multiplayer zombie survival IO game. 100 zombies, 3200×2400 arena, last standing wins. XP/gold → level up (T1→T2 at 10, T2→T3 at 20) → leaderboard.
 
-## How It Works
-- **Movement:** WASD / Arrow keys with smooth acceleration
-- **Combat:** Click to swing sword toward mouse cursor. Hitbox calculated from blade tip/hilt keyframe interpolation
-- **Zombies:** Target nearest player. When two overlap they **merge** into one higher-level zombie with combined health
-- **Server:** Node.js + Socket.IO, tick loop at ~30Hz, binary-protocol broadcasts at ~18Hz with view culling
-- **Client:** Vanilla JS Canvas 2D with `requestAnimationFrame`, client-side interpolation, sprite caching
+## Tech Stack
 
-## Match Structure
-The game uses a phased lobby → match → intermission loop. See **[how-the-game-runs-matches.md](./how-the-game-runs-matches.md)** for the full phase state machine, lobby system, zombie gating, socket events, and file map.
+| Layer | Stack | Runs On |
+|---|---|---|
+| Game server | Node.js + Socket.IO + SQLite + binary protocol | Fly.io |
+| Client | Vanilla JS Canvas 2D + ES modules | Browser |
+| Website | Next.js static export + Cloudflare Workers | Cloudflare |
+
+## Key Docs
+
+| Document | Covers |
+|---|---|
+| [server-architecture.md](./server-architecture.md) | 13 server files, tick loop, binary broadcast, spatial grid, zombie AI |
+| [client-architecture.md](./client-architecture.md) | 8 client modules, render loop, import chain, sprite caching |
+| [match-lifecycle.md](./match-lifecycle.md) | Phase state machine, lobby system, zombie gating, spectator/end-game |
+| [deploy.md](./deploy.md) | Two-project sync, backend/frontend deploy, image management |
+| [troubleshooting.md](./troubleshooting.md) | Common issues and fixes |
 
 ## Two-Project Architecture
 
-| Project | Role | Hosting | Deploy Command |
-|---|---|---|---|
-| `HoldYourGround\` | Game server (Express + Socket.IO + SQLite) | Fly.io | `npm run deploy` |
-| `IOWebsite\` | Marketing site + game client delivery | Cloudflare Workers | `deploy.bat` |
+**`HoldYourGround\`** is the source of truth. Game server + all game client files live here.
+**`IOWebsite\`** mirrors `public/` for the marketing site. After editing frontend code, sync:
 
-## The Critical Sync Step
-**`HoldYourGround\public\` is the source of truth.** After editing game files, manually copy to `IOWebsite\public\`:
-- `public\holdyourground\` (all files)
-- `public\shared\data.js` (game constants — most commonly missed)
-- `public\style.css`
-- `images\*` → `IOWebsite\public\images\`
+```
+HoldYourGround\public\holdyourground\  →  IOWebsite\public\holdyourground\
+HoldYourGround\public\shared\data.js   →  IOWebsite\public\shared\data.js
+HoldYourGround\public\style.css        →  IOWebsite\public\style.css
+HoldYourGround\images\*.png            →  IOWebsite\public\images\
+```
 
-## Full Deployment
-See **[HowToFullDeploy.md](./HowToFullDeploy.md)** for step-by-step instructions covering backend-only deploy, frontend-only deploy, full redeploy checklists, image management, and troubleshooting (invisible swords, Cloudflare cache, etc.).
+See [deploy.md](./deploy.md) for full instructions.
