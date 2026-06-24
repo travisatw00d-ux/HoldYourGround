@@ -53,7 +53,7 @@ export function registerEvents(socket) {
   socket.on('guestJoined', (data) => { resetKeys(); if (callbacks.guestJoined) callbacks.guestJoined(data); });
   socket.on('authSuccess', (data) => { resetKeys(); if (callbacks.authSuccess) callbacks.authSuccess(data); });
   socket.on('authError', (msg) => { document.getElementById('errorMsg').textContent = msg; document.getElementById('errorMsg').classList.remove('hidden'); });
-  socket.on('lobbyCount', (count) => { if (callbacks.lobbyCount) callbacks.lobbyCount(count); });
+  socket.on('lobbyCount', ({ count }) => { if (callbacks.lobbyCount) callbacks.lobbyCount(count); });
   socket.on('roomList', (rooms) => { if (callbacks.roomList) callbacks.roomList(rooms); });
   socket.on('roomFull', () => { document.getElementById('errorMsg').textContent = 'Room is full'; });
   socket.on('error', (msg) => { document.getElementById('errorMsg').textContent = msg; });
