@@ -345,7 +345,6 @@ export function registerEvents(socket) {
     stopRender();
     state.matchPhase = 'ended'; state.isDeadSpectating = false;
     document.getElementById('loadingOverlay').classList.add('hidden');
-    document.getElementById('lobbyScreen').classList.remove('hidden');
     document.getElementById('resultsOverlay').classList.remove('hidden');
     ['phaseDisplay', 'waitingRespawn'].forEach(id => document.getElementById(id).classList.add('hidden'));
     ['menu', 'eliminated'].forEach(id => document.getElementById(id).classList.add('hidden'));
