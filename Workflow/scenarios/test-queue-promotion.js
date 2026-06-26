@@ -137,6 +137,7 @@ function testCmd(p, action) {
 }
 
 function writeTraceFile(players, scenarioName, diagEntries, extra) {
+  fs.readdirSync(outDir).filter(f => f.startsWith('trace-')).forEach(f => fs.unlinkSync(path.join(outDir, f)));
   const allEvents = [];
   for (const p of players) {
     for (const e of p.events) {

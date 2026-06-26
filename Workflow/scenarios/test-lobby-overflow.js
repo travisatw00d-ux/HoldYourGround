@@ -46,6 +46,7 @@ async function createFreshRoom(leader) {
 }
 
 function writeTrace(players, scenarioName, extra) {
+  fs.readdirSync(outDir).filter(f => f.startsWith('overflow-')).forEach(f => fs.unlinkSync(path.join(outDir, f)));
   const allEvents = []; for (const p of players) { for (const e of p.events) allEvents.push({ player: p.name, ...e }); }
   allEvents.sort((a, b) => a.t - b.t);
   const ts = new Date().toISOString().replace(/[:.]/g, '-');
