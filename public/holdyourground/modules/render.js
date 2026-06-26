@@ -5,6 +5,13 @@ import { drawPlayer, drawZombie, drawDebugSwordHitbox, getBladeSegment } from '.
 import { drawStatHUD, drawServerLevel, drawSpectatingUI, drawDeadSpectatingUI, drawDmgNumbers, drawMergeSmoke, drawBuildWatermark, drawHitFlash } from './render-ui.js';
 import { drawDiag } from './diag.js';
 
+function shortAngleDist(a, b) {
+  let diff = b - a;
+  while (diff > Math.PI) diff -= Math.PI * 2;
+  while (diff < -Math.PI) diff += Math.PI * 2;
+  return diff;
+}
+
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
 canvas.width = state.viewW;
@@ -128,6 +135,9 @@ function render() {
     const sx = (p.px + (p.x - p.px) * alpha) - cam.x;
     const sy = (p.py + (p.y - p.py) * alpha) - cam.y;
     if (sx < -40 || sx > eW + 40 || sy < -40 || sy > eH + 40) continue;
+    if (p.id !== state.myId && p.pfacingAngle != null) {
+      p._smoothAngle = p.pfacingAngle + shortAngleDist(p.pfacingAngle, p.facingAngle) * alpha;
+    }
     drawPlayer(ctx, p, sx, sy, alpha, topKills);
     if (state.debugHitbox) {
       const knightFrame = state.knightFrames?.[`T${p.lvl >= 20 ? 3 : p.lvl >= 10 ? 2 : 1}KnightHead.png`]?.frame;

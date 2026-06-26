@@ -6,6 +6,7 @@ const fs = require('fs');
 const path = require('path');
 
 const CLIENT_DIAG_DIR = path.join(__dirname, '..', 'Workflow');
+const activeSessions = new Map();
 
 module.exports = function registerSocket(socket, { io, broadcastRoomList, broadcastLobbyUpdate, joinLobby, leaveLobby }) {
   console.log(`[${socket.id}] connected`);
@@ -26,6 +27,12 @@ module.exports = function registerSocket(socket, { io, broadcastRoomList, broadc
   socket.on('login', ({ username, password }) => {
     const result = auth.login(username, password);
     if (result.ok) {
+      const accountId = result.account.id;
+      if (activeSessions.has(accountId) && activeSessions.get(accountId) !== socket.id) {
+        socket.emit('authError', 'Already logged in — close other tab first');
+        return;
+      }
+      activeSessions.set(accountId, socket.id);
       socket.account = result.account;
       socket.emit('authSuccess', { account: result.account, rooms: roomManager.getRoomList() });
       console.log(`[${socket.id}] logged in as "${result.account.username}"`);
@@ -161,7 +168,10 @@ module.exports = function registerSocket(socket, { io, broadcastRoomList, broadc
     joinLobby(socket);
   });
 
-  socket.on('diagPing', (t) => socket.emit('diagPong', { t }));
+  socket.on('diagPing', (t) => {
+    socket._lastDiagPing = Date.now();
+    socket.emit('diagPong', { t });
+  });
 
   socket.on('startMatch', () => {
     const room = roomManager.getPlayerRoom(socket.id);
@@ -230,6 +240,7 @@ module.exports = function registerSocket(socket, { io, broadcastRoomList, broadc
 
   socket.on('disconnect', () => {
     console.log(`[${socket.id}] disconnected`);
+    if (socket.account) activeSessions.delete(socket.account.id);
     leaveLobby(socket);
     const room = roomManager.getPlayerRoom(socket.id);
     if (room && room.matchPhase === 'ended') {

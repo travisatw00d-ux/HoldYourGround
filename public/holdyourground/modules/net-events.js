@@ -114,14 +114,15 @@ export function registerEvents(socket) {
     const u8 = msg instanceof ArrayBuffer ? new Uint8Array(msg) : new Uint8Array(msg.buffer, msg.byteOffset, msg.byteLength);
     const dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
     let o = 0;
+    let playerCount = 0, zombieCount = 0;
     try {
       dv.getUint8(o); o += 1;
       const emitTime = dv.getFloat64(o, true); o += 8;
       const arenaW = dv.getUint16(o, true); o += 2;
       const arenaH = dv.getUint16(o, true); o += 2;
       const sLevel = dv.getUint16(o, true); o += 2;
-      const playerCount = dv.getUint8(o); o += 1;
-      const zombieCount = dv.getUint16(o, true); o += 2;
+      playerCount = dv.getUint8(o); o += 1;
+      zombieCount = dv.getUint16(o, true); o += 2;
       state.isSpectator = dv.getUint8(o) === 1; o += 1;
 
       const oldP = state.players;
@@ -152,8 +153,8 @@ export function registerEvents(socket) {
           speed: meta.speed != null ? meta.speed : 13, attackDmg: meta.attackDmg != null ? meta.attackDmg : 5,
           attackSpeed: meta.attackSpeed != null ? meta.attackSpeed : 800
         };
-        if (old && Math.abs(x - old.x) < 200 && Math.abs(y - old.y) < 200) { p.px = old.x; p.py = old.y; }
-        else { p.px = x; p.py = y; }
+        if (old && Math.abs(x - old.x) < 200 && Math.abs(y - old.y) < 200) { p.px = old.x; p.py = old.y; p.pfacingAngle = old.facingAngle; }
+        else { p.px = x; p.py = y; p.pfacingAngle = facingAngle; }
         map[id] = p;
       }
       state.players = map;
@@ -203,7 +204,7 @@ export function registerEvents(socket) {
       updateLeaderboard();
       updateHotbar();
     } catch (e) {
-      console.error('[HYG] state buffer error:', e);
+      console.error(`[HYG] state buffer error at offset=${o} playerCount=${playerCount} zombieCount=${zombieCount} bytes=${u8.byteLength}:`, e);
       state.players = {}; state.zombies = [];
     }
   });
@@ -268,6 +269,7 @@ export function registerEvents(socket) {
 
   socket.on('spectatorAssigned', () => {
     state.isSpectator = true;
+    state.isDeadSpectating = false;
     state._joinedEnded = false;
     document.getElementById('xpBar').classList.add('hidden');
     if (state.screen === 'results') {
@@ -311,6 +313,7 @@ export function registerEvents(socket) {
     state.lbSig = '';
     updateLeaderboard();
     updateJoinButton();
+    socket.emit('clientDiag', { event: 'queueUpdate', isSpectator: state.isSpectator, screen: state.screen, matchPhase: state.matchPhase, queued: (queued || []).length, myPos: myQ?.pos });
   });
 
   socket.on('attackStart', ({ lockedAngle }) => { startAttackAnim(lockedAngle); });
@@ -376,6 +379,7 @@ export function registerEvents(socket) {
     if (!document.getElementById('resultsOverlay').classList.contains('hidden')) {
       document.getElementById('joinGameBtn').classList.add('hidden');
     }
+    socket.emit('clientDiag', { event: 'matchPhase', phase, isSpectator: state.isSpectator, screen: state.screen, _joinedEnded: state._joinedEnded });
   });
 
   socket.on('matchEnd', ({ wave, timer, serverLevel, playerStats, lobbyPlayers }) => {
@@ -412,8 +416,9 @@ export function registerEvents(socket) {
     document.getElementById('lobbyQueuePos').classList.add('hidden');
     ['hud', 'hotbarInventory', 'settingsBtn', 'xpBar'].forEach(id => document.getElementById(id).classList.add('hidden'));
     document.getElementById('lobbyScreen').classList.remove('hidden');
-    document.getElementById('lobbyStartBtn').classList.remove('hidden');
+    document.getElementById('lobbyStartBtn').classList.toggle('hidden', !!state.isSpectator);
     updateJoinButton();
+    socket.emit('clientDiag', { event: 'matchReset', isSpectator: state.isSpectator, screen: state.screen, matchPhase: 'waiting', _joinedEnded: state._joinedEnded });
   });
 
   socket.on('lobbyUpdate', ({ players }) => {
@@ -435,7 +440,7 @@ export function registerEvents(socket) {
     document.getElementById('lobbyTimerValue').textContent = Math.max(0, Math.ceil(timer / 1000));
     document.getElementById('lobbyTimer').classList.remove('hidden');
     const startBtn = document.getElementById('lobbyStartBtn');
-    if (startBtn) startBtn.classList.toggle('hidden', !allReady);
+    if (startBtn) startBtn.classList.toggle('hidden', !allReady || state.isSpectator);
   });
 
   socket.on('diagPong', (t) => {
@@ -516,7 +521,7 @@ async function enterGame(socket) {
   state._joinedEnded = false;
   state.screen = 'playing';
   state.level = 1; state.exp = 0; state.expToNext = 100; state.gold = 0;
-  state.players = {}; state.zombies = []; state.activePlayerCount = 0;
+  state.zombies = []; state.activePlayerCount = 0;
   state.dmgNumbers = []; state.mergeSmokes = []; state.zombieAnims = {};
   state.localAnim = null; state.lbSig = ''; state.hotSig = '';
   document.getElementById('eliminated').classList.add('hidden');

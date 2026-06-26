@@ -146,7 +146,7 @@ function getVis(p) {
 
 function getDrawAngle(p) {
   if (p.id !== state.myId && p.attacking && p.attackLockedAngle != null) return p.attackLockedAngle;
-  return p.facingAngle || 0;
+  return p._smoothAngle ?? (p.facingAngle || 0);
 }
 
 export function getBladeSegment(p, sx, sy, isKnight) {
@@ -344,7 +344,7 @@ export function drawPlayer(ctx, p, sx, sy, alpha, topKills) {
     const sz = 56 / Math.max(knightFrame.w, knightFrame.h);
     ctx.save();
     ctx.translate(sx, sy);
-    ctx.rotate(p.facingAngle - Math.PI / 2);
+    ctx.rotate((p._smoothAngle ?? p.facingAngle) - Math.PI / 2);
     ctx.drawImage(getSpriteFromSheet(state.knightSheet, knightFrame.w * sz, knightFrame.h * sz, knightFrame), -(knightFrame.w * sz) / 2, -(knightFrame.h * sz) / 2, knightFrame.w * sz, knightFrame.h * sz);
     ctx.restore();
   } else {

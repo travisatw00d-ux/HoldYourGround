@@ -69,6 +69,9 @@ class Room {
     if (this.matchPhase === 'ended') {
       return all.filter(p => this._endGameReady.has(p.id));
     }
+    if (this.matchPhase === 'waiting' && this._postGameWaiting) {
+      return all.filter(p => !this.players[p.id]?.isSpectator);
+    }
     if (this._endGameReady.size > 0 && this.matchPhase !== 'waiting') {
       return all.filter(p => this._endGameReady.has(p.id) || !this.players[p.id]?.isSpectator);
     }
@@ -129,9 +132,10 @@ class Room {
     this._lobbyOrder = this._lobbyOrder.filter(oid => oid !== id);
     this._joinQueue = this._joinQueue.filter(qid => qid !== id);
     this._broadcastQueueUpdate();
-    if (wasActive) this._promoteFromQueue();
+    if (wasActive && this.matchPhase !== 'ended') this._promoteFromQueue();
     this._broadcastLobbyUpdate();
     if (this.isEmpty()) {
+      this._postGameWaiting = false;
       if (this.matchPhase === 'ended') {
         this._timerEndReset();
       } else if (!this._emptyTimeout) {
@@ -466,12 +470,12 @@ class Room {
         p.alive = false;
       }
     }
-    this.io.to('room:' + this.id).emit('matchReset', { readyPlayers: readySnapshot, activePlayers: this.getActivePlayerIds() });
     const prePromoteActive = this.getActivePlayerCount();
     const prePromoteQueue = this._joinQueue.length;
     this._promoteFromQueue();
     const postPromoteActive = this.getActivePlayerCount();
     const postPromoteQueue = this._joinQueue.length;
+    this.io.to('room:' + this.id).emit('matchReset', { readyPlayers: readySnapshot, activePlayers: this.getActivePlayerIds() });
     console.log(`[room ${this.id}] _timerEndReset: ready=${readySnapshot.length} queue=${prePromoteQueue}->${postPromoteQueue} active=${prePromoteActive}->${postPromoteActive}`);
     this._broadcastQueueUpdate();
     this.io.to('room:' + this.id).emit('lobbyUpdate', {
@@ -536,12 +540,11 @@ class Room {
 
   _broadcastQueueUpdate(directTargetId) {
     const activeCount = this.getActivePlayerCount();
-    const waitingCount = Math.max(0, MAX_PLAYERS - activeCount);
     let queuePos = 0;
     const queued = this._joinQueue.map((id, idx) => {
       const p = this.players[id];
       if (!p) return null;
-      const pos = idx >= waitingCount ? ++queuePos : 0;
+      const pos = ++queuePos;
       return { id, name: p.name, pos };
     }).filter(Boolean);
     const data = { queued, playerCount: activeCount };
@@ -602,10 +605,23 @@ class Room {
     }
 
     if (this.matchPhase === 'ended') {
+      if (this._endGameReady.size === 0 && this._joinQueue.length > 0 && this._joinQueue.length === Object.keys(this.players).length) {
+        this._timerEndReset();
+        return;
+      }
       if (tickStart - this._lastEndGameBroadcast < BROADCAST_MS) return;
       this._lastEndGameBroadcast = tickStart;
       this._broadcastEndGameUpdate();
       return;
+    }
+
+    if (this.matchPhase !== 'waiting' && tickStart % (BROADCAST_MS * 3) < TICK_MS) {
+      for (const id in this.players) {
+        const sock = this.io?.sockets?.sockets?.get(id);
+        if (sock && sock._lastDiagPing && tickStart - sock._lastDiagPing > 30000) {
+          console.log(`[room ${this.id}] diag STALL ${id.slice(0,12)} no ping ${tickStart - sock._lastDiagPing}ms`);
+        }
+      }
     }
 
     const ids = Object.keys(this.players);

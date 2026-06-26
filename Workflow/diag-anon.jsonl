@@ -1,3 +1,10 @@
-{"event":"tabVisibility","hidden":false,"screen":"lobby","phase":"waiting","socketId":"RNFhcdzT","t":1782438612006}
-{"event":"tabVisibility","hidden":true,"screen":"lobby","phase":"waiting","socketId":"RNFhcdzT","t":1782438614634}
-{"event":"tabVisibility","hidden":true,"screen":"menu","phase":null,"socketId":"j8wynt2u","t":1782438617894}
+{"event":"tabVisibility","hidden":true,"screen":"menu","phase":null,"socketId":"geQbNEjo","t":1782445290436}
+{"event":"tabVisibility","hidden":false,"screen":"menu","phase":null,"socketId":"EmltO4Du","t":1782445291901}
+{"event":"tabVisibility","hidden":true,"screen":"menu","phase":null,"socketId":"EmltO4Du","t":1782445296209}
+{"event":"tabVisibility","hidden":false,"screen":"menu","phase":null,"socketId":"geQbNEjo","t":1782445296211}
+{"event":"tabVisibility","hidden":true,"screen":"menu","phase":null,"socketId":"geQbNEjo","t":1782445296946}
+{"event":"tabVisibility","hidden":false,"screen":"menu","phase":null,"socketId":"EmltO4Du","t":1782445296951}
+{"event":"matchPhase","phase":"waiting","isSpectator":false,"screen":"lobby","_joinedEnded":true,"socketId":"EmltO4Du","t":1782445304294}
+{"event":"queueUpdate","isSpectator":false,"screen":"lobby","matchPhase":"waiting","queued":0,"socketId":"EmltO4Du","t":1782445305052}
+{"event":"matchPhase","phase":"daytime","isSpectator":false,"screen":"lobby","_joinedEnded":true,"socketId":"EmltO4Du","t":1782445305053}
+{"event":"tabVisibility","hidden":true,"screen":"playing","phase":"daytime","socketId":"EmltO4Du","t":1782445308371}
