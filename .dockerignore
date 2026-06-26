@@ -5,3 +5,5 @@ npm-debug.log
 *.md
 .idea
 .DS_Store
+Workflow/
+data/
