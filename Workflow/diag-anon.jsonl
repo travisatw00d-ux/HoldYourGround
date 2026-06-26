@@ -8,3 +8,4 @@
 {"event":"queueUpdate","isSpectator":false,"screen":"lobby","matchPhase":"waiting","queued":0,"socketId":"EmltO4Du","t":1782445305052}
 {"event":"matchPhase","phase":"daytime","isSpectator":false,"screen":"lobby","_joinedEnded":true,"socketId":"EmltO4Du","t":1782445305053}
 {"event":"tabVisibility","hidden":true,"screen":"playing","phase":"daytime","socketId":"EmltO4Du","t":1782445308371}
+{"event":"tabVisibility","hidden":true,"screen":"menu","phase":null,"socketId":"h9j0iNV9","t":1782447486139}

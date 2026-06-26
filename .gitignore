@@ -3,5 +3,6 @@ node_modules
 # Test artifacts
 Workflow/scenarios/trace-*.json
 Workflow/scenarios/overflow-*.json
+Workflow/scenarios/archive/
 Workflow/diag-log.json
 *.db*

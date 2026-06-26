@@ -300,7 +300,7 @@ function clearCanvas() {
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 }
 
-escapeReturnBtn.addEventListener('click', () => {
+function leaveToMenu() {
   stopRender();
   clearCanvas();
   socket.emit('leaveRoom');
@@ -308,46 +308,24 @@ escapeReturnBtn.addEventListener('click', () => {
   eliminated.classList.add('hidden');
   waitingRespawn.classList.add('hidden');
   lobbyScreen.classList.add('hidden');
-  menu.classList.remove('hidden');
+  document.getElementById('resultsOverlay').classList.add('hidden');
   document.getElementById('xpBar').classList.add('hidden');
   document.getElementById('loadingOverlay').classList.add('hidden');
   document.getElementById('phaseDisplay').classList.add('hidden');
-  welcomeMsg.textContent = 'Ready For Battle?';
-  state.screen = 'menu';
-  selectedRoomId = null;
-});
-
-escapeConfirmBtn.addEventListener('click', () => {
-  stopRender();
-  clearCanvas();
-  socket.emit('leaveRoom');
-  hideEscapeMenu();
-  eliminated.classList.add('hidden');
+  document.getElementById('joinGameBtn').classList.add('hidden');
   menu.classList.remove('hidden');
-  document.getElementById('xpBar').classList.add('hidden');
-  document.getElementById('loadingOverlay').classList.add('hidden');
   welcomeMsg.textContent = 'Ready For Battle?';
   state.screen = 'menu';
   selectedRoomId = null;
-});
+}
+
+escapeReturnBtn.addEventListener('click', leaveToMenu);
+
+escapeConfirmBtn.addEventListener('click', leaveToMenu);
 
 escapeCancelBtn.addEventListener('click', hideEscapeMenu);
 
-lobbyBtn.addEventListener('click', () => {
-  stopRender();
-  clearCanvas();
-  socket.emit('leaveRoom');
-  eliminated.classList.add('hidden');
-  lobbyScreen.classList.add('hidden');
-  menu.classList.remove('hidden');
-  document.getElementById('xpBar').classList.add('hidden');
-  document.getElementById('loadingOverlay').classList.add('hidden');
-  welcomeMsg.textContent = 'Ready For Battle?';
-  state.screen = 'menu';
-  selectedRoomId = null;
-});
-
-
+lobbyBtn.addEventListener('click', leaveToMenu);
 
 resultsPlayAgainBtn.addEventListener('click', () => {
   document.getElementById('resultsOverlay').classList.add('hidden');
@@ -359,49 +337,19 @@ resultsPlayAgainBtn.addEventListener('click', () => {
   }
 });
 
-resultsLobbyBtn.addEventListener('click', () => {
-  stopRender();
-  clearCanvas();
-  socket.emit('leaveRoom');
-  document.getElementById('resultsOverlay').classList.add('hidden');
-  lobbyScreen.classList.add('hidden');
-  menu.classList.remove('hidden');
-  document.getElementById('xpBar').classList.add('hidden');
-  document.getElementById('loadingOverlay').classList.add('hidden');
-  welcomeMsg.textContent = 'Ready For Battle?';
-  state.screen = 'menu';
-  selectedRoomId = null;
-});
+resultsLobbyBtn.addEventListener('click', leaveToMenu);
 
 joinGameBtn.addEventListener('click', () => {
   socket.emit('joinGame');
 });
 
-waitingLobbyBtn.addEventListener('click', () => {
-  stopRender();
-  clearCanvas();
-  socket.emit('leaveRoom');
-  waitingRespawn.classList.add('hidden');
-  menu.classList.remove('hidden');
-  document.getElementById('xpBar').classList.add('hidden');
-  document.getElementById('loadingOverlay').classList.add('hidden');
-  welcomeMsg.textContent = 'Ready For Battle?';
-  state.screen = 'menu';
-  selectedRoomId = null;
-});
+waitingLobbyBtn.addEventListener('click', leaveToMenu);
 
 lobbyStartBtn.addEventListener('click', () => {
   socket.emit('startMatch');
 });
 
-lobbyLeaveBtn.addEventListener('click', () => {
-  socket.emit('leaveRoom');
-  lobbyScreen.classList.add('hidden');
-  menu.classList.remove('hidden');
-  welcomeMsg.textContent = 'Ready For Battle?';
-  state.screen = 'menu';
-  selectedRoomId = null;
-});
+lobbyLeaveBtn.addEventListener('click', leaveToMenu);
 
 fullscreenToggle.addEventListener('change', () => {
   if (fullscreenToggle.checked) {
