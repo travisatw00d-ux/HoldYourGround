@@ -60,8 +60,15 @@ class Room {
     return Object.keys(this.players).filter(id => !this.players[id].isSpectator);
   }
 
+  _broadcastLobbyUpdate() {
+    this.io.to('room:' + this.id).emit('lobbyUpdate', { players: this.getFilteredLobbyPlayers() });
+  }
+
   getFilteredLobbyPlayers() {
     const all = this.getLobbyPlayers();
+    if (this.matchPhase === 'ended') {
+      return all.filter(p => this._endGameReady.has(p.id));
+    }
     if (this._endGameReady.size > 0 && this.matchPhase !== 'waiting') {
       return all.filter(p => this._endGameReady.has(p.id) || !this.players[p.id]?.isSpectator);
     }
@@ -106,6 +113,7 @@ class Room {
     }
     this._diag(id, 'addPlayer', { isActive, accountType });
     this._broadcastQueueUpdate();
+    this._broadcastLobbyUpdate();
     zombieAi.recalcAllZombieTargets(this.zombies, this.players);
     if (!this._lobbyOrder.includes(id)) this._lobbyOrder.push(id);
     if (this._emptyTimeout) { clearTimeout(this._emptyTimeout); this._emptyTimeout = null; }
@@ -122,6 +130,7 @@ class Room {
     this._joinQueue = this._joinQueue.filter(qid => qid !== id);
     this._broadcastQueueUpdate();
     if (wasActive) this._promoteFromQueue();
+    this._broadcastLobbyUpdate();
     if (this.isEmpty()) {
       if (this.matchPhase === 'ended') {
         this._timerEndReset();
@@ -243,6 +252,7 @@ class Room {
     }
     this.io.to('room:' + this.id).emit('matchPhase', matchData);
     this._joinQueue = this._joinQueue.filter(id => this.players[id]?.isSpectator);
+    this._broadcastLobbyUpdate();
   }
 
   handleStartMatch(socketId) {
@@ -313,6 +323,7 @@ class Room {
     });
     this.io.to('room:' + this.id).emit('matchPhase', { phase: 'ended', timer: END_GAME_MS, wave: this.currentWave, activePlayers: this.getActivePlayerIds() });
     this._broadcastQueueUpdate();
+    this._broadcastLobbyUpdate();
   }
 
   resetMatch() {
@@ -410,8 +421,8 @@ class Room {
     return Object.values(this.players).filter(p => !p.isSpectator).map(p => ({ name: p.name, level: p.lvl || 1, kills: p.kills || 0 })).sort((a, b) => b.level - a.level);
   }
 
-  handleEndGameReady(id) { this._endGameReady.add(id); this._broadcastEndGameUpdate(); }
-  handleEndGameLeave(id) { this._endGameReady.delete(id); this._broadcastEndGameUpdate(); }
+  handleEndGameReady(id) { this._endGameReady.add(id); this._broadcastEndGameUpdate(); this._broadcastLobbyUpdate(); }
+  handleEndGameLeave(id) { this._endGameReady.delete(id); this._broadcastEndGameUpdate(); this._broadcastLobbyUpdate(); }
 
   _broadcastEndGameUpdate() {
     const players = this.getLobbyPlayers();
@@ -574,6 +585,7 @@ class Room {
       slots--;
     }
     this._broadcastQueueUpdate();
+    this._broadcastLobbyUpdate();
     this.lastBroadcast = 0;
   }
 
@@ -684,7 +696,7 @@ class Room {
         }
         this._viewZ.push(z);
       }
-      this.io.to(id).emit('state', bp.buildStateBuffer(playerBlock, this._playerList.length, this.currentServerLevel, this._viewZ, emitTime));
+      this.io.to(id).emit('state', bp.buildStateBuffer(playerBlock, this._playerList.length, this.currentServerLevel, this._viewZ, emitTime, p.isSpectator));
     }
     const tickMs = Date.now() - tickStart;
     if (tickMs > 30) console.log(`[room ${this.id}] tick=${tickMs}ms players=${ids.length} zombies=${this.zombies.length}`);

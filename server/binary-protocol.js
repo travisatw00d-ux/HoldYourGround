@@ -28,9 +28,9 @@ function buildPlayerBlock(list) {
   return buf;
 }
 
-function buildStateBuffer(playerBlock, playerCount, serverLevel, viewZombies, emitTime) {
+function buildStateBuffer(playerBlock, playerCount, serverLevel, viewZombies, emitTime, playerIsSpectator) {
   const zCount = viewZombies.length;
-  const buf = Buffer.allocUnsafe(18 + playerBlock.length + zCount * 20);
+  const buf = Buffer.allocUnsafe(19 + playerBlock.length + zCount * 20);
   let o = 0;
   buf[o++] = 1;
   buf.writeDoubleLE(emitTime, o); o += 8;
@@ -39,6 +39,7 @@ function buildStateBuffer(playerBlock, playerCount, serverLevel, viewZombies, em
   buf.writeUInt16LE(serverLevel, o); o += 2;
   buf[o++] = playerCount;
   buf.writeUInt16LE(zCount, o); o += 2;
+  buf[o++] = playerIsSpectator ? 1 : 0;
   playerBlock.copy(buf, o); o += playerBlock.length;
   for (let i = 0; i < zCount; i++) {
     const z = viewZombies[i];

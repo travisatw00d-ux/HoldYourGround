@@ -122,6 +122,7 @@ export function registerEvents(socket) {
       const sLevel = dv.getUint16(o, true); o += 2;
       const playerCount = dv.getUint8(o); o += 1;
       const zombieCount = dv.getUint16(o, true); o += 2;
+      state.isSpectator = dv.getUint8(o) === 1; o += 1;
 
       const oldP = state.players;
       const map = {};
@@ -392,8 +393,6 @@ export function registerEvents(socket) {
     ['hud', 'hotbarInventory', 'settingsBtn', 'settingsPanel', 'xpBar'].forEach(id => document.getElementById(id).classList.add('hidden'));
     document.getElementById('resultsTimerValue').textContent = Math.ceil((timer || 30000) / 1000);
     document.getElementById('lobbyStartBtn').classList.add('hidden');
-    state.lobbyPlayers = [];
-    renderLobbyCards();
     renderResults({ serverLevel, playerStats, wave });
     document.getElementById('resultsPlayAgainBtn').textContent = 'Play Again';
     state.screen = 'results';
@@ -414,7 +413,6 @@ export function registerEvents(socket) {
     ['hud', 'hotbarInventory', 'settingsBtn', 'xpBar'].forEach(id => document.getElementById(id).classList.add('hidden'));
     document.getElementById('lobbyScreen').classList.remove('hidden');
     document.getElementById('lobbyStartBtn').classList.remove('hidden');
-    renderLobbyCards();
     updateJoinButton();
   });
 
@@ -433,10 +431,6 @@ export function registerEvents(socket) {
       state.screen = 'lobby';
     }
     // Refresh lobby state (always runs)
-    const s = new Set(ready || []);
-    if (state.myId && !state.isSpectator && state.matchPhase !== 'ended') s.add(state.myId);
-    state.lobbyPlayers = (players || []).filter(p => s.has(p.id));
-    renderLobbyCards();
     document.getElementById('resultsTimerValue').textContent = Math.max(0, Math.ceil(timer / 1000));
     document.getElementById('lobbyTimerValue').textContent = Math.max(0, Math.ceil(timer / 1000));
     document.getElementById('lobbyTimer').classList.remove('hidden');
