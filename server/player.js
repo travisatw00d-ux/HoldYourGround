@@ -113,7 +113,8 @@ function playerInfoObj(p) {
     currentItem: p.currentItem, inventory: p.inventory,
     maxHealth: p.maxHealth, speed: p.speed, attackDmg: p.attackDmg, attackSpeed: p.attackSpeed,
     lvl: p.lvl || 1,
-    playerClass: p.playerClass || 'knight'
+    playerClass: p.playerClass || 'knight',
+    isSpectator: p.isSpectator
   };
 }
 

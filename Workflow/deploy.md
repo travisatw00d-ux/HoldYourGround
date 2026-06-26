@@ -42,10 +42,3 @@ Run sync checklist → deploy backend → push frontend. Wait ~1-2 min for Cloud
 ## Image Management
 
 Images in both projects must match. Add/rename in `HoldYourGround\images\` → copy to `IOWebsite\public\images\` → update JS references → deploy both.
-
-## Quick Reference
-
-```bash
-cd C:\Dev\IOGames\HoldYourGround && npm run deploy   # backend
-cd C:\Dev\IOWebsite && git add -A && git commit -m "x" && git push origin main  # frontend
-```

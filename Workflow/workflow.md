@@ -1,6 +1,6 @@
 # Hold Your Ground — Project Workflow
 
-Multiplayer zombie survival IO game. 100 zombies, 3200×2400 arena, last standing wins. XP/gold → level up (T1→T2 at 10, T2→T3 at 20) → leaderboard.
+Multiplayer zombie survival IO game. 100 zombies, 10 active players, 3200×2400 arena, last standing wins per wave. XP/gold → level up (T1→T2 at 10, T2→T3 at 20). AGENTS.md provides AI session context.
 
 ## Tech Stack
 
@@ -19,6 +19,7 @@ Multiplayer zombie survival IO game. 100 zombies, 3200×2400 arena, last standin
 | [match-lifecycle.md](./match-lifecycle.md) | Phase state machine, zombie mechanics, spectator, end game |
 | [join-queue.md](./join-queue.md) | Join flows (A/B/C1/C2), queue rules, button text, playAgain routing |
 | [results-rejoin.md](./results-rejoin.md) | Results screen, rejoin behavior, empty room cleanup |
+| [diagnostics.md](./diagnostics.md) | Client heartbeat, stalled tab detection, diag overlay & logging |
 | [editing.md](./editing.md) | Task-to-file mapping, gotchas, verification checklist |
 | [scenarios/README.md](./scenarios/README.md) | Automated test scenarios, `__test` commands |
 | [deploy.md](./deploy.md) | Two-project sync, backend/frontend deploy, image management |

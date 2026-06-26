@@ -56,6 +56,14 @@ class Room {
     }).filter(Boolean);
   }
 
+  getFilteredLobbyPlayers() {
+    const all = this.getLobbyPlayers();
+    if (this._endGameReady.size > 0 && this.matchPhase !== 'waiting') {
+      return all.filter(p => this._endGameReady.has(p.id) || !this.players[p.id]?.isSpectator);
+    }
+    return all;
+  }
+
   _diag(id, action, extra = {}) {
     const p = this.players[id];
     if (!p || !p.name || !p.name.toLowerCase().includes('diag')) return;
@@ -74,15 +82,26 @@ class Room {
   }
 
   addPlayer(id, name, accountType, accountId) {
-    const isActive = this.matchPhase !== 'waiting' && this.matchPhase !== 'ended';
-    if (!isActive && this.getPlayerCount() >= MAX_PLAYERS) return false;
     playerMod.addPlayer(id, name, this.players, this.zombies, accountType, accountId);
-    if (isActive) {
+    const isActive = this.matchPhase !== 'waiting' && this.matchPhase !== 'ended';
+    if (isActive || this.matchPhase === 'ended') {
       const p = this.players[id];
       p.isSpectator = true;
       p.alive = false;
     }
+    if (this.matchPhase === 'waiting') {
+      let activeCount = 0;
+      for (const pid in this.players) {
+        if (!this.players[pid].isSpectator) activeCount++;
+      }
+      if (activeCount > MAX_PLAYERS) {
+        const p = this.players[id];
+        p.isSpectator = true;
+        p.alive = false;
+      }
+    }
     this._diag(id, 'addPlayer', { isActive, accountType });
+    this._broadcastQueueUpdate();
     zombieAi.recalcAllZombieTargets(this.zombies, this.players);
     if (!this._lobbyOrder.includes(id)) this._lobbyOrder.push(id);
     if (this._emptyTimeout) { clearTimeout(this._emptyTimeout); this._emptyTimeout = null; }
@@ -161,6 +180,7 @@ class Room {
 
   startMatch(fromEnded) {
     this.matchStarted = true;
+    const isRestart = this._postGameWaiting;
     this._postGameWaiting = false;
     this.currentWave = 1;
     this.matchPhase = 'daytime';
@@ -174,11 +194,11 @@ class Room {
     }
     for (const id in this.players) {
       const p = this.players[id];
-      if (readySet.size > 0 && !readySet.has(id)) {
+      if (readySet.size > 0 && !readySet.has(id) && p.isSpectator) {
         p.isSpectator = true;
         p.alive = false;
         if (firstReady) { p.x = firstReady.x; p.y = firstReady.y; }
-      } else {
+      } else if (readySet.size > 0 || !isRestart) {
         p.isSpectator = false;
         p.lvl = 1; p.exp = 0; p.gold = 0;
         this._persistedExp.delete(p.id);
@@ -195,14 +215,25 @@ class Room {
         if (activeCount > MAX_PLAYERS) {
           p.isSpectator = true;
           p.alive = false;
+          console.log(`[room ${this.id}] enforce demoted ${id.slice(0,12)}`);
         }
       }
     }
+    console.log(`[room ${this.id}] sm final active=${activeCount}`);
+    this._promoteFromQueue();
     zombieAi.recalcAllZombieTargets(this.zombies, this.players);
     const matchData = { phase: 'daytime', timer: DAYTIME_MS, wave: 1 };
-    if (readySet.size > 0) matchData.readyPlayers = Array.from(readySet);
+    if (readySet.size > 0) {
+      const active = Object.keys(this.players).filter(id => !this.players[id].isSpectator);
+      matchData.readyPlayers = active;
+    }
     for (const id in this.players) {
       if (!this.players[id].isSpectator) {
+        this.io.to('room:' + this.id).emit('playerInfo', playerMod.playerInfoObj(this.players[id]));
+      }
+    }
+    for (const id in this.players) {
+      if (this.players[id].isSpectator) {
         this.io.to('room:' + this.id).emit('playerInfo', playerMod.playerInfoObj(this.players[id]));
       }
     }
@@ -211,6 +242,10 @@ class Room {
   }
 
   handleStartMatch(socketId) {
+    const p = this.players[socketId];
+    if (!p || p.isSpectator) return;
+    if (this._endGameReady.size > 0 && !this._endGameReady.has(socketId)) {
+    }
     if (this.matchPhase !== 'waiting' && !(this.matchPhase === 'ended' && this._allPlayersReady())) return;
     this.startMatch(this.matchPhase === 'ended');
   }
@@ -272,6 +307,8 @@ class Room {
       playerStats: this._getSortedPlayerStats(),
       lobbyPlayers: this.getLobbyPlayers()
     });
+    this.io.to('room:' + this.id).emit('matchPhase', { phase: 'ended', timer: END_GAME_MS, wave: this.currentWave });
+    this._broadcastQueueUpdate();
   }
 
   resetMatch() {
@@ -394,7 +431,7 @@ class Room {
       for (const id of pIds) {
         if (Object.keys(this.players).length <= MAX_PLAYERS) break;
         const p = this.players[id];
-        if (p.isSpectator && !readySet.has(id)) {
+        if (p.isSpectator && !readySet.has(id) && !this._joinQueue.includes(id)) {
           delete this.players[id];
         }
       }
@@ -406,9 +443,25 @@ class Room {
     for (const id in this.players) {
       if (readySnapshot.includes(id) && !this.players[id].alive) playerMod.respawnPlayer(id, this.players, this.zombies);
     }
+    // Free slots from non-ready originals so queue can fill
+    for (const id in this.players) {
+      const p = this.players[id];
+      if (!p.isSpectator && !readySnapshot.includes(id)) {
+        p.isSpectator = true;
+        p.alive = false;
+      }
+    }
     this.io.to('room:' + this.id).emit('matchReset', { readyPlayers: readySnapshot });
-    this._joinQueue.length = 0;
+    const prePromoteActive = this.getActivePlayerCount();
+    const prePromoteQueue = this._joinQueue.length;
+    this._promoteFromQueue();
+    const postPromoteActive = this.getActivePlayerCount();
+    const postPromoteQueue = this._joinQueue.length;
+    console.log(`[room ${this.id}] _timerEndReset: ready=${readySnapshot.length} queue=${prePromoteQueue}->${postPromoteQueue} active=${prePromoteActive}->${postPromoteActive}`);
     this._broadcastQueueUpdate();
+    this.io.to('room:' + this.id).emit('lobbyUpdate', {
+      players: this.getLobbyPlayers().filter(p => readySnapshot.includes(p.id) || !this.players[p.id]?.isSpectator)
+    });
   }
 
   getActivePlayerCount() {
@@ -422,7 +475,7 @@ class Room {
     if (!p || !p.isSpectator) return;
     const activeCount = this.getActivePlayerCount();
     this._diag(id, 'handleDirectJoin_entry', { activeCount });
-    if (activeCount >= MAX_PLAYERS || this._joinQueue.length > 0) {
+    if (this.matchPhase === 'ended' || activeCount >= MAX_PLAYERS || this._joinQueue.length > 0) {
       this._diag(id, 'handleDirectJoin→queue', { activeCount });
       this.handleQueueJoin(id);
       return;
@@ -499,6 +552,10 @@ class Room {
         playerMod.respawnPlayer(qid, this.players, this.zombies);
         this.io.to(qid).emit('playerInfo', playerMod.playerInfoObj(qp));
         this.io.to(qid).emit('joinedGame');
+      } else if (this.matchPhase === 'waiting' || this.matchPhase === 'ended') {
+        this._diag(qid, '_promoteFromQueue→waiting', {});
+        qp.alive = false;
+        this.io.to(qid).emit('playerInfo', playerMod.playerInfoObj(qp));
       } else {
         this._diag(qid, '_promoteFromQueue→isDead:true', { matchPhase: this.matchPhase });
         qp.alive = false;

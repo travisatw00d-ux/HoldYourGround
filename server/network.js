@@ -39,13 +39,8 @@ function broadcastRoomList() {
 }
 
 function broadcastLobbyUpdate(room) {
-  if (room.matchPhase === 'waiting') {
-    let players = room.getLobbyPlayers();
-    if (room._postGameWaiting) {
-      players = players.filter(p => room._endGameReady && room._endGameReady.has(p.id));
-    }
-    io.to('room:' + room.id).emit('lobbyUpdate', { players });
-  }
+  const data = { players: room.getFilteredLobbyPlayers() };
+  io.to('room:' + room.id).emit('lobbyUpdate', data);
 }
 
 function joinLobby(socket) {

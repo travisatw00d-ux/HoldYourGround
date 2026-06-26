@@ -352,10 +352,9 @@ lobbyBtn.addEventListener('click', () => {
 resultsPlayAgainBtn.addEventListener('click', () => {
   document.getElementById('resultsOverlay').classList.add('hidden');
   document.getElementById('joinGameBtn').classList.add('hidden');
-  if (state.isSpectator) {
-    socket.emit('joinQueue');
+  if (resultsPlayAgainBtn.textContent === 'Spectate') {
+    socket.emit('spectate');
   } else {
-    state.isSpectator = false;
     socket.emit('playAgain');
   }
 });
@@ -375,11 +374,7 @@ resultsLobbyBtn.addEventListener('click', () => {
 });
 
 joinGameBtn.addEventListener('click', () => {
-  if (state.matchPhase === 'waiting') return;
   socket.emit('joinGame');
-  joinGameBtn.textContent = 'In queue: waiting for slot...';
-  const name = state.account?.displayName || state.guestName || 'Player';
-  state.queuedPlayers = [...(state.queuedPlayers || []), { id: state.myId, name, pos: 0 }];
 });
 
 waitingLobbyBtn.addEventListener('click', () => {
@@ -475,5 +470,19 @@ document.addEventListener('keydown', (e) => {
 setInterval(() => {
   if (socket.connected) socket.emit('diagPing', Date.now());
 }, 250);
+
+setInterval(() => {
+  if (state.screen !== 'playing') return;
+  const age = state._lastStateTime ? performance.now() - state._lastStateTime : -1;
+  if (age > 8000 && state.matchPhase !== 'waiting' && state.matchPhase !== 'ended') {
+    socket.emit('clientDiag', { event: 'stalled', stateAge: Math.round(age), phase: state.matchPhase, frames: state._frameCount || 0 });
+  } else if (age === -1 && state.matchPhase !== 'waiting' && state.matchPhase !== 'ended') {
+    socket.emit('clientDiag', { event: 'stalled', stateAge: -1, phase: state.matchPhase, frames: state._frameCount || 0 });
+  }
+}, 8000);
+
+document.addEventListener('visibilitychange', () => {
+  socket.emit('clientDiag', { event: 'tabVisibility', hidden: document.hidden, screen: state.screen, phase: state.matchPhase });
+});
 
 export { socket, showScreen };

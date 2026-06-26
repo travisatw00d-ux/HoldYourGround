@@ -195,8 +195,8 @@ let animFrame = null;
 let inputInterval = null;
 
 export function startRender(socket) {
-  if (animFrame) return;
-  if (inputInterval) clearInterval(inputInterval);
+  if (animFrame) { cancelAnimationFrame(animFrame); animFrame = null; }
+  if (inputInterval) { clearInterval(inputInterval); inputInterval = null; }
   inputInterval = setInterval(() => {
     if (state.screen === 'playing') {
       const input = getInput();
@@ -213,6 +213,11 @@ export function startRender(socket) {
   let lastRAF = 0;
   function loop(ts) {
     if (state.screen === 'playing') {
+      state._frameCount = (state._frameCount || 0) + 1;
+      if (state._frameCount % 600 === 0) {
+        const age = state._lastStateTime ? Math.round((performance.now() - state._lastStateTime)) : -1;
+        socket.emit('clientDiag', { event: 'frame', frames: state._frameCount, stateAge: age, phase: state.matchPhase });
+      }
       if (lastRAF && ts - lastRAF < 500) {
         const gap = ts - lastRAF;
         state.lastFrameGap = gap;

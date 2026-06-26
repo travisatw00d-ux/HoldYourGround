@@ -2,6 +2,10 @@ const { WORLD_W, WORLD_H, MAX_PLAYERS } = require('./config');
 const auth = require('./auth');
 const playerMod = require('./player');
 const roomManager = require('./game-loop');
+const fs = require('fs');
+const path = require('path');
+
+const CLIENT_DIAG_DIR = path.join(__dirname, '..', 'Workflow');
 
 module.exports = function registerSocket(socket, { io, broadcastRoomList, broadcastLobbyUpdate, joinLobby, leaveLobby }) {
   console.log(`[${socket.id}] connected`);
@@ -31,6 +35,7 @@ module.exports = function registerSocket(socket, { io, broadcastRoomList, broadc
   });
 
   socket.on('playAsGuest', ({ name }) => {
+    socket._guestName = name;
     socket.emit('guestJoined', { name, rooms: roomManager.getRoomList() });
     console.log(`[${socket.id}] playing as guest "${name}"`);
   });
@@ -64,7 +69,10 @@ module.exports = function registerSocket(socket, { io, broadcastRoomList, broadc
       socket.emit('playerInfo', room.getPlayerInfoObj(oid));
     }
     socket.emit('joined');
-    socket.emit('lobbyUpdate', { players: room.getLobbyPlayers() });
+    if (room.players[socket.id]?.isSpectator) {
+      socket.emit('spectatorAssigned');
+    }
+    socket.emit('lobbyUpdate', { players: room.getFilteredLobbyPlayers() });
     socket.emit('matchPhase', { phase: room.matchPhase, timer: room.phaseTimer, wave: room.currentWave });
     if (room.matchPhase === 'ended') {
       socket.emit('matchEnd', {
@@ -178,6 +186,21 @@ module.exports = function registerSocket(socket, { io, broadcastRoomList, broadc
     }
   });
 
+  socket.on('spectate', () => {
+    const room = roomManager.getPlayerRoom(socket.id);
+    if (!room) return;
+    const p = room.players[socket.id];
+    if (!p) return;
+    p.isSpectator = true;
+    p.alive = false;
+    const living = Object.values(room.players).find(p2 => p2.alive && p2.id !== socket.id);
+    if (living) { p.x = living.x; p.y = living.y; }
+    for (const oid in room.players) {
+      room.io.to(oid).emit('playerInfo', room.getPlayerInfoObj(p));
+    }
+    socket.emit('spectatorAssigned');
+  });
+
   socket.on('joinGame', () => {
     const room = roomManager.getPlayerRoom(socket.id);
     if (room) room.handleDirectJoin(socket.id);
@@ -195,6 +218,14 @@ module.exports = function registerSocket(socket, { io, broadcastRoomList, broadc
     if (action === 'advancePhase') room._testAdvancePhase();
     if (action === 'killAllZombies') room.killAllMobs();
     if (action === 'endMatch') room._endMatch();
+  });
+
+  socket.on('clientDiag', (data) => {
+    const name = socket._guestName || socket.handshake?.query?.guest || 'anon';
+    const logPath = path.join(CLIENT_DIAG_DIR, `diag-${name.replace(/[^a-zA-Z0-9_-]/g, '_')}.jsonl`);
+    data.socketId = socket.id.slice(0, 8);
+    data.t = Date.now();
+    try { fs.appendFileSync(logPath, JSON.stringify(data) + '\n'); } catch {}
   });
 
   socket.on('disconnect', () => {
