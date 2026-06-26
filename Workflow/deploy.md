@@ -9,6 +9,8 @@
 
 **`HoldYourGround\public\` is the source of truth.** Frontend files must be synced to `IOWebsite\public\` before deploying.
 
+> ⚠️ The live site (Cloudflare) cannot serve `/socket.io/socket.io.js` — that path only exists on the game server. The CDN URL in `index.html` handles both environments.
+
 ## Sync Checklist (after frontend changes)
 
 ```
