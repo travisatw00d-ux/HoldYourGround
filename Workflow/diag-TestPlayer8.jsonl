@@ -1,0 +1,13 @@
+{"event":"frame","frames":600,"stateAge":40,"phase":"daytime","socketId":"M9kIbEsU","t":1782438635741}
+{"event":"frame","frames":1200,"stateAge":16,"phase":"daytime","socketId":"M9kIbEsU","t":1782438639379}
+{"event":"frame","frames":1800,"stateAge":53,"phase":"daytime","socketId":"M9kIbEsU","t":1782438643016}
+{"event":"frame","frames":2400,"stateAge":27,"phase":"nighttime","socketId":"M9kIbEsU","t":1782438646659}
+{"event":"frame","frames":3000,"stateAge":9,"phase":"nighttime","socketId":"M9kIbEsU","t":1782438650310}
+{"event":"frame","frames":3600,"stateAge":5,"phase":"nighttime","socketId":"M9kIbEsU","t":1782438654203}
+{"event":"frame","frames":4200,"stateAge":14,"phase":"nighttime","socketId":"M9kIbEsU","t":1782438658814}
+{"event":"frame","frames":4800,"stateAge":27,"phase":"nighttime","socketId":"M9kIbEsU","t":1782438664762}
+{"event":"frame","frames":5400,"stateAge":4,"phase":"nighttime","socketId":"M9kIbEsU","t":1782438723572}
+{"event":"frame","frames":6000,"stateAge":13,"phase":"nighttime","socketId":"M9kIbEsU","t":1782438727216}
+{"event":"frame","frames":6600,"stateAge":52,"phase":"nighttime","socketId":"M9kIbEsU","t":1782438731152}
+{"event":"frame","frames":7200,"stateAge":23,"phase":"nighttime","socketId":"M9kIbEsU","t":1782438735255}
+{"event":"tabVisibility","hidden":true,"screen":"lobby","phase":"waiting","socketId":"M9kIbEsU","t":1782438778358}

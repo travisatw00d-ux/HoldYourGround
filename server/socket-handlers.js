@@ -73,7 +73,7 @@ module.exports = function registerSocket(socket, { io, broadcastRoomList, broadc
       socket.emit('spectatorAssigned');
     }
     socket.emit('lobbyUpdate', { players: room.getFilteredLobbyPlayers() });
-    socket.emit('matchPhase', { phase: room.matchPhase, timer: room.phaseTimer, wave: room.currentWave });
+    socket.emit('matchPhase', { phase: room.matchPhase, timer: room.phaseTimer, wave: room.currentWave, activePlayers: room.getActivePlayerIds() });
     if (room.matchPhase === 'ended') {
       socket.emit('matchEnd', {
         wave: room.currentWave,
@@ -179,7 +179,7 @@ module.exports = function registerSocket(socket, { io, broadcastRoomList, broadc
         playerMod.respawnPlayer(socket.id, room.players, room.zombies);
       }
       broadcastLobbyUpdate(room);
-      io.to(socket.id).emit('matchReset', { readyPlayers: [socket.id] });
+      io.to(socket.id).emit('matchReset', { readyPlayers: [socket.id], activePlayers: room.getActivePlayerIds() });
     } else {
       room._endGameReady.add(socket.id);
       room.handleDirectJoin(socket.id);

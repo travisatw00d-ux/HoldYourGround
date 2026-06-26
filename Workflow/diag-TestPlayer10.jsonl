@@ -1,0 +1,11 @@
+{"event":"tabVisibility","hidden":true,"screen":"menu","phase":null,"socketId":"4Nz8VWTY","t":1782438612023}
+{"event":"tabVisibility","hidden":false,"screen":"menu","phase":null,"socketId":"4Nz8VWTY","t":1782438617923}
+{"event":"frame","frames":600,"stateAge":46,"phase":"daytime","socketId":"4Nz8VWTY","t":1782438629480}
+{"event":"frame","frames":1200,"stateAge":17,"phase":"daytime","socketId":"4Nz8VWTY","t":1782438633117}
+{"event":"frame","frames":1800,"stateAge":5,"phase":"daytime","socketId":"4Nz8VWTY","t":1782438636769}
+{"event":"frame","frames":2400,"stateAge":40,"phase":"daytime","socketId":"4Nz8VWTY","t":1782438640403}
+{"event":"frame","frames":3000,"stateAge":11,"phase":"daytime","socketId":"4Nz8VWTY","t":1782438644041}
+{"event":"frame","frames":3600,"stateAge":52,"phase":"nighttime","socketId":"4Nz8VWTY","t":1782438647684}
+{"event":"frame","frames":4200,"stateAge":39,"phase":"nighttime","socketId":"4Nz8VWTY","t":1782438651341}
+{"event":"frame","frames":4800,"stateAge":49,"phase":"nighttime","socketId":"4Nz8VWTY","t":1782438655382}
+{"event":"frame","frames":5400,"stateAge":47,"phase":"nighttime","socketId":"4Nz8VWTY","t":1782438660246}

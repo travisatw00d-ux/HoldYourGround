@@ -319,13 +319,13 @@ export function registerEvents(socket) {
     if (anim) state.zombieAnims[zombieId] = { startTime: performance.now() };
   });
 
-  socket.on('matchPhase', async ({ phase, timer, wave, readyPlayers }) => {
+  socket.on('matchPhase', async ({ phase, timer, wave, readyPlayers, activePlayers }) => {
     state.matchPhase = phase;
     state.phaseTimer = timer;
     state.phaseTimerStart = timer;
     state.phaseStartedAt = performance.now();
     state.currentWave = wave;
-    if (readyPlayers) state.isSpectator = !readyPlayers.includes(state.myId);
+    if (activePlayers) state.isSpectator = !activePlayers.includes(state.myId);
     document.getElementById('phaseDisplay').classList.toggle('hidden', phase === 'waiting' || phase === 'ended');
     const names = { daytime: 'Daytime', nighttime: 'Nighttime', waveOver: 'Clean Up', intermission: 'Intermission' };
     document.getElementById('phaseName').textContent = names[phase] || phase;
@@ -399,9 +399,10 @@ export function registerEvents(socket) {
     state.screen = 'results';
   });
 
-  socket.on('matchReset', ({ readyPlayers }) => {
+  socket.on('matchReset', ({ readyPlayers, activePlayers }) => {
     const isReady = readyPlayers && readyPlayers.includes(state.myId);
     if (state.screen === 'results' && !isReady) return;
+    if (activePlayers) state.isSpectator = !activePlayers.includes(state.myId);
     document.getElementById('loadingOverlay').classList.add('hidden');
     state.matchPhase = 'waiting'; state.phaseTimer = 0; state.phaseTimerStart = 0; state.phaseStartedAt = 0;
     state.currentWave = 0; state.screen = 'lobby';

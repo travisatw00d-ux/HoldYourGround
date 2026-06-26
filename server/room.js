@@ -56,6 +56,10 @@ class Room {
     }).filter(Boolean);
   }
 
+  getActivePlayerIds() {
+    return Object.keys(this.players).filter(id => !this.players[id].isSpectator);
+  }
+
   getFilteredLobbyPlayers() {
     const all = this.getLobbyPlayers();
     if (this._endGameReady.size > 0 && this.matchPhase !== 'waiting') {
@@ -222,10 +226,10 @@ class Room {
     console.log(`[room ${this.id}] sm final active=${activeCount}`);
     this._promoteFromQueue();
     zombieAi.recalcAllZombieTargets(this.zombies, this.players);
-    const matchData = { phase: 'daytime', timer: DAYTIME_MS, wave: 1 };
+    const activePlayers = this.getActivePlayerIds();
+    const matchData = { phase: 'daytime', timer: DAYTIME_MS, wave: 1, activePlayers };
     if (readySet.size > 0) {
-      const active = Object.keys(this.players).filter(id => !this.players[id].isSpectator);
-      matchData.readyPlayers = active;
+      matchData.readyPlayers = activePlayers;
     }
     for (const id in this.players) {
       if (!this.players[id].isSpectator) {
@@ -256,20 +260,20 @@ class Room {
         try { fs.appendFileSync(DIAG_LOG, JSON.stringify({ t: Date.now(), action: 'daytime→nighttime', playerCount: Object.keys(this.players).length }) + '\n'); } catch (e) {}
         this.matchPhase = 'nighttime';
         this.phaseTimer = NIGHTTIME_MS;
-        this.io.to('room:' + this.id).emit('matchPhase', { phase: 'nighttime', timer: NIGHTTIME_MS, wave: this.currentWave });
+        this.io.to('room:' + this.id).emit('matchPhase', { phase: 'nighttime', timer: NIGHTTIME_MS, wave: this.currentWave, activePlayers: this.getActivePlayerIds() });
         break;
       case 'nighttime': {
         const anyAlive = Object.values(this.players).some(p => p.alive);
         if (!anyAlive) { this._endMatch(); return; }
         this.matchPhase = 'waveOver';
         this.phaseTimer = 0;
-        this.io.to('room:' + this.id).emit('matchPhase', { phase: 'waveOver', timer: 0, wave: this.currentWave });
+        this.io.to('room:' + this.id).emit('matchPhase', { phase: 'waveOver', timer: 0, wave: this.currentWave, activePlayers: this.getActivePlayerIds() });
         break;
       }
       case 'waveOver': {
         this.matchPhase = 'intermission';
         this.phaseTimer = INTERMISSION_MS;
-        this.io.to('room:' + this.id).emit('matchPhase', { phase: 'intermission', timer: INTERMISSION_MS, wave: this.currentWave });
+        this.io.to('room:' + this.id).emit('matchPhase', { phase: 'intermission', timer: INTERMISSION_MS, wave: this.currentWave, activePlayers: this.getActivePlayerIds() });
         break;
       }
       case 'intermission': {
@@ -286,7 +290,7 @@ class Room {
         this.currentWave++;
         this.matchPhase = 'daytime';
         this.phaseTimer = DAYTIME_MS;
-        this.io.to('room:' + this.id).emit('matchPhase', { phase: 'daytime', timer: DAYTIME_MS, wave: this.currentWave });
+        this.io.to('room:' + this.id).emit('matchPhase', { phase: 'daytime', timer: DAYTIME_MS, wave: this.currentWave, activePlayers: this.getActivePlayerIds() });
         break;
       }
     }
@@ -307,7 +311,7 @@ class Room {
       playerStats: this._getSortedPlayerStats(),
       lobbyPlayers: this.getLobbyPlayers()
     });
-    this.io.to('room:' + this.id).emit('matchPhase', { phase: 'ended', timer: END_GAME_MS, wave: this.currentWave });
+    this.io.to('room:' + this.id).emit('matchPhase', { phase: 'ended', timer: END_GAME_MS, wave: this.currentWave, activePlayers: this.getActivePlayerIds() });
     this._broadcastQueueUpdate();
   }
 
@@ -451,7 +455,7 @@ class Room {
         p.alive = false;
       }
     }
-    this.io.to('room:' + this.id).emit('matchReset', { readyPlayers: readySnapshot });
+    this.io.to('room:' + this.id).emit('matchReset', { readyPlayers: readySnapshot, activePlayers: this.getActivePlayerIds() });
     const prePromoteActive = this.getActivePlayerCount();
     const prePromoteQueue = this._joinQueue.length;
     this._promoteFromQueue();

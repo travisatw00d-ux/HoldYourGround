@@ -1,1 +1,11 @@
-{"event":"tabVisibility","hidden":true,"screen":"lobby","phase":"waiting","socketId":"2h2MjBmi","t":1782434984938}
+{"event":"frame","frames":600,"stateAge":46,"phase":"daytime","socketId":"QQuDN9MR","t":1782438629481}
+{"event":"frame","frames":1200,"stateAge":17,"phase":"daytime","socketId":"QQuDN9MR","t":1782438633118}
+{"event":"frame","frames":1800,"stateAge":60,"phase":"daytime","socketId":"QQuDN9MR","t":1782438636762}
+{"event":"frame","frames":2400,"stateAge":34,"phase":"daytime","socketId":"QQuDN9MR","t":1782438640400}
+{"event":"frame","frames":3000,"stateAge":5,"phase":"daytime","socketId":"QQuDN9MR","t":1782438644035}
+{"event":"frame","frames":3600,"stateAge":45,"phase":"nighttime","socketId":"QQuDN9MR","t":1782438647680}
+{"event":"frame","frames":4200,"stateAge":39,"phase":"nighttime","socketId":"QQuDN9MR","t":1782438651339}
+{"event":"frame","frames":4800,"stateAge":48,"phase":"nighttime","socketId":"QQuDN9MR","t":1782438655380}
+{"event":"frame","frames":5400,"stateAge":47,"phase":"nighttime","socketId":"QQuDN9MR","t":1782438660247}
+{"event":"frame","frames":6000,"stateAge":65,"phase":"nighttime","socketId":"QQuDN9MR","t":1782438732102}
+{"event":"frame","frames":6600,"stateAge":47,"phase":"nighttime","socketId":"QQuDN9MR","t":1782438737480}
