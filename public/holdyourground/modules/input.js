@@ -28,6 +28,8 @@ export function setupInput(socket, canvas) {
       if (ids.length === 0) return;
       const dir = e.key === 'ArrowRight' ? 1 : -1;
       state.spectatingTargetIndex = (state.spectatingTargetIndex + dir + ids.length) % ids.length;
+      const targetId = ids[Math.min(state.spectatingTargetIndex, ids.length - 1)];
+      if (targetId) socket.emit('spectateTarget', { targetId });
       return;
     }
     keys[e.key] = true;
@@ -44,6 +46,12 @@ export function setupInput(socket, canvas) {
       } else {
         state.debugHitbox = true;
       }
+      state.showHudDebug = false;
+    }
+    if (e.key === 'j' || e.key === 'J') {
+      state.showHudDebug = !state.showHudDebug;
+      if (state.showHudDebug) { state.debugHitbox = false; state.showDiag = false; }
+      console.log('[HYG] HUD debug:', state.showHudDebug);
     }
   });
 
@@ -56,6 +64,18 @@ export function setupInput(socket, canvas) {
   });
 
   canvas.addEventListener('wheel', (e) => {
+    if (state.isSpectator || state.isDeadSpectating) return;
+    const mx = state.mouseX;
+    const my = state.mouseY;
+    const oy = Math.max(0, state.viewH - 576);
+    const hudBounds = { x: -35, y: 375 + oy, w: 500, h: 170 };
+    if (mx >= hudBounds.x && mx <= hudBounds.x + hudBounds.w &&
+        my >= hudBounds.y && my <= hudBounds.y + hudBounds.h) {
+      e.preventDefault();
+      const maxHS = document.fullscreenElement ? 1.5 : 1.0;
+      state.hudScale = Math.max(0.3, Math.min(maxHS, state.hudScale + (e.deltaY > 0 ? -0.05 : 0.05)));
+      return;
+    }
     e.preventDefault();
     const dir = e.deltaY > 0 ? -1 : 1;
     state.cameraZoom *= dir > 0 ? 1.1 : 1 / 1.1;

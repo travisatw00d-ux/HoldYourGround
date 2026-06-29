@@ -2,51 +2,35 @@
 
 "T1KnightHead.png":
 {
-	"frame": {"x":0,"y":0,"w":128,"h":128},
+	"frame": {"x":1,"y":1,"w":112,"h":121},
 	"rotated": false,
-	"trimmed": false,
-	"spriteSourceSize": {"x":0,"y":0,"w":128,"h":128},
+	"trimmed": true,
+	"spriteSourceSize": {"x":9,"y":1,"w":112,"h":121},
 	"sourceSize": {"w":128,"h":128}
 },
 "T1KnightLeftHand.png":
 {
-	"frame": {"x":128,"y":0,"w":112,"h":112},
+	"frame": {"x":1,"y":124,"w":63,"h":57},
 	"rotated": false,
-	"trimmed": false,
-	"spriteSourceSize": {"x":0,"y":0,"w":112,"h":112},
+	"trimmed": true,
+	"spriteSourceSize": {"x":26,"y":28,"w":63,"h":57},
 	"sourceSize": {"w":112,"h":112}
 },
 "T1KnightSword.png":
 {
-	"frame": {"x":0,"y":128,"w":176,"h":176},
+	"frame": {"x":115,"y":1,"w":55,"h":176},
 	"rotated": false,
-	"trimmed": false,
-	"spriteSourceSize": {"x":0,"y":0,"w":176,"h":176},
+	"trimmed": true,
+	"spriteSourceSize": {"x":58,"y":0,"w":55,"h":176},
 	"sourceSize": {"w":176,"h":176}
-},
-"T2KnightHead.png":
-{
-	"frame": {"x":0,"y":304,"w":128,"h":128},
-	"rotated": false,
-	"trimmed": false,
-	"spriteSourceSize": {"x":0,"y":0,"w":128,"h":128},
-	"sourceSize": {"w":128,"h":128}
-},
-"T3KnightHead.png":
-{
-	"frame": {"x":128,"y":304,"w":128,"h":128},
-	"rotated": false,
-	"trimmed": false,
-	"spriteSourceSize": {"x":0,"y":0,"w":128,"h":128},
-	"sourceSize": {"w":128,"h":128}
 }},
 "meta": {
 	"app": "https://www.codeandweb.com/texturepacker",
 	"version": "1.0",
 	"image": "KnightSheet.png",
 	"format": "RGBA8888",
-	"size": {"w":256,"h":432},
+	"size": {"w":171,"h":182},
 	"scale": "1",
-	"smartupdate": "$TexturePacker:SmartUpdate:2d3f491bd03a039cde2ff7d9f50203b2:3a2a92a4e070b44c4c262cbacec3402a:f357a720a4075c575eb23efadc7d8572$"
+	"smartupdate": "$TexturePacker:SmartUpdate:d4428386e1d56aeee41c9bf674ed799a:98ef06f244cbc6f62afacba6d121d1f2:f357a720a4075c575eb23efadc7d8572$"
 }
 }

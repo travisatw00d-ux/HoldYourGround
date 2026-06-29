@@ -2,7 +2,7 @@ const { WORLD_W, WORLD_H } = require('./config');
 
 function buildPlayerBlock(list) {
   let size = 0;
-  for (let i = 0; i < list.length; i++) size += 1 + list[i]._idBytes.length + 31 + 1 + Buffer.byteLength(list[i].name || '', 'utf8') + 1;
+  for (let i = 0; i < list.length; i++) size += 1 + list[i]._idBytes.length + 35 + 1 + Buffer.byteLength(list[i].name || '', 'utf8') + 1;
   const buf = Buffer.allocUnsafe(size);
   let o = 0;
   for (let i = 0; i < list.length; i++) {
@@ -20,6 +20,8 @@ function buildPlayerBlock(list) {
     buf.writeDoubleLE(p.attackStartTime || 0, o); o += 8;
     buf.writeInt16LE(p.kills || 0, o); o += 2;
     buf[o++] = p.lvl || 1;
+    buf.writeInt16LE(p.energy || 100, o); o += 2;
+    buf.writeInt16LE(p.maxEnergy || 100, o); o += 2;
     const nameBytes = Buffer.from(p.name || '', 'utf8');
     buf[o++] = nameBytes.length;
     nameBytes.copy(buf, o); o += nameBytes.length;
@@ -28,9 +30,9 @@ function buildPlayerBlock(list) {
   return buf;
 }
 
-function buildStateBuffer(playerBlock, playerCount, serverLevel, viewZombies, emitTime, playerIsSpectator) {
+function buildStateBuffer(playerBlock, playerCount, serverLevel, viewZombies, emitTime, playerIsSpectator, cameraZoom, viewW, viewH) {
   const zCount = viewZombies.length;
-  const buf = Buffer.allocUnsafe(19 + playerBlock.length + zCount * 20);
+  const buf = Buffer.allocUnsafe(27 + playerBlock.length + zCount * 20);
   let o = 0;
   buf[o++] = 1;
   buf.writeDoubleLE(emitTime, o); o += 8;
@@ -40,6 +42,9 @@ function buildStateBuffer(playerBlock, playerCount, serverLevel, viewZombies, em
   buf[o++] = playerCount;
   buf.writeUInt16LE(zCount, o); o += 2;
   buf[o++] = playerIsSpectator ? 1 : 0;
+  buf.writeFloatLE(cameraZoom || 1, o); o += 4;
+  buf.writeUInt16LE(viewW || 1024, o); o += 2;
+  buf.writeUInt16LE(viewH || 576, o); o += 2;
   playerBlock.copy(buf, o); o += playerBlock.length;
   for (let i = 0; i < zCount; i++) {
     const z = viewZombies[i];

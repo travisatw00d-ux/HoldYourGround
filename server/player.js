@@ -48,6 +48,8 @@ function addPlayer(id, name, players, zombies, accountType, accountId) {
     input: { dx: 0, dy: 0 },
     health: BASE_HEALTH,
     maxHealth: BASE_HEALTH,
+    energy: 100,
+    maxEnergy: 100,
     attackCooldown: 0,
     facingAngle: 0,
     currentItem: 'wooden_sword',

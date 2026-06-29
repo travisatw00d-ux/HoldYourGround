@@ -42,6 +42,7 @@ class Room {
     this._lastEndGameBroadcast = 0;
     this._joinQueue = [];
     this._postGameWaiting = false;
+    this.spectatorFollows = new Map();
   }
 
   setIo(io) { this.io = io; }
@@ -120,6 +121,7 @@ class Room {
     zombieAi.recalcAllZombieTargets(this.zombies, this.players);
     if (!this._lobbyOrder.includes(id)) this._lobbyOrder.push(id);
     if (this._emptyTimeout) { clearTimeout(this._emptyTimeout); this._emptyTimeout = null; }
+    if (this.players[id].isSpectator) this._assignFollowTarget(id);
     return true;
   }
 
@@ -131,6 +133,7 @@ class Room {
     delete this.players[id];
     this._lobbyOrder = this._lobbyOrder.filter(oid => oid !== id);
     this._joinQueue = this._joinQueue.filter(qid => qid !== id);
+    this.spectatorFollows.delete(id);
     this._broadcastQueueUpdate();
     if (wasActive && this.matchPhase !== 'ended') this._promoteFromQueue();
     this._broadcastLobbyUpdate();
@@ -215,7 +218,7 @@ class Room {
         p.isSpectator = true;
         p.alive = false;
         if (firstReady) { p.x = firstReady.x; p.y = firstReady.y; }
-      } else if (readySet.size > 0 || !isRestart) {
+      } else if (readySet.size > 0 || !isRestart || !p.isSpectator) {
         p.isSpectator = false;
         p.lvl = 1; p.exp = 0; p.gold = 0;
         this._persistedExp.delete(p.id);
@@ -366,6 +369,17 @@ class Room {
     for (const z of this.zombies) z.alive = false;
   }
 
+  _assignFollowTarget(spectatorId) {
+    const alive = Object.values(this.players)
+      .filter(p => p.alive && !p.isSpectator)
+      .sort((a, b) => (b.lvl || 1) - (a.lvl || 1));
+    if (alive.length > 0) {
+      this.spectatorFollows.set(spectatorId, alive[0].id);
+    } else {
+      this.spectatorFollows.delete(spectatorId);
+    }
+  }
+
   _testAdvancePhase() {
     if (this.matchPhase === 'ended') { this._timerEndReset(); return; }
     this.killAllMobs();
@@ -443,18 +457,6 @@ class Room {
     this.matchStarted = false;
     this._roundSaved = false;
     this._lastEndGameBroadcast = 0;
-    // Trim excess spectators — preserve ready players first
-    const pIds = Object.keys(this.players);
-    if (pIds.length > MAX_PLAYERS) {
-      const readySet = new Set(readySnapshot);
-      for (const id of pIds) {
-        if (Object.keys(this.players).length <= MAX_PLAYERS) break;
-        const p = this.players[id];
-        if (p.isSpectator && !readySet.has(id) && !this._joinQueue.includes(id)) {
-          delete this.players[id];
-        }
-      }
-    }
     this._lobbyOrder = Object.keys(this.players);
     this.zombies = zombieMod.initZombies(this.players);
     this.grid.clear();
@@ -508,6 +510,11 @@ class Room {
     if (this.matchPhase === 'daytime') {
       this._diag(id, 'handleDirectJoin→alive', {});
       playerMod.respawnPlayer(id, this.players, this.zombies);
+      playerMod.recalcStats(p);
+      this.io.to(id).emit('playerInfo', playerMod.playerInfoObj(p));
+      this.io.to(id).emit('joinedGame');
+    } else if (this.matchPhase === 'waiting') {
+      this._diag(id, 'handleDirectJoin→waiting', {});
       playerMod.recalcStats(p);
       this.io.to(id).emit('playerInfo', playerMod.playerInfoObj(p));
       this.io.to(id).emit('joinedGame');
@@ -676,8 +683,41 @@ class Room {
 
     if (this.matchPhase === 'waveOver' && this.zombies.every(z => !z.alive)) this._advancePhase();
 
-    if (tickStart - this.lastBroadcast < BROADCAST_MS) return;
+    if (tickStart - this.lastBroadcast < BROADCAST_MS) {
+      if (tickStart % (BROADCAST_MS * 20) < TICK_MS) {
+        for (const id in this.players) {
+          const p = this.players[id];
+          if (p && p._lastStateSent && tickStart - p._lastStateSent > 5000) {
+            console.log(`[room ${this.id}] SKIP bcast spec=${id.slice(0,8)} lastState=${tickStart - p._lastStateSent}ms alive=${p.alive} spec=${p.isSpectator}`);
+            break;
+          }
+        }
+      }
+      return;
+    }
     this.lastBroadcast = tickStart;
+
+    // Assign follow targets for spectators and dead players that don't have one
+    for (const id in this.players) {
+      const p = this.players[id];
+      if (p && (p.isSpectator || !p.alive) && !this.spectatorFollows.has(id)) {
+        this._assignFollowTarget(id);
+      }
+    }
+    // Reassign followers whose target is gone, remove stale entries
+    const staleFollows = [];
+    for (const [specId, targetId] of this.spectatorFollows) {
+      const spec = this.players[specId];
+      if (spec && !spec.isSpectator && spec.alive) {
+        staleFollows.push(specId);
+        continue;
+      }
+      const target = this.players[targetId];
+      if (!target || !target.alive || target.isSpectator) {
+        this._assignFollowTarget(specId);
+      }
+    }
+    for (const id of staleFollows) this.spectatorFollows.delete(id);
 
     this._playerList.length = 0;
     let serverLevelSum = 0;
@@ -694,9 +734,11 @@ class Room {
     if (this.lastEmitTime && emitTime - this.lastEmitTime > 100) console.log(`[room ${this.id}] STALL broadcast gap=${emitTime - this.lastEmitTime}ms`);
     this.lastEmitTime = emitTime;
 
+    // Phase 1: Build one view-culled buffer + zombie list per alive active player
+    const bufs = new Map();
     for (const id in this.players) {
       const p = this.players[id];
-      if (!p) continue;
+      if (!p || !p.alive || p.isSpectator) continue;
       const zoom = p.cameraZoom || 1;
       const vw = p.viewW || VIEW_W;
       const vh = p.viewH || VIEW_H;
@@ -706,14 +748,46 @@ class Room {
       for (let i = 0; i < this.zombies.length; i++) {
         const z = this.zombies[i];
         if (!z.alive) continue;
-        if (!p.fullscreen && !p.isSpectator && p.alive) {
+        if (!p.fullscreen) {
           const dzx = z.x - p.x; if (dzx < -pHalfVW || dzx > pHalfVW) continue;
           const dzy = z.y - p.y; if (dzy < -pHalfVH || dzy > pHalfVH) continue;
         }
         this._viewZ.push(z);
       }
-      this.io.to(id).emit('state', bp.buildStateBuffer(playerBlock, this._playerList.length, this.currentServerLevel, this._viewZ, emitTime, p.isSpectator));
+      const zlist = this._viewZ.slice();
+      bufs.set(id, { buf: bp.buildStateBuffer(playerBlock, this._playerList.length, this.currentServerLevel, zlist, emitTime, false, p.cameraZoom || 1, p.viewW || VIEW_W, p.viewH || VIEW_H), zombies: zlist, zoom: p.cameraZoom || 1, viewW: p.viewW || VIEW_W, viewH: p.viewH || VIEW_H });
     }
+
+    // Phase 2: Emit to all connections
+    let specCount = 0, activeCount = 0;
+    for (const id in this.players) {
+      const p = this.players[id];
+      if (!p) continue;
+      if (!p.isSpectator && p.alive) {
+        const entry = bufs.get(id);
+        if (entry) { this.io.to(id).emit('state', entry.buf); p._lastStateSent = tickStart; activeCount++; }
+      } else {
+        const targetId = this.spectatorFollows.get(id);
+        const targetEntry = targetId ? bufs.get(targetId) : null;
+        if (targetEntry && p.isSpectator) {
+          const specBuf = bp.buildStateBuffer(playerBlock, this._playerList.length, this.currentServerLevel, targetEntry.zombies, emitTime, true, targetEntry.zoom, targetEntry.viewW, targetEntry.viewH);
+          this.io.to(id).emit('state', specBuf);
+          p._lastStateSent = tickStart;
+          specCount++;
+        } else if (targetEntry) {
+          this.io.to(id).emit('state', targetEntry.buf);
+          p._lastStateSent = tickStart;
+        } else {
+          const emptyBuf = bp.buildStateBuffer(playerBlock, this._playerList.length, this.currentServerLevel, [], emitTime, p.isSpectator, 1, VIEW_W, VIEW_H);
+          this.io.to(id).emit('state', emptyBuf);
+          p._lastStateSent = tickStart;
+        }
+      }
+    }
+    if (specCount > 0 && tickStart % (BROADCAST_MS * 10) < TICK_MS) {
+      console.log(`[room ${this.id}] broadcast: ${activeCount} active, ${specCount} spec followers, ${this._playerList.length} in playerBlock`);
+    }
+
     const tickMs = Date.now() - tickStart;
     if (tickMs > 30) console.log(`[room ${this.id}] tick=${tickMs}ms players=${ids.length} zombies=${this.zombies.length}`);
   }

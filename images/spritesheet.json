@@ -24,7 +24,7 @@
 	"spriteSourceSize": {"x":0,"y":0,"w":128,"h":128},
 	"sourceSize": {"w":128,"h":128}
 },
-"T2zombiehead.png":
+"trollhead.png":
 {
 	"frame": {"x":546,"y":0,"w":128,"h":118},
 	"rotated": false,
@@ -32,7 +32,7 @@
 	"spriteSourceSize": {"x":0,"y":0,"w":128,"h":118},
 	"sourceSize": {"w":128,"h":118}
 },
-"T2zombielefthand.png":
+"trolllefthand.png":
 {
 	"frame": {"x":674,"y":0,"w":64,"h":80},
 	"rotated": false,
@@ -40,7 +40,7 @@
 	"spriteSourceSize": {"x":0,"y":0,"w":64,"h":80},
 	"sourceSize": {"w":64,"h":80}
 },
-"T2zombierighthand.png":
+"trollrighthand.png":
 {
 	"frame": {"x":738,"y":0,"w":64,"h":80},
 	"rotated": false,

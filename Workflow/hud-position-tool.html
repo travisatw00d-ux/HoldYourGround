@@ -1,0 +1,845 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HUD Position Tool</title>
+<link href="https://fonts.googleapis.com/css2?family=Lilita+One&family=Teko:wght@700&family=Rajdhani:wght@700&display=swap" rel="stylesheet">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: #0a0a0f; color: #eee;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  display: flex; justify-content: center; align-items: center;
+  min-height: 100vh;
+}
+.container { display: flex; gap: 24px; align-items: flex-start; padding: 20px; }
+canvas { border: 1px solid #333; border-radius: 8px; cursor: grab; background: #1a1a24; }
+.panel { width: 320px; display: flex; flex-direction: column; gap: 12px; }
+.panel h2 { font-size: 1rem; font-weight: 600; }
+.layer-list { border: 1px solid #333; border-radius: 6px; max-height: 300px; overflow-y: auto; }
+.layer-item {
+  display: flex; align-items: center; gap: 8px; padding: 6px 10px;
+  border-bottom: 1px solid #222; cursor: pointer; font-size: 0.8rem;
+  transition: background 0.1s;
+}
+.layer-item:hover { background: #14141e; }
+.layer-item.active { background: rgba(78,205,196,0.12); color: #4ECDC4; }
+.layer-item .thumb { width: 32px; height: 24px; object-fit: contain; border-radius: 2px; background: #1e1e2a; }
+.layer-item .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.layer-item .z-btn {
+  width: 20px; height: 20px; border-radius: 3px; border: 1px solid #444;
+  background: transparent; color: #888; font-size: 0.7rem; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+.layer-item .z-btn:hover { border-color: #4ECDC4; color: #4ECDC4; }
+.layer-item .vis-btn {
+  width: 20px; height: 20px; border-radius: 3px; border: 1px solid #444;
+  background: transparent; color: #888; font-size: 0.7rem; cursor: pointer;
+}
+.layer-item .vis-btn:hover { border-color: #aaa; color: #fff; }
+.ctrl-group { display: flex; flex-direction: column; gap: 4px; }
+.ctrl-group label { font-size: 0.75rem; color: #999; }
+.ctrl-row { display: flex; gap: 8px; }
+.ctrl-row input, .ctrl-row select {
+  flex: 1; padding: 4px 8px; border-radius: 4px; border: 1px solid #333;
+  background: #14141e; color: #eee; font-size: 0.8rem;
+}
+.ctrl-row input[type="number"] { width: 80px; }
+.output {
+  background: #0d0d14; border: 1px solid #333; border-radius: 6px;
+  padding: 10px; font-family: monospace; font-size: 0.7rem; line-height: 1.4;
+  white-space: pre; overflow-x: auto; max-height: 200px; overflow-y: auto;
+}
+.output .num { color: #4ECDC4; }
+.val { color: #4ECDC4; font-family: monospace; font-size: 0.9rem; }
+button {
+  background: #4ECDC4; border: none; border-radius: 6px; padding: 8px 16px;
+  color: #0a0a0f; font-size: 0.85rem; font-weight: 600; cursor: pointer;
+  transition: background 0.15s;
+}
+button:hover { background: #45b8b0; }
+button.secondary { background: transparent; border: 1px solid #4ECDC4; color: #4ECDC4; }
+button.secondary:hover { background: rgba(78,205,196,0.1); }
+.hidden { display: none; }
+</style>
+</head>
+<body>
+<div class="container">
+  <canvas id="c" width="1024" height="576"></canvas>
+  <div class="panel">
+    <div style="display:flex;gap:8px;align-items:center">
+      <h2>HUD Layout</h2>
+      <span id="status" style="font-size:0.75rem;color:#666">loading...</span>
+      <button class="secondary" id="resetBtn" style="margin-left:auto;padding:4px 10px;font-size:0.75rem">Reset</button>
+    </div>
+
+    <div class="layer-list" id="layerList"></div>
+
+    <div id="controls">
+      <div class="ctrl-row" style="gap:12px">
+        <div class="ctrl-group" style="flex:1">
+          <label>X</label>
+          <input type="number" id="posX" step="1">
+        </div>
+        <div class="ctrl-group" style="flex:1">
+          <label>Y</label>
+          <input type="number" id="posY" step="1">
+        </div>
+        <div class="ctrl-group" style="flex:1">
+          <label>Width</label>
+          <input type="number" id="sizeW" step="1" min="1">
+        </div>
+        <div class="ctrl-group" style="flex:1">
+          <label>Height</label>
+          <input type="number" id="sizeH" step="1" min="1">
+        </div>
+      </div>
+      <div class="ctrl-row" style="gap:8px;margin-top:4px">
+        <button class="secondary" id="toBackBtn" style="font-size:0.7rem;flex:1;padding:4px">Send to Back</button>
+        <button class="secondary" id="toFrontBtn" style="font-size:0.7rem;flex:1;padding:4px">Bring to Front</button>
+      </div>
+      <div class="ctrl-group" id="scaleGroup">
+        <label>Scale: <span class="val" id="scaleVal">1.0</span></label>
+        <input type="range" id="scaleSlider" min="0.1" max="5.0" step="0.05" value="1.0">
+      </div>
+      <div id="fillGroup" class="hidden">
+        <div class="ctrl-row" style="gap:8px">
+          <div class="ctrl-group" style="flex:1">
+            <label>Fill X</label>
+            <input type="number" id="fillX" step="1">
+          </div>
+          <div class="ctrl-group" style="flex:1">
+            <label>Fill Y</label>
+            <input type="number" id="fillY" step="1">
+          </div>
+          <div class="ctrl-group" style="flex:1">
+            <label>Fill W</label>
+            <input type="number" id="fillW" step="1" min="1">
+          </div>
+          <div class="ctrl-group" style="flex:1">
+            <label>Fill H</label>
+            <input type="number" id="fillH" step="1" min="1">
+          </div>
+        </div>
+      </div>
+      <div id="textGroup" class="hidden">
+        <div class="ctrl-row" style="gap:8px">
+          <div class="ctrl-group" style="flex:1">
+            <label>Text X</label>
+            <input type="number" id="textX" step="1">
+          </div>
+          <div class="ctrl-group" style="flex:1">
+            <label>Text Y</label>
+            <input type="number" id="textY" step="1">
+          </div>
+          <div class="ctrl-group" style="flex:1">
+            <label>Text Size</label>
+            <input type="number" id="textSize" step="1" min="8">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="output" id="output">Select an element to begin</div>
+
+    <div class="ctrl-row">
+      <button id="copyBtn" style="flex:1">Copy Layout JSON</button>
+      <button class="secondary" id="refreshOutput" style="flex:0">Refresh</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const W = 1024, H = 576;
+
+// Data
+let hudFrames = null;
+let hudSheet = new Image();
+let items = []; // { name, x, y, w, h, zIndex, visible, frame }
+let selectedIdx = -1;
+
+// Drag state
+let dragging = false;
+let dragOffX = 0, dragOffY = 0;
+let resizeCorner = null; // 'tl','tr','bl','br'
+let resizeStart = null;
+let dragItemIdx = -1; // for layer list drag
+
+// Load data
+const hudJsonPath = '/images/HUD.json';
+const hudPngPath = '/images/HUD.png';
+const hudLayoutPath = '/holdyourground/hud-layout.json';
+
+Promise.all([
+  fetch(hudJsonPath).then(r => r.json()),
+  new Promise((resolve, reject) => { hudSheet.onload = resolve; hudSheet.onerror = reject; hudSheet.src = hudPngPath; }),
+  fetch(hudLayoutPath).then(r => r.json()).catch(() => [])
+]).then(([json, _, layoutArr]) => {
+  hudFrames = json.frames;
+  const layoutMap = {};
+  for (const el of layoutArr) layoutMap[el.name] = el;
+  const names = Object.keys(hudFrames);
+  let autoIdx = 0;
+  items = names.map((name) => {
+    const f = hudFrames[name];
+    const laid = layoutMap[name];
+    if (laid) {
+      return {
+        name, x: laid.x, y: laid.y, w: f.sourceSize.w, h: f.sourceSize.h,
+        zIndex: laid.zIndex, visible: true, scale: laid.scale || 1.0,
+        fillX: laid.fillX, fillY: laid.fillY, fillW: laid.fillW, fillH: laid.fillH,
+        textX: laid.textX, textY: laid.textY, textSize: laid.textSize,
+        frame: f
+      };
+    }
+    const col = autoIdx % 4, row = Math.floor(autoIdx / 4);
+    autoIdx++;
+    return {
+      name, x: 20 + col * 200, y: 20 + row * 100,
+      w: f.sourceSize.w, h: f.sourceSize.h,
+      zIndex: 100 + autoIdx, visible: true, scale: 1.0, frame: f
+    };
+  });
+  selectedIdx = items.length > 0 ? 0 : -1;
+  // Add virtual elements from layout that aren't in HUD frames
+  for (const laid of layoutArr) {
+    if (!hudFrames[laid.name] && !items.find(i => i.name === laid.name)) {
+      items.push({
+        name: laid.name, x: laid.x, y: laid.y, w: 80, h: 30,
+        zIndex: laid.zIndex, visible: true, scale: 1.0,
+        textX: laid.textX, textY: laid.textY, textSize: laid.textSize, frame: null
+      });
+    }
+  }
+  // Always add StatsHotkey virtual element (text-only hotkey letter)
+  if (!items.find(i => i.name === 'StatsHotkey')) {
+    items.push({
+      name: 'StatsHotkey', x: -7, y: 525, w: 50, h: 44,
+      zIndex: 200, visible: true, scale: 1.0,
+      textX: 25, textY: 22, textSize: 23, frame: null
+    });
+  }
+  document.getElementById('status').textContent = `${layoutArr.length} placed, ${items.length - layoutArr.length} unplaced`;
+  render();
+  document.fonts.ready.then(render);
+  setTimeout(render, 2000);
+}).catch(e => {
+  document.getElementById('status').textContent = 'Error loading: ' + e.message;
+});
+
+// === Layer list ===
+function renderLayerList() {
+  const list = document.getElementById('layerList');
+  const sorted = [...items].sort((a, b) => b.zIndex - a.zIndex);
+  list.innerHTML = sorted.map((item, displayIdx) => {
+    const realIdx = items.indexOf(item);
+    const active = realIdx === selectedIdx ? ' active' : '';
+    const frame = item.frame;
+    const tw = 32, th = 24;
+    let dataUrl = '';
+    if (hudSheet.complete && hudSheet.naturalWidth > 0 && frame) {
+      const c = document.createElement('canvas');
+      c.width = tw; c.height = th;
+      const cx = c.getContext('2d');
+      const fr = frame.frame;
+      cx.drawImage(hudSheet, fr.x, fr.y, fr.w, fr.h, 0, 0, tw, th);
+      dataUrl = c.toDataURL();
+    }
+    return `<div class="layer-item${active}" data-idx="${realIdx}">
+      <img class="thumb" src="${dataUrl || ''}" alt="">
+      <span class="name">${item.name.replace('.png','')}</span>
+      <button class="vis-btn" data-idx="${realIdx}" title="Toggle visibility">${item.visible !== false ? '👁' : '—'}</button>
+      ${item.name === 'HealthBar.png' || item.name === 'ExperienceBar.png' || item.name === 'EnergyBar.png' ? `<button class="fill-btn" data-idx="${realIdx}" data-fill="1" title="Toggle fill" style="font-size:0.65rem;font-weight:700">${item.fillVisible !== false ? 'F' : '—'}</button>` : ''}
+      <button class="z-btn" data-idx="${realIdx}" data-dir="up" title="Move up">▲</button>
+      <button class="z-btn" data-idx="${realIdx}" data-dir="down" title="Move down">▼</button>
+    </div>`;
+  }).join('');
+
+  list.querySelectorAll('.layer-item').forEach(el => {
+    el.addEventListener('click', (e) => {
+      if (e.target.closest('button')) return;
+      const idx = parseInt(el.dataset.idx);
+      selectItem(idx);
+    });
+    el.addEventListener('mousedown', (e) => {
+      // Start drag for reordering via up/down buttons (separate click handlers)
+    });
+  });
+
+  list.querySelectorAll('.vis-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const idx = parseInt(btn.dataset.idx);
+      const item = items[idx];
+      if (item) {
+        item.visible = item.visible === false ? true : false;
+        if (selectedIdx === idx && item.visible === false) {
+          // Find next visible
+          const vis = items.filter(i => i.visible !== false);
+          if (vis.length > 0) selectItem(items.indexOf(vis[0]));
+        }
+        render();
+      }
+    });
+  });
+
+  list.querySelectorAll('[data-fill]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const idx = parseInt(btn.dataset.idx);
+      const item = items[idx];
+      if (item) {
+        item.fillVisible = item.fillVisible === false ? true : false;
+        render();
+      }
+    });
+  });
+
+  list.querySelectorAll('.z-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const idx = parseInt(btn.dataset.idx);
+      const dir = btn.dataset.dir;
+      const item = items[idx];
+      if (!item) return;
+      if (dir === 'up') item.zIndex = Math.min(1000, item.zIndex + 1);
+      else item.zIndex = Math.max(0, item.zIndex - 1);
+      render();
+    });
+  });
+}
+
+function renderControls() {
+  if (selectedIdx < 0 || selectedIdx >= items.length) {
+    document.getElementById('controls').classList.add('hidden');
+    return;
+  }
+  document.getElementById('controls').classList.remove('hidden');
+  const item = items[selectedIdx];
+  document.getElementById('posX').value = Math.round(item.x);
+  document.getElementById('posY').value = Math.round(item.y);
+  document.getElementById('sizeW').value = item.w;
+  document.getElementById('sizeH').value = item.h;
+  document.getElementById('scaleSlider').value = item.scale;
+  document.getElementById('scaleVal').textContent = item.scale.toFixed(2);
+
+  const fillGroup = document.getElementById('fillGroup');
+  if (item.name === 'HealthBar.png' || item.name === 'ExperienceBar.png' || item.name === 'EnergyBar.png') {
+    fillGroup.classList.remove('hidden');
+    document.getElementById('fillX').value = item.fillX ?? item.frame.spriteSourceSize.x;
+    document.getElementById('fillY').value = item.fillY ?? item.frame.spriteSourceSize.y;
+    document.getElementById('fillW').value = item.fillW ?? item.frame.spriteSourceSize.w;
+    document.getElementById('fillH').value = item.fillH ?? item.frame.spriteSourceSize.h;
+  } else {
+    fillGroup.classList.add('hidden');
+  }
+  const textGroup = document.getElementById('textGroup');
+  if (item.name === 'ServerLevel.png' || item.name === 'PlayerLevel' || item.name === 'PlayerName' || item.name === 'StatsHotkey') {
+    textGroup.classList.remove('hidden');
+    document.getElementById('textX').value = item.textX ?? 0;
+    document.getElementById('textY').value = item.textY ?? 0;
+    document.getElementById('textSize').value = item.textSize || (item.name === 'ServerLevel.png' ? 32 : 28);
+  } else {
+    textGroup.classList.add('hidden');
+  }
+}
+
+function renderOutput() {
+  const el = document.getElementById('output');
+  if (items.length === 0) {
+    el.textContent = 'No elements loaded';
+    return;
+  }
+  const sorted = [...items].filter(i => i.visible !== false).sort((a, b) => a.zIndex - b.zIndex);
+  let json = JSON.stringify(sorted.map(i => {
+    const obj = {
+      name: i.name,
+      x: Math.round(i.x),
+      y: Math.round(i.y),
+      scale: Math.round(i.scale * 100) / 100,
+      zIndex: i.zIndex
+    };
+    if ((i.fillX ?? i.frame?.spriteSourceSize?.x) !== i.frame?.spriteSourceSize?.x ||
+        (i.fillY ?? i.frame?.spriteSourceSize?.y) !== i.frame?.spriteSourceSize?.y ||
+        (i.fillW ?? i.frame?.spriteSourceSize?.w) !== i.frame?.spriteSourceSize?.w ||
+        (i.fillH ?? i.frame?.spriteSourceSize?.h) !== i.frame?.spriteSourceSize?.h) {
+      obj.fillX = i.fillX ?? i.frame?.spriteSourceSize?.x;
+      obj.fillY = i.fillY ?? i.frame?.spriteSourceSize?.y;
+      obj.fillW = i.fillW ?? i.frame?.spriteSourceSize?.w;
+      obj.fillH = i.fillH ?? i.frame?.spriteSourceSize?.h;
+    }
+    if (i.name === 'ServerLevel.png' || i.name === 'PlayerLevel' || i.name === 'PlayerName' || i.name === 'StatsHotkey') {
+      if (i.textX) obj.textX = i.textX;
+      if (i.textY) obj.textY = i.textY;
+      if (i.textSize) obj.textSize = i.textSize;
+    }
+    return obj;
+  }), null, 2);
+  el.innerHTML = json.replace(/(\d+)/g, '<span class="num">$1</span>');
+}
+
+function render() {
+  ctx.clearRect(0, 0, W, H);
+
+  // Grid background
+  ctx.strokeStyle = 'rgba(255,255,255,0.04)'; ctx.lineWidth = 1;
+  for (let x = 0; x <= W; x += 80) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
+  for (let y = 0; y <= H; y += 80) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+  ctx.strokeStyle = 'rgba(255,255,255,0.1)'; ctx.lineWidth = 2;
+  ctx.strokeRect(0, 0, W, H);
+  ctx.fillStyle = 'rgba(255,255,255,0.15)'; ctx.font = '10px monospace'; ctx.textAlign = 'left';
+  ctx.fillText(W + '×' + H + ' viewport (16:9)', 8, 16);
+
+  // Draw all elements sorted by zIndex
+  const sorted = [...items].filter(i => i.visible !== false).sort((a, b) => a.zIndex - b.zIndex);
+  for (const item of sorted) {
+    const idx = items.indexOf(item);
+    const frame = item.frame;
+    if (!frame || !hudSheet.complete) {
+      if (item.name !== 'StatsHotkey') continue;
+    }
+
+    ctx.save();
+
+    const sw = item.w * item.scale, sh = item.h * item.scale;
+
+    // Sprite and dynamic fill drawing (only for items with sprites)
+    if (frame && hudSheet.complete) {
+      const fr = frame.frame;
+      const sss = frame.spriteSourceSize;
+
+      // Dynamic fill for HealthBar
+      if (item.name === 'HealthBar.png' && item.fillVisible !== false) {
+        const el = item;
+        const ls = el.scale;
+        const fx = el.x + (el.fillX ?? sss.x) * ls;
+        const fy = el.y + (el.fillY ?? sss.y) * ls;
+        const fw = (el.fillW ?? sss.w) * ls;
+        const fh = (el.fillH ?? sss.h) * ls;
+        const notch = fh * 0.41;
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(fx, fy);
+        ctx.lineTo(fx + fw - notch, fy);
+        ctx.lineTo(fx + fw, fy + fh / 2);
+        ctx.lineTo(fx + fw - notch, fy + fh);
+        ctx.lineTo(fx, fy + fh);
+        ctx.closePath();
+        ctx.clip();
+        const grad = ctx.createLinearGradient(fx, fy, fx, fy + fh);
+        grad.addColorStop(0, '#7dff35');
+        grad.addColorStop(0.35, '#31ef10');
+        grad.addColorStop(0.6, '#11c900');
+        grad.addColorStop(1, '#078500');
+        ctx.fillStyle = grad;
+        ctx.fillRect(fx, fy, fw, fh);
+        ctx.fillStyle = 'rgba(255,255,255,0.35)';
+        ctx.fillRect(fx, fy, fw, 3 * ls);
+        ctx.fillStyle = 'rgba(0,80,0,0.45)';
+        ctx.fillRect(fx, fy + fh - 4 * ls, fw, 4 * ls);
+        ctx.shadowColor = 'rgba(40,255,0,0.35)';
+        ctx.shadowBlur = 8;
+        ctx.fillStyle = 'rgba(0,0,0,0)';
+        ctx.fillRect(fx, fy, fw, fh);
+        ctx.shadowBlur = 0;
+        ctx.restore();
+      }
+
+      // Dynamic fill for ExperienceBar
+      if (item.name === 'ExperienceBar.png' && item.fillVisible !== false) {
+        const el = item;
+        const ls = el.scale;
+        const fx = el.x + (el.fillX ?? sss.x) * ls;
+        const fy = el.y + (el.fillY ?? sss.y) * ls;
+        const fw = (el.fillW ?? sss.w) * ls;
+        const fh = (el.fillH ?? sss.h) * ls;
+        const notch = fh * 0.41;
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(fx, fy);
+        ctx.lineTo(fx + fw - notch, fy);
+        ctx.lineTo(fx + fw, fy + fh / 2);
+        ctx.lineTo(fx + fw - notch, fy + fh);
+        ctx.lineTo(fx, fy + fh);
+        ctx.closePath();
+        ctx.clip();
+        const grad = ctx.createLinearGradient(fx, fy, fx, fy + fh);
+        grad.addColorStop(0, '#fff06a');
+        grad.addColorStop(0.3, '#ffc21e');
+        grad.addColorStop(0.65, '#e38b00');
+        grad.addColorStop(1, '#8a4200');
+        ctx.fillStyle = grad;
+        ctx.fillRect(fx, fy, fw, fh);
+        ctx.fillStyle = 'rgba(255,255,255,0.35)';
+        ctx.fillRect(fx, fy, fw, 2 * ls);
+        ctx.fillStyle = 'rgba(80,35,0,0.55)';
+        ctx.fillRect(fx, fy + fh - 3 * ls, fw, 3 * ls);
+        ctx.shadowColor = 'rgba(255,170,0,0.45)';
+        ctx.shadowBlur = 8;
+        ctx.fillStyle = 'rgba(0,0,0,0)';
+        ctx.fillRect(fx, fy, fw, fh);
+        ctx.shadowBlur = 0;
+        ctx.restore();
+      }
+
+      // Dynamic fill for EnergyBar
+      if (item.name === 'EnergyBar.png' && item.fillVisible !== false) {
+        const el = item;
+        const ls = el.scale;
+        const fx = el.x + (el.fillX ?? sss.x) * ls;
+        const fy = el.y + (el.fillY ?? sss.y) * ls;
+        const fw = (el.fillW ?? sss.w) * ls;
+        const fh = (el.fillH ?? sss.h) * ls;
+        const notch = fh * 0.41;
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(fx, fy);
+        ctx.lineTo(fx + fw - notch, fy);
+        ctx.lineTo(fx + fw, fy + fh / 2);
+        ctx.lineTo(fx + fw - notch, fy + fh);
+        ctx.lineTo(fx, fy + fh);
+        ctx.closePath();
+        ctx.clip();
+        const grad = ctx.createLinearGradient(fx, fy, fx, fy + fh);
+        grad.addColorStop(0, '#53D8FF');
+        grad.addColorStop(0.25, '#2AB9FF');
+        grad.addColorStop(0.5, '#139BFF');
+        grad.addColorStop(0.75, '#0A82F0');
+        grad.addColorStop(1, '#0463D7');
+        ctx.fillStyle = grad;
+        ctx.fillRect(fx, fy, fw, fh);
+        ctx.fillStyle = 'rgba(255,255,255,0.35)';
+        ctx.fillRect(fx, fy, fw, 3 * ls);
+        ctx.fillStyle = 'rgba(0,40,80,0.45)';
+        ctx.fillRect(fx, fy + fh - 4 * ls, fw, 4 * ls);
+        ctx.shadowColor = 'rgba(0,150,255,0.35)';
+        ctx.shadowBlur = 8;
+        ctx.fillStyle = 'rgba(0,0,0,0)';
+        ctx.fillRect(fx, fy, fw, fh);
+        ctx.shadowBlur = 0;
+        ctx.restore();
+      }
+
+      // Skip sprite draw for text-only virtual elements
+      if (item.name !== 'PlayerLevel') {
+        ctx.drawImage(hudSheet, fr.x, fr.y, sss.w, sss.h, item.x + sss.x * item.scale, item.y + sss.y * item.scale, sss.w * item.scale, sss.h * item.scale);
+      }
+    }
+
+    // Selection highlight
+    if (idx === selectedIdx) {
+      ctx.strokeStyle = '#4ECDC4'; ctx.lineWidth = 2;
+      ctx.strokeRect(item.x - 1, item.y - 1, sw + 2, sh + 2);
+      // Resize handles
+      const hs = 6;
+      ctx.fillStyle = '#4ECDC4';
+      [[item.x, item.y], [item.x + sw, item.y], [item.x, item.y + sh], [item.x + sw, item.y + sh]].forEach(([hx, hy]) => {
+        ctx.fillRect(hx - hs/2, hy - hs/2, hs, hs);
+      });
+    }
+
+    // Name label
+    ctx.fillStyle = 'rgba(255,255,255,0.3)'; ctx.font = '9px monospace'; ctx.textAlign = 'left';
+    ctx.fillText(item.name.replace('.png',''), item.x, item.y + sh + 12);
+
+    ctx.restore();
+  }
+
+  // Health bar text overlay
+  const hbItem = items.find(i => i.name === 'HealthBar.png' && i.visible !== false);
+  if (hbItem) {
+    const ls = hbItem.scale;
+    const fx = hbItem.x + (hbItem.fillX ?? hbItem.frame.spriteSourceSize.x) * ls;
+    const fy = hbItem.y + (hbItem.fillY ?? hbItem.frame.spriteSourceSize.y) * ls;
+    const fw = (hbItem.fillW ?? hbItem.frame.spriteSourceSize.w) * ls;
+    const fh = (hbItem.fillH ?? hbItem.frame.spriteSourceSize.h) * ls;
+    const cx = fx + fw / 2, cy = fy + fh / 2;
+    ctx.save();
+    ctx.font = 'bold 20px Arial, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.shadowColor = 'rgba(0,0,0,0.8)';
+    ctx.shadowBlur = 3;
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 4;
+    ctx.strokeText('100 / 100', cx, cy);
+    ctx.fillStyle = '#fff';
+    ctx.fillText('100 / 100', cx, cy);
+    ctx.restore();
+  }
+
+  // Energy bar text overlay
+  const ebItem = items.find(i => i.name === 'EnergyBar.png' && i.visible !== false);
+  if (ebItem) {
+    const ls = ebItem.scale;
+    const fx = ebItem.x + (ebItem.fillX ?? ebItem.frame.spriteSourceSize.x) * ls;
+    const fy = ebItem.y + (ebItem.fillY ?? ebItem.frame.spriteSourceSize.y) * ls;
+    const fw = (ebItem.fillW ?? ebItem.frame.spriteSourceSize.w) * ls;
+    const fh = (ebItem.fillH ?? ebItem.frame.spriteSourceSize.h) * ls;
+    const cx = fx + fw / 2, cy = fy + fh / 2;
+    ctx.save();
+    ctx.font = 'bold 20px Arial, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.shadowColor = 'rgba(0,0,0,0.8)';
+    ctx.shadowBlur = 3;
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 4;
+    ctx.strokeText('100 / 100', cx, cy);
+    ctx.fillStyle = '#fff';
+    ctx.fillText('100 / 100', cx, cy);
+    ctx.restore();
+  }
+
+  // Text overlays for ServerLevel and PlayerLevel
+  for (const preview of [
+    { name: 'ServerLevel.png', text: '12', key: 'textSize', defSize: 32 },
+    { name: 'PlayerLevel', text: '5', key: 'textSize', defSize: 28 },
+    { name: 'StatsHotkey', text: 'C', key: 'textSize', defSize: 28 }
+  ]) {
+    const el = items.find(i => i.name === preview.name && i.visible !== false);
+    if (!el) continue;
+    const tSize = el[preview.key] || preview.defSize;
+    const tx = el.x + (el.textX || 0);
+    const ty = el.y + (el.textY || 0);
+    ctx.save();
+    ctx.font = '700 ' + tSize + 'px "Teko", "Rajdhani", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.lineJoin = 'round';
+    ctx.miterLimit = 2;
+    ctx.shadowColor = 'rgba(0,0,0,0.45)';
+    ctx.shadowBlur = 3;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(preview.text, tx + 1, ty + 2);
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = '#111';
+    ctx.lineWidth = 6;
+    ctx.strokeText(preview.text, tx, ty);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(preview.text, tx, ty);
+    ctx.restore();
+  }
+
+  // Player name preview (max 16 chars)
+  const pnEl = items.find(i => i.name === 'PlayerName' && i.visible !== false);
+  if (pnEl) {
+    const tSize = pnEl.textSize || 28;
+    const tx = pnEl.x, ty = pnEl.y;
+    ctx.save();
+    ctx.font = '700 ' + tSize + 'px "Teko", "Rajdhani", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.lineJoin = 'round';
+    ctx.miterLimit = 2;
+    // Drop shadow (offset 2px down, 4px blur)
+    ctx.shadowColor = 'rgba(0,0,0,0.45)';
+    ctx.shadowBlur = 4;
+    ctx.shadowOffsetY = 2;
+    ctx.strokeStyle = '#111';
+    ctx.lineWidth = 6;
+    ctx.strokeText('TestPlayer1234567', tx, ty);
+    ctx.fillStyle = '#fff';
+    ctx.fillText('TestPlayer1234567', tx, ty);
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetY = 0;
+    ctx.restore();
+  }
+
+  renderLayerList();
+  renderControls();
+  renderOutput();
+
+  // Update output refresh
+}
+
+// === Selection ===
+function selectItem(idx) {
+  if (idx >= 0 && idx < items.length && items[idx].visible !== false) {
+    selectedIdx = idx;
+  } else {
+    selectedIdx = -1;
+  }
+  render();
+}
+
+// === Canvas mouse events ===
+function getCanvasPos(e) {
+  const r = canvas.getBoundingClientRect();
+  return { x: (e.clientX - r.left) * (W / r.width), y: (e.clientY - r.top) * (H / r.height) };
+}
+
+function hitTestElement(px, py) {
+  const sorted = [...items].filter(i => i.visible !== false).sort((a, b) => b.zIndex - a.zIndex);
+  for (const item of sorted) {
+    const sw = item.w * item.scale, sh = item.h * item.scale;
+    if (px >= item.x && px <= item.x + sw && py >= item.y && py <= item.y + sh) {
+      return items.indexOf(item);
+    }
+  }
+  return -1;
+}
+
+function getCorner(px, py, item) {
+  const hs = 8;
+  const sw = item.w * item.scale, sh = item.h * item.scale;
+  const corners = {
+    'tl': [item.x, item.y],
+    'tr': [item.x + sw, item.y],
+    'bl': [item.x, item.y + sh],
+    'br': [item.x + sw, item.y + sh]
+  };
+  for (const [key, [cx, cy]] of Object.entries(corners)) {
+    if (Math.abs(px - cx) < hs && Math.abs(py - cy) < hs) return key;
+  }
+  return null;
+}
+
+canvas.addEventListener('mousedown', (e) => {
+  const p = getCanvasPos(e);
+  if (selectedIdx >= 0) {
+    const item = items[selectedIdx];
+    const corner = getCorner(p.x, p.y, item);
+    if (corner) {
+      resizeCorner = corner;
+      resizeStart = { x: p.x, y: p.y, sw: item.w * item.scale, sh: item.h * item.scale, ix: item.x, iy: item.y };
+      canvas.style.cursor = 'nw-resize';
+      return;
+    }
+  }
+  const idx = hitTestElement(p.x, p.y);
+  if (idx >= 0) {
+    selectItem(idx);
+    const item = items[idx];
+    dragging = true;
+    dragOffX = p.x - item.x;
+    dragOffY = p.y - item.y;
+    canvas.style.cursor = 'grabbing';
+  } else {
+    selectItem(-1);
+  }
+});
+
+canvas.addEventListener('mousemove', (e) => {
+  const p = getCanvasPos(e);
+  if (dragging && selectedIdx >= 0) {
+    const item = items[selectedIdx];
+    item.x = Math.round(p.x - dragOffX);
+    item.y = Math.round(p.y - dragOffY);
+    render();
+    } else if (resizeCorner && selectedIdx >= 0 && resizeStart) {
+    const item = items[selectedIdx];
+    const dx = p.x - resizeStart.x;
+    const dy = p.y - resizeStart.y;
+    let newW = resizeStart.sw, newH = resizeStart.sh;
+    if (resizeCorner.includes('r')) { newW = resizeStart.sw + dx; }
+    else { newW = resizeStart.sw - dx; }
+    if (resizeCorner.includes('b')) { newH = resizeStart.sh + dy; }
+    else { newH = resizeStart.sh - dy; }
+    if (newW > 4) item.scale = Math.max(0.1, newW / item.w);
+    if (newH > 4) item.scale = Math.max(0.1, newH / item.h);
+    render();
+  } else {
+    // Hover cursor
+    if (selectedIdx >= 0) {
+      const item = items[selectedIdx];
+      const corner = getCorner(p.x, p.y, item);
+      if (corner) canvas.style.cursor = 'nw-resize';
+      else canvas.style.cursor = hitTestElement(p.x, p.y) >= 0 ? 'grab' : 'default';
+    } else {
+      canvas.style.cursor = hitTestElement(p.x, p.y) >= 0 ? 'grab' : 'default';
+    }
+  }
+});
+
+canvas.addEventListener('mouseup', () => {
+  dragging = false;
+  resizeCorner = null;
+  resizeStart = null;
+  canvas.style.cursor = 'default';
+});
+canvas.addEventListener('mouseleave', () => { dragging = false; resizeCorner = null; resizeStart = null; canvas.style.cursor = 'default'; });
+
+// === Control inputs ===
+['posX','posY','sizeW','sizeH'].forEach(id => {
+  document.getElementById(id).addEventListener('input', () => {
+    if (selectedIdx < 0) return;
+    const item = items[selectedIdx];
+    item.x = parseInt(document.getElementById('posX').value) || item.x;
+    item.y = parseInt(document.getElementById('posY').value) || item.y;
+    item.w = Math.max(1, parseInt(document.getElementById('sizeW').value) || item.w);
+    item.h = Math.max(1, parseInt(document.getElementById('sizeH').value) || item.h);
+    render();
+  });
+});
+
+document.getElementById('toBackBtn').addEventListener('click', () => {
+  if (selectedIdx < 0) return;
+  const item = items[selectedIdx];
+  const minZ = Math.min(...items.filter(i => i.visible !== false).map(i => i.zIndex));
+  item.zIndex = minZ - 1;
+  render();
+});
+document.getElementById('toFrontBtn').addEventListener('click', () => {
+  if (selectedIdx < 0) return;
+  const item = items[selectedIdx];
+  const maxZ = Math.max(...items.filter(i => i.visible !== false).map(i => i.zIndex));
+  item.zIndex = maxZ + 1;
+  render();
+});
+
+document.getElementById('scaleSlider').addEventListener('input', () => {
+  if (selectedIdx < 0) return;
+  items[selectedIdx].scale = parseFloat(document.getElementById('scaleSlider').value);
+  render();
+});
+
+['fillX','fillY','fillW','fillH'].forEach(id => {
+  document.getElementById(id).addEventListener('input', () => {
+    if (selectedIdx < 0) return;
+    const val = parseInt(document.getElementById(id).value);
+    if (isNaN(val)) return;
+    if (id === 'fillW' || id === 'fillH') { if (val < 1) return; }
+    items[selectedIdx][id] = val;
+    render();
+  });
+});
+
+['textX','textY','textSize'].forEach(id => {
+  document.getElementById(id).addEventListener('input', () => {
+    if (selectedIdx < 0) return;
+    const val = parseInt(document.getElementById(id).value);
+    if (isNaN(val)) return;
+    if (id === 'textSize' && val < 8) return;
+    items[selectedIdx][id] = val;
+    render();
+  });
+});
+
+document.getElementById('copyBtn').addEventListener('click', () => {
+  const text = document.getElementById('output').textContent;
+  navigator.clipboard.writeText(text);
+  document.getElementById('copyBtn').textContent = 'Copied!';
+  setTimeout(() => { document.getElementById('copyBtn').textContent = 'Copy Layout JSON'; }, 2000);
+});
+
+document.getElementById('refreshOutput').addEventListener('click', render);
+document.getElementById('resetBtn').addEventListener('click', () => {
+  if (!confirm('Reset all positions to defaults?')) return;
+  const names = Object.keys(hudFrames || {});
+  items = names.map((name, i) => {
+    const f = hudFrames[name];
+    return {
+      name, x: 20 + (i % 4) * 200, y: 20 + Math.floor(i / 4) * 100,
+      w: f.sourceSize.w, h: f.sourceSize.h, zIndex: i, visible: true, scale: 1.0, frame: f
+    };
+  });
+  selectedIdx = items.length > 0 ? 0 : -1;
+  render();
+});
+</script>
+</body>
+</html>

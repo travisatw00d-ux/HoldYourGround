@@ -209,6 +209,17 @@ module.exports = function registerSocket(socket, { io, broadcastRoomList, broadc
       room.io.to(oid).emit('playerInfo', room.getPlayerInfoObj(p));
     }
     socket.emit('spectatorAssigned');
+    room._assignFollowTarget(socket.id);
+  });
+
+  socket.on('spectateTarget', ({ targetId }) => {
+    const room = roomManager.getPlayerRoom(socket.id);
+    if (room) {
+      const p = room.players[socket.id];
+      if (p && (p.isSpectator || !p.alive)) {
+        room.spectatorFollows.set(socket.id, targetId);
+      }
+    }
   });
 
   socket.on('joinGame', () => {

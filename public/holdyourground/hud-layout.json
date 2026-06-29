@@ -1,0 +1,20 @@
+[
+  { "name": "EnergyBarBG.png", "x": 142, "y": 429, "scale": 1, "zIndex": 0 },
+  { "name": "EnergyBar.png", "x": 127, "y": 457, "scale": 1, "zIndex": 1, "fillX": 61, "fillY": 59, "fillW": 320, "fillH": 30 },
+  { "name": "HealthBarBG.png", "x": 140, "y": 387, "scale": 1, "zIndex": 2 },
+  { "name": "HealthBar.png", "x": 124, "y": 393, "scale": 1, "zIndex": 3, "fillX": 66, "fillY": 77, "fillW": 316, "fillH": 39 },
+  { "name": "NameBar.png", "x": 35, "y": 391, "scale": 0.8, "zIndex": 6 },
+  { "name": "PlayerName", "x": 237, "y": 452, "scale": 1.15, "zIndex": 6, "textSize": 27 },
+  { "name": "CharacterWindow.png", "x": -25, "y": 400, "scale": 1, "zIndex": 7 },
+  { "name": "Hotkey.png", "x": -7, "y": 519, "scale": 0.25, "zIndex": 8 },
+  { "name": "KnightCharacter.png", "x": -6, "y": 408, "scale": 0.8, "zIndex": 8 },
+  { "name": "settingsgear.png", "x": 978, "y": 9, "scale": 0.55, "zIndex": 8 },
+  { "name": "TimeBar.png", "x": 45, "y": -33, "scale": 1, "zIndex": 9 },
+  { "name": "ServerLevel.png", "x": -3, "y": -1, "scale": 0.45, "zIndex": 10, "textX": 65, "textY": 62, "textSize": 37 },
+  { "name": "XPBarBG.png", "x": 110, "y": 495, "scale": 0.5, "zIndex": 98 },
+  { "name": "PlayerLevel", "x": 49, "y": 503, "scale": 1, "zIndex": 100, "textX": 85, "textY": 64, "textSize": 20 },
+  { "name": "ExperienceBar.png", "x": 110, "y": 495, "scale": 0.5, "zIndex": 101, "fillX": 88, "fillY": 116, "fillW": 681, "fillH": 39 },
+  { "name": "StatsHotkey", "x": -7, "y": 525, "scale": 1, "zIndex": 200, "textX": 25, "textY": 22, "textSize": 23 },
+  { "name": "JabAttack.png", "x": 907, "y": 300, "scale": 0.7, "zIndex": 102 },
+  { "name": "SwingAttack.png", "x": 906, "y": 422, "scale": 0.7, "zIndex": 103 }
+]

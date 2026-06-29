@@ -2,7 +2,7 @@ import { state } from './state.js';
 import { getCamera } from './camera.js';
 import { getInput } from './input.js';
 import { drawPlayer, drawZombie, drawDebugSwordHitbox, getBladeSegment } from './render-entity.js';
-import { drawStatHUD, drawServerLevel, drawSpectatingUI, drawDeadSpectatingUI, drawDmgNumbers, drawMergeSmoke, drawBuildWatermark, drawHitFlash } from './render-ui.js';
+import { drawStatHUD, drawServerLevel, drawSpectatingUI, drawDeadSpectatingUI, drawDmgNumbers, drawMergeSmoke, drawBuildWatermark, drawHitFlash, drawHUD } from './render-ui.js';
 import { drawDiag } from './diag.js';
 
 function shortAngleDist(a, b) {
@@ -42,6 +42,7 @@ export function generateBackground(w, h, color) {
 }
 
 function render() {
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.clearRect(0, 0, state.viewW, state.viewH);
   const rT0 = performance.now();
 
@@ -159,8 +160,7 @@ function render() {
 
   ctx.restore();
 
-  const hudTarget = state.isDeadSpectating && spectatingTarget ? spectatingTarget : me;
-  drawStatHUD(ctx, hudTarget);
+  drawHUD(ctx);
   drawSpectatingUI(ctx);
   drawDeadSpectatingUI(ctx, spectatingTarget);
 

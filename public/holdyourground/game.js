@@ -66,14 +66,13 @@ function showScreen(id) {
   hud.classList.add('hidden');
   hotbarEl.classList.add('hidden');
   settingsPanel.classList.add('hidden');
-  document.getElementById('xpBar').classList.add('hidden');
   document.getElementById('loadingOverlay').classList.add('hidden');
   state.screen = id;
   if (id === 'menu') menu.classList.remove('hidden');
   if (id === 'eliminated') eliminated.classList.remove('hidden');
   if (id === 'waitingRespawn') waitingRespawn.classList.remove('hidden');
   if (id === 'lobby') lobbyScreen.classList.remove('hidden');
-  if (id === 'playing') { hud.classList.remove('hidden'); hotbarEl.classList.remove('hidden'); settingsBtn.classList.remove('hidden'); document.getElementById('xpBar').classList.remove('hidden'); }
+  if (id === 'playing') { hud.classList.remove('hidden'); hotbarEl.classList.remove('hidden'); settingsBtn.classList.remove('hidden'); }
 }
 
 showScreen('menu');
@@ -300,6 +299,16 @@ function clearCanvas() {
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 }
 
+function logScreenState(tag) {
+  const ids = ['menu','lobbyScreen','resultsOverlay','eliminated','loadingOverlay','settingsBtn','settingsPanel','hud','hotbarInventory','phaseDisplay','waitingRespawn','joinGameBtn','escapeMenu','canvas'];
+  let out = '[SCREEN-' + tag + '] scr=' + state.screen + ' ph=' + state.matchPhase + ' jE=' + state._joinedEnded;
+  for (const id of ids) {
+    const el = document.getElementById(id);
+    if (el) out += ' ' + id + '=' + (el.classList.contains('hidden') ? 'H' : 'V');
+  }
+  console.log(out);
+}
+
 function leaveToMenu() {
   stopRender();
   clearCanvas();
@@ -309,14 +318,20 @@ function leaveToMenu() {
   waitingRespawn.classList.add('hidden');
   lobbyScreen.classList.add('hidden');
   document.getElementById('resultsOverlay').classList.add('hidden');
-  document.getElementById('xpBar').classList.add('hidden');
   document.getElementById('loadingOverlay').classList.add('hidden');
   document.getElementById('phaseDisplay').classList.add('hidden');
   document.getElementById('joinGameBtn').classList.add('hidden');
+  hotbarEl.classList.add('hidden');
+  settingsPanel.classList.add('hidden');
+  escapeMenu.classList.add('hidden');
+  state.players = {};
+  state.zombies = [];
   menu.classList.remove('hidden');
   welcomeMsg.textContent = 'Ready For Battle?';
   state.screen = 'menu';
   selectedRoomId = null;
+  logScreenState('afterLeave');
+  setTimeout(() => logScreenState('200ms'), 200);
 }
 
 escapeReturnBtn.addEventListener('click', leaveToMenu);
@@ -375,10 +390,23 @@ document.addEventListener('click', (e) => {
   }
 });
 
+function compute16x9(containerW, containerH) {
+  let w = containerW;
+  let h = Math.round(w / 16 * 9);
+  if (h > containerH) {
+    h = containerH;
+    w = Math.round(h * 16 / 9);
+  }
+  return { w, h };
+}
+
+let preFSW, preFSH;
+
 document.addEventListener('fullscreenchange', () => {
   if (document.fullscreenElement) {
-    const w = window.innerWidth;
-    const h = window.innerHeight;
+    preFSW = state.viewW;
+    preFSH = state.viewH;
+    const { w, h } = compute16x9(screen.width, screen.height);
     wrapper.style.width = w + 'px';
     wrapper.style.height = h + 'px';
     resizeViewport(w, h);
@@ -386,9 +414,10 @@ document.addEventListener('fullscreenchange', () => {
     socket.emit('fullscreen', { enabled: true });
     socket.emit('cameraZoom', { zoom: state.cameraZoom, viewW: state.viewW, viewH: state.viewH });
   } else {
-    wrapper.style.width = '800px';
-    wrapper.style.height = '600px';
-    resizeViewport(800, 600);
+    if (state.hudScale > 1.0) state.hudScale = 1.0;
+    wrapper.style.width = preFSW + 'px';
+    wrapper.style.height = preFSH + 'px';
+    resizeViewport(preFSW, preFSH);
     fullscreenToggle.checked = false;
     socket.emit('fullscreen', { enabled: false });
     socket.emit('cameraZoom', { zoom: state.cameraZoom, viewW: state.viewW, viewH: state.viewH });
@@ -428,6 +457,10 @@ setInterval(() => {
     socket.emit('clientDiag', { event: 'stalled', stateAge: -1, phase: state.matchPhase, frames: state._frameCount || 0 });
   }
 }, 8000);
+
+setInterval(() => {
+  socket.emit('clientDiag', { event: 'heartbeat', screen: state.screen, isSpectator: state.isSpectator, matchPhase: state.matchPhase, _lastStateTime: !!state._lastStateTime, frameCount: state._frameCount || 0 });
+}, 10000);
 
 document.addEventListener('visibilitychange', () => {
   socket.emit('clientDiag', { event: 'tabVisibility', hidden: document.hidden, screen: state.screen, phase: state.matchPhase });

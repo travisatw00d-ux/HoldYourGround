@@ -69,40 +69,394 @@ export function drawStatHUD(ctx, hudTarget) {
 }
 
 export function drawServerLevel(ctx) {
-  const srvFrame = state.spriteFrames?.['ServerLevel.png']?.frame;
+  const srvFrame = state.hudFrames?.['ServerLevel.png']?.frame;
   if (!srvFrame) return;
-  const ui = window.SCREEN_UI && window.SCREEN_UI.serverLevel;
-  if (!ui) return;
-  const sw = srvFrame.w * ui.scale, sh = srvFrame.h * ui.scale;
+  const el = state.hudLayout?.find(e => e.name === 'ServerLevel.png');
+  if (!el) return;
+  const viewportScale = 0.471 + 0.529 * (state.viewH / 1080);
+  const sss = state.hudFrames['ServerLevel.png'].spriteSourceSize;
+  const dx = (el.x + sss.x * el.scale) * viewportScale;
+  const dy = (el.y + sss.y * el.scale) * viewportScale;
+  const dw = sss.w * el.scale * viewportScale;
+  const dh = sss.h * el.scale * viewportScale;
   ctx.save();
-  ctx.translate(ui.x, ui.y);
-  ctx.drawImage(getSpriteFromSheet(state.spriteSheet, sw, sh, srvFrame), -sw / 2, -sh / 2, sw, sh);
+  ctx.drawImage(state.hudSheet, srvFrame.x, srvFrame.y, sss.w, sss.h, dx, dy, dw, dh);
   ctx.restore();
   const text = String(state.serverLevel);
+  const tx = (el.textX != null ? (el.x + el.textX) * viewportScale : dx + dw / 2);
+  const ty = (el.textY != null ? (el.y + el.textY) * viewportScale : dy + dh * 0.6);
+  const tSize = (el.textSize || 32) * viewportScale;
+  ctx.save();
+  ctx.font = '700 ' + tSize + 'px "Teko", "Rajdhani", sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.font = '32px "Lilita One", "Segoe UI", sans-serif';
-  if (!state.levelGrad) {
-    state.levelGrad = ctx.createLinearGradient(ui.x, ui.y + (ui.ty || 0) - 14, ui.x, ui.y + (ui.ty || 0) + 14);
-    state.levelGrad.addColorStop(0, '#ffffff');
-    state.levelGrad.addColorStop(1, '#b0b0b0');
-  }
   ctx.lineJoin = 'round';
   ctx.miterLimit = 2;
-  ctx.save();
-  ctx.translate(2, 3);
-  ctx.fillStyle = 'rgba(0,0,0,0.4)';
-  ctx.fillText(text, ui.x, ui.y + (ui.ty || 0));
+  // Drop shadow
+  ctx.shadowColor = 'rgba(0,0,0,0.45)';
+  ctx.shadowBlur = 3 * viewportScale;
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText(text, tx + 1 * viewportScale, ty + 2 * viewportScale);
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = '#111';
+  ctx.lineWidth = 6 * viewportScale;
+  ctx.strokeText(text, tx, ty);
+  // White fill
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText(text, tx, ty);
   ctx.restore();
-  ctx.strokeStyle = '#000';
-  ctx.lineWidth = 10;
-  ctx.strokeText(text, ui.x, ui.y + (ui.ty || 0));
-  ctx.strokeStyle = 'rgba(255,255,255,0.5)';
-  ctx.lineWidth = 2;
-  ctx.strokeText(text, ui.x - 1, ui.y + (ui.ty || 0) - 1);
-  ctx.fillStyle = state.levelGrad;
-  ctx.fillText(text, ui.x, ui.y + (ui.ty || 0));
   ctx.textBaseline = 'alphabetic';
+}
+
+const HUD_GROUP = [
+  'HealthBarBG.png', 'HealthBar.png', 'EnergyBarBG.png', 'EnergyBar.png',
+  'NameBar.png', 'PlayerName', 'CharacterWindow.png', 'Hotkey.png',
+  'KnightCharacter.png', 'XPBarBG.png', 'ExperienceBar.png',
+  'PlayerLevel', 'StatsHotkey'
+];
+
+function applyHUDTransform(ctx, ax, ay) {
+  const viewportScale = 0.471 + 0.529 * (state.viewH / 1080);
+  const s = (state.hudScale ?? 1.0) * viewportScale;
+  const oy = Math.max(0, state.viewH - 576);
+  if (s < 1.0 || oy > 0) {
+    ctx.save();
+    ctx.translate(0, oy);
+    ctx.translate(ax, ay);
+    ctx.scale(s, s);
+    ctx.translate(-ax, -ay);
+    return true;
+  }
+  return false;
+}
+
+function endHUDTransform(ctx, applied) {
+  if (applied) ctx.restore();
+}
+
+
+let _hudRendering = false;
+
+export function drawHUD(ctx) {
+  if (_hudRendering) return;
+  _hudRendering = true;
+  try {
+    if (!state.hudLayout || !state.hudSheet || !state.hudFrames) return;
+  const viewportScale = 0.471 + 0.529 * (state.viewH / 1080);
+  let ax = Infinity, ay = -Infinity;
+  for (const el of state.hudLayout) {
+    if (!HUD_GROUP.includes(el.name)) continue;
+    const fd = state.hudFrames[el.name];
+    if (fd) {
+      const sss = fd.spriteSourceSize;
+      const left = el.x + sss.x * el.scale;
+      const bottom = el.y + (sss.y + sss.h) * el.scale;
+      if (left < ax) ax = left;
+      if (bottom > ay) ay = bottom;
+    } else {
+      const tx = el.x + (el.textX || 0);
+      const ty = el.y + (el.textY || 0);
+      const halfH = (el.textSize || 28) / 2;
+      const halfW = (el.textSize || 28) * 0.3;
+      if (tx - halfW < ax) ax = tx - halfW;
+      if (ty + halfH > ay) ay = ty + halfH;
+    }
+  }
+  if (ax === Infinity) { ax = 0; ay = 0; }
+  const sorted = [...state.hudLayout].sort((a, b) => a.zIndex - b.zIndex);
+  let hbEl = null;
+  for (const el of sorted) {
+    const fd = state.hudFrames[el.name];
+    if (!fd) continue;
+    const isGroup = HUD_GROUP.includes(el.name);
+    const tf = isGroup && applyHUDTransform(ctx, ax, ay);
+    const sss = fd.spriteSourceSize;
+    if (el.name === 'HealthBar.png' && el.fillVisible !== false) {
+      hbEl = el;
+      const me = state.players[state.myId];
+      const hp = me ? me.health : 100;
+      const maxHp = me ? me.maxHealth : 100;
+      const pct = Math.max(0, Math.min(1, hp / maxHp));
+      const ls = el.scale;
+      const fx = el.x + (el.fillX ?? sss.x) * ls;
+      const fy = el.y + (el.fillY ?? sss.y) * ls;
+      const fw = (el.fillW ?? sss.w) * ls;
+      const fh = (el.fillH ?? sss.h) * ls;
+      const fillW = fw * pct;
+      const notch = fh * 0.41 * pct;
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(fx, fy);
+      ctx.lineTo(fx + fillW - notch, fy);
+      ctx.lineTo(fx + fillW, fy + fh / 2);
+      ctx.lineTo(fx + fillW - notch, fy + fh);
+      ctx.lineTo(fx, fy + fh);
+      ctx.closePath();
+      ctx.clip();
+      const grad = ctx.createLinearGradient(fx, fy, fx, fy + fh);
+      grad.addColorStop(0, '#7dff35');
+      grad.addColorStop(0.35, '#31ef10');
+      grad.addColorStop(0.6, '#11c900');
+      grad.addColorStop(1, '#078500');
+      ctx.fillStyle = grad;
+      ctx.fillRect(fx, fy, fillW, fh);
+      ctx.fillStyle = 'rgba(255,255,255,0.35)';
+      ctx.fillRect(fx, fy, fillW, 3 * ls);
+      ctx.fillStyle = 'rgba(0,80,0,0.45)';
+      ctx.fillRect(fx, fy + fh - 4 * ls, fillW, 4 * ls);
+      ctx.shadowColor = 'rgba(40,255,0,0.35)';
+      ctx.shadowBlur = 8;
+      ctx.fillStyle = 'rgba(0,0,0,0)';
+      ctx.fillRect(fx, fy, fillW, fh);
+      ctx.shadowBlur = 0;
+      ctx.restore();
+    }
+    if (el.name === 'ExperienceBar.png' && el.fillVisible !== false) {
+      const me = state.players[state.myId];
+      const xp = me ? state.exp : 0;
+      const xpToNext = me ? state.expToNext : 100;
+      const pct = xpToNext > 0 ? Math.max(0, Math.min(1, xp / xpToNext)) : 0;
+      const ls = el.scale;
+      const fx = el.x + (el.fillX ?? sss.x) * ls;
+      const fy = el.y + (el.fillY ?? sss.y) * ls;
+      const fw = (el.fillW ?? sss.w) * ls;
+      const fh = (el.fillH ?? sss.h) * ls;
+      const fillW = fw * pct;
+      const notch = fh * 0.41 * pct;
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(fx, fy);
+      ctx.lineTo(fx + fillW - notch, fy);
+      ctx.lineTo(fx + fillW, fy + fh / 2);
+      ctx.lineTo(fx + fillW - notch, fy + fh);
+      ctx.lineTo(fx, fy + fh);
+      ctx.closePath();
+      ctx.clip();
+      const grad = ctx.createLinearGradient(fx, fy, fx, fy + fh);
+      grad.addColorStop(0, '#fff06a');
+      grad.addColorStop(0.3, '#ffc21e');
+      grad.addColorStop(0.65, '#e38b00');
+      grad.addColorStop(1, '#8a4200');
+      ctx.fillStyle = grad;
+      ctx.fillRect(fx, fy, fillW, fh);
+      ctx.fillStyle = 'rgba(255,255,255,0.35)';
+      ctx.fillRect(fx, fy, fillW, 2 * ls);
+      ctx.fillStyle = 'rgba(80,35,0,0.55)';
+      ctx.fillRect(fx, fy + fh - 3 * ls, fillW, 3 * ls);
+      ctx.shadowColor = 'rgba(255,170,0,0.45)';
+      ctx.shadowBlur = 8;
+      ctx.fillStyle = 'rgba(0,0,0,0)';
+      ctx.fillRect(fx, fy, fillW, fh);
+      ctx.shadowBlur = 0;
+      ctx.restore();
+    }
+    if (el.name === 'EnergyBar.png' && el.fillVisible !== false) {
+      const me = state.players[state.myId];
+      const eng = me ? me.energy : 100;
+      const maxEng = me ? me.maxEnergy : 100;
+      const pct = Math.max(0, Math.min(1, eng / maxEng));
+      const ls = el.scale;
+      const fx = el.x + (el.fillX ?? sss.x) * ls;
+      const fy = el.y + (el.fillY ?? sss.y) * ls;
+      const fw = (el.fillW ?? sss.w) * ls;
+      const fh = (el.fillH ?? sss.h) * ls;
+      const fillW = fw * pct;
+      const notch = fh * 0.41 * pct;
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(fx, fy);
+      ctx.lineTo(fx + fillW - notch, fy);
+      ctx.lineTo(fx + fillW, fy + fh / 2);
+      ctx.lineTo(fx + fillW - notch, fy + fh);
+      ctx.lineTo(fx, fy + fh);
+      ctx.closePath();
+      ctx.clip();
+      const grad = ctx.createLinearGradient(fx, fy, fx, fy + fh);
+      grad.addColorStop(0, '#53D8FF');
+      grad.addColorStop(0.25, '#2AB9FF');
+      grad.addColorStop(0.5, '#139BFF');
+      grad.addColorStop(0.75, '#0A82F0');
+      grad.addColorStop(1, '#0463D7');
+      ctx.fillStyle = grad;
+      ctx.fillRect(fx, fy, fillW, fh);
+      ctx.fillStyle = 'rgba(255,255,255,0.35)';
+      ctx.fillRect(fx, fy, fillW, 3 * ls);
+      ctx.fillStyle = 'rgba(0,40,80,0.45)';
+      ctx.fillRect(fx, fy + fh - 4 * ls, fillW, 4 * ls);
+      ctx.shadowColor = 'rgba(0,150,255,0.35)';
+      ctx.shadowBlur = 8;
+      ctx.fillStyle = 'rgba(0,0,0,0)';
+      ctx.fillRect(fx, fy, fillW, fh);
+      ctx.shadowBlur = 0;
+      ctx.restore();
+    }
+    if (el.name === 'ServerLevel.png' || el.name === 'settingsgear.png') continue;
+    const fr = fd.frame;
+    const scl = isGroup ? 1 : viewportScale;
+    const dw = sss.w * el.scale * scl;
+    const dh = sss.h * el.scale * scl;
+    let dx, dy;
+    if (el.name === 'JabAttack.png' || el.name === 'SwingAttack.png') {
+      const right = 1024 - (el.x + sss.x * el.scale) - sss.w * el.scale;
+      const bottom = 576 - (el.y + sss.y * el.scale) - sss.h * el.scale;
+      dx = state.viewW - right * scl - dw;
+      dy = state.viewH - bottom * scl - dh;
+    } else {
+      dx = (el.x + sss.x * el.scale) * scl;
+      dy = (el.y + sss.y * el.scale) * scl;
+    }
+    ctx.drawImage(state.hudSheet, fr.x, fr.y, sss.w, sss.h, dx, dy, dw, dh);
+    if (state.showHudDebug) {
+      const dx2 = dx, dy2 = dy, dw2 = dw, dh2 = dh;
+      const name = el.name;
+      ctx.save();
+      ctx.strokeStyle = '#0f0';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(dx2, dy2, dw2, dh2);
+      ctx.fillStyle = '#0f0';
+      ctx.font = '9px monospace';
+      ctx.fillText(name, dx2, dy2 - 3);
+      ctx.restore();
+    }
+    endHUDTransform(ctx, tf);
+  }
+  const hudTF = applyHUDTransform(ctx, ax, ay);
+
+  // Health bar text overlay
+  if (hbEl) {
+    const sss = state.hudFrames['HealthBar.png'].spriteSourceSize;
+    const ls = hbEl.scale;
+    const fx = hbEl.x + (hbEl.fillX ?? sss.x) * ls;
+    const fy = hbEl.y + (hbEl.fillY ?? sss.y) * ls;
+    const fw = (hbEl.fillW ?? sss.w) * ls;
+    const fh = (hbEl.fillH ?? sss.h) * ls;
+    const me = state.players[state.myId];
+    const hp = me ? me.health : 100;
+    const maxHp = me ? me.maxHealth : 100;
+    const text = hp + ' / ' + maxHp;
+    const cx = fx + fw / 2, cy = fy + fh / 2;
+    ctx.save();
+    ctx.font = 'bold 20px Arial, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.shadowColor = 'rgba(0,0,0,0.8)';
+    ctx.shadowBlur = 3;
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 4;
+    ctx.strokeText(text, cx, cy);
+    ctx.fillStyle = '#fff';
+    ctx.fillText(text, cx, cy);
+    ctx.restore();
+  }
+
+  // Energy bar text overlay
+  const engEl = state.hudLayout?.find(e => e.name === 'EnergyBar.png' && e.visible !== false);
+  if (engEl) {
+    const sss = state.hudFrames['EnergyBar.png'].spriteSourceSize;
+    const ls = engEl.scale;
+    const fx = engEl.x + (engEl.fillX ?? sss.x) * ls;
+    const fy = engEl.y + (engEl.fillY ?? sss.y) * ls;
+    const fw = (engEl.fillW ?? sss.w) * ls;
+    const fh = (engEl.fillH ?? sss.h) * ls;
+    const me = state.players[state.myId];
+    const eng = me ? me.energy : 100;
+    const maxEng = me ? me.maxEnergy : 100;
+    const text = eng + ' / ' + maxEng;
+    const cx = fx + fw / 2, cy = fy + fh / 2;
+    ctx.save();
+    ctx.font = 'bold 20px Arial, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.shadowColor = 'rgba(0,0,0,0.8)';
+    ctx.shadowBlur = 3;
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 4;
+    ctx.strokeText(text, cx, cy);
+    ctx.fillStyle = '#fff';
+    ctx.fillText(text, cx, cy);
+    ctx.restore();
+  }
+
+  // Player level text overlay
+  const plEl = state.hudLayout?.find(e => e.name === 'PlayerLevel');
+  if (plEl) {
+    const text = String(state.level);
+    const tx = plEl.x + (plEl.textX || 0);
+    const ty = plEl.y + (plEl.textY || 0);
+    const tSize = plEl.textSize || 28;
+    ctx.save();
+    ctx.font = '700 ' + tSize + 'px "Teko", "Rajdhani", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.lineJoin = 'round';
+    ctx.miterLimit = 2;
+    ctx.shadowColor = 'rgba(0,0,0,0.45)';
+    ctx.shadowBlur = 3;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(text, tx + 1, ty + 2);
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = '#111';
+    ctx.lineWidth = 6;
+    ctx.strokeText(text, tx, ty);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(text, tx, ty);
+    ctx.restore();
+  }
+
+  // Stats hotkey text overlay
+  const skEl = state.hudLayout?.find(e => e.name === 'StatsHotkey');
+  if (skEl) {
+    const text = 'C';
+    const tx = skEl.x + (skEl.textX || 0);
+    const ty = skEl.y + (skEl.textY || 0);
+    const tSize = skEl.textSize || 28;
+    ctx.save();
+    ctx.font = '700 ' + tSize + 'px "Teko", "Rajdhani", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.lineJoin = 'round';
+    ctx.miterLimit = 2;
+    ctx.shadowColor = 'rgba(0,0,0,0.45)';
+    ctx.shadowBlur = 3;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(text, tx + 1, ty + 2);
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = '#111';
+    ctx.lineWidth = 6;
+    ctx.strokeText(text, tx, ty);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(text, tx, ty);
+    ctx.restore();
+  }
+
+  // Player name text overlay
+  const pnEl = state.hudLayout?.find(e => e.name === 'PlayerName');
+  if (pnEl) {
+    const me = state.players[state.myId];
+    const name = me ? me.name : '';
+    if (!name) return;
+    const tx = pnEl.x, ty = pnEl.y;
+    const tSize = pnEl.textSize || 28;
+    ctx.save();
+    ctx.font = '700 ' + tSize + 'px "Teko", "Rajdhani", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.lineJoin = 'round';
+    ctx.miterLimit = 2;
+    ctx.shadowColor = 'rgba(0,0,0,0.45)';
+    ctx.shadowBlur = 4;
+    ctx.shadowOffsetY = 2;
+    ctx.strokeStyle = '#111';
+    ctx.lineWidth = 6;
+    ctx.strokeText(name, tx, ty);
+    ctx.fillStyle = '#fff';
+    ctx.fillText(name, tx, ty);
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetY = 0;
+    ctx.restore();
+  }
+  endHUDTransform(ctx, hudTF);
+  } finally { _hudRendering = false; }
 }
 
 export function drawSpectatingUI(ctx) {
@@ -117,10 +471,6 @@ export function drawSpectatingUI(ctx) {
 
 export function drawDeadSpectatingUI(ctx, spectatingTarget) {
   if (!state.isDeadSpectating || !spectatingTarget) return;
-  document.getElementById('levelBadge').textContent = spectatingTarget.lvl || 1;
-  document.getElementById('xpFill').style.width = '0%';
-  document.getElementById('xpText').textContent = 'Spectating';
-  document.getElementById('xpPercent').textContent = '';
   ctx.fillStyle = 'rgba(255,200,100,0.8)';
   ctx.font = '14px "Segoe UI", system-ui, sans-serif';
   ctx.textAlign = 'center';
