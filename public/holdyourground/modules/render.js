@@ -1,8 +1,8 @@
 import { state } from './state.js';
 import { getCamera } from './camera.js';
-import { getInput } from './input.js';
+import { getInput, resetKeys } from './input.js';
 import { drawPlayer, drawZombie, drawDebugSwordHitbox, getBladeSegment } from './render-entity.js';
-import { drawStatHUD, drawServerLevel, drawSpectatingUI, drawDeadSpectatingUI, drawDmgNumbers, drawMergeSmoke, drawBuildWatermark, drawHitFlash, drawHUD } from './render-ui.js';
+import { drawStatHUD, drawServerLevel, drawSpectatingUI, drawDeadSpectatingUI, drawDmgNumbers, drawBuildWatermark, drawHitFlash, drawHUD } from './render-ui.js';
 import { drawDiag } from './diag.js';
 
 function shortAngleDist(a, b) {
@@ -46,7 +46,14 @@ function render() {
   ctx.clearRect(0, 0, state.viewW, state.viewH);
   const rT0 = performance.now();
 
-  if (state.matchPhase && state.matchPhase !== 'waiting' && state.phaseTimerStart > 0) {
+  if (state.matchPhase === 'nighttime' && state.waveStartTime > 0) {
+    const elapsed = Math.floor((performance.now() - state.waveStartTime) / 1000);
+    const prev = state._lastWaveSec || -1;
+    if (elapsed !== prev) { document.getElementById('phaseTimer').textContent = elapsed + 's'; state._lastWaveSec = elapsed; }
+  } else if (state.matchPhase === 'daytime' && state.phaseTimer > 0 && state.phaseTimer <= 10000 && !state._wavePopupTriggered && state.waveComposition && state._showNWPopup) {
+    state._wavePopupTriggered = true;
+    state._showNWPopup();
+  } else if (state.matchPhase && state.matchPhase !== 'waiting' && state.phaseTimerStart > 0) {
     const elapsed = performance.now() - state.phaseStartedAt;
     const remaining = Math.max(0, state.phaseTimerStart - elapsed);
     const seconds = Math.ceil(remaining / 1000);
@@ -147,7 +154,6 @@ function render() {
   }
 
   drawDmgNumbers(ctx, cam.x, cam.y);
-  drawMergeSmoke(ctx, cam.x, cam.y);
 
   if (me && me.alive && state.localAnim) {
     const mex = me.px + (me.x - me.px) * alpha;
@@ -207,6 +213,7 @@ let inputInterval = null;
 export function startRender(socket) {
   if (animFrame) { cancelAnimationFrame(animFrame); animFrame = null; }
   if (inputInterval) { clearInterval(inputInterval); inputInterval = null; }
+  resetKeys();
   inputInterval = setInterval(() => {
     if (state.screen === 'playing') {
       const input = getInput();

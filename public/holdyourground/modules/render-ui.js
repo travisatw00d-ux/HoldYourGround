@@ -493,23 +493,6 @@ export function drawDmgNumbers(ctx, camX, camY) {
   ctx.textBaseline = 'alphabetic';
 }
 
-export function drawMergeSmoke(ctx, camX, camY) {
-  for (let i = state.mergeSmokes.length - 1; i >= 0; i--) {
-    const s = state.mergeSmokes[i];
-    s.timer -= 1 / 60;
-    if (s.timer <= 0) { state.mergeSmokes.splice(i, 1); continue; }
-    const pct = 1 - s.timer;
-    const sx = s.x - camX, sy = s.y - camY;
-    for (let r = 0; r < 3; r++) {
-      const radius = 10 + (pct + r * 0.15) * 40;
-      ctx.beginPath();
-      ctx.arc(sx, sy, Math.max(2, radius), 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(160, 160, 160, ${Math.max(0, 1 - pct - r * 0.25)})`;
-      ctx.fill();
-    }
-  }
-}
-
 export function drawBuildWatermark(ctx) {
   if (window.BUILD) {
     ctx.font = '10px monospace';

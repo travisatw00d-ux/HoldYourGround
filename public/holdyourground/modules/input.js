@@ -1,10 +1,27 @@
 import { state } from './state.js';
 
 const keys = {};
+const keyTimers = {};
+
+function clearKeyTimer(key) {
+  if (keyTimers[key]) { clearTimeout(keyTimers[key]); delete keyTimers[key]; }
+  if (key >= 'a' && key <= 'z' && keyTimers[key.toUpperCase()]) { clearTimeout(keyTimers[key.toUpperCase()]); delete keyTimers[key.toUpperCase()]; }
+  if (key >= 'A' && key <= 'Z' && keyTimers[key.toLowerCase()]) { clearTimeout(keyTimers[key.toLowerCase()]); delete keyTimers[key.toLowerCase()]; }
+}
+
+function setKeyTimer(key) {
+  clearKeyTimer(key);
+  keyTimers[key] = setTimeout(() => { keys[key] = false; syncKeyCase(key, false); delete keyTimers[key]; }, 5000);
+}
+
+function syncKeyCase(key, value) {
+  if (key >= 'a' && key <= 'z') keys[key.toUpperCase()] = value;
+  if (key >= 'A' && key <= 'Z') keys[key.toLowerCase()] = value;
+}
 
 export function getInput() {
   const me = state.players[state.myId];
-  if (!me || me.isSpectator || state.isDeadSpectating) return { dx: 0, dy: 0 };
+  if (!me || me.isSpectator || state.isDeadSpectating) return { dx: 0, dy: 0, sprint: false };
   let dx = 0;
   let dy = 0;
   if (keys['w'] || keys['W'] || keys['ArrowUp']) dy = -1;
@@ -13,11 +30,12 @@ export function getInput() {
   if (keys['d'] || keys['D'] || keys['ArrowRight']) dx = 1;
   const len = Math.sqrt(dx * dx + dy * dy);
   if (len > 0) { dx /= len; dy /= len; }
-  return { dx, dy };
+  return { dx, dy, sprint: !!keys['Shift'] };
 }
 
 export function resetKeys() {
   for (const key in keys) keys[key] = false;
+  for (const k in keyTimers) { clearTimeout(keyTimers[k]); delete keyTimers[k]; }
 }
 
 export function setupInput(socket, canvas) {
@@ -32,7 +50,10 @@ export function setupInput(socket, canvas) {
       if (targetId) socket.emit('spectateTarget', { targetId });
       return;
     }
+    if (!e.getModifierState('Shift') && keys['Shift']) keys['Shift'] = false;
     keys[e.key] = true;
+    syncKeyCase(e.key, true);
+    setKeyTimer(e.key);
     if (e.key >= '1' && e.key <= '9') {
       const slot = parseInt(e.key) - 1;
       socket.emit('equip', { slot });
@@ -56,11 +77,21 @@ export function setupInput(socket, canvas) {
   });
 
   document.addEventListener('keyup', (e) => {
+    if (!e.getModifierState('Shift') && keys['Shift']) keys['Shift'] = false;
+    clearKeyTimer(e.key);
     keys[e.key] = false;
+    syncKeyCase(e.key, false);
   });
 
   window.addEventListener('blur', () => {
     for (const key in keys) keys[key] = false;
+    for (const k in keyTimers) { clearTimeout(keyTimers[k]); delete keyTimers[k]; }
+  });
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      for (const key in keys) keys[key] = false;
+      for (const k in keyTimers) { clearTimeout(keyTimers[k]); delete keyTimers[k]; }
+    }
   });
 
   canvas.addEventListener('wheel', (e) => {

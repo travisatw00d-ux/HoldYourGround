@@ -91,6 +91,12 @@
     serverLevel: { x: 53, y: 56, scale: 0.4, ty: -6 }
   };
 
+  const MOB_TYPES = [
+    { id: 'zombie',  name: 'Zombie',  emoji: '🧟', miniFrame: 'zombieminibig.png', unlockLevel: 1,  minCount: 90,  maxCount: 110, countGrowth: 2, baseHealth: 5, healthGrowth: 1.5, baseSpeed: 1.5, speedDecay: 0 },
+    { id: 'troll',   name: 'Troll',   emoji: '👹', unlockLevel: 5,  minCount: 5,   maxCount: 15,  countGrowth: 1, baseHealth: 15, healthGrowth: 2,   baseSpeed: 1.3, speedDecay: 0 },
+    { id: 'goblin',  name: 'Goblin',  emoji: '👺', unlockLevel: 10, minCount: 3,   maxCount: 10,  countGrowth: 1, baseHealth: 8,  healthGrowth: 1.8, baseSpeed: 1.6, speedDecay: 0.01 },
+  ];
+
   const KNIGHT_BLADE_TIP_X = -10;
   const KNIGHT_BLADE_TIP_Y = -87;
   const KNIGHT_BLADE_HILT_X = 0;
@@ -132,7 +138,7 @@
   };
 
   if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { BASE_STATS, ITEMS, ITEM_VISUALS, ANIMATIONS, SWORD_IMG_SIZE, BLADE_TIP_X, BLADE_TIP_Y, BLADE_HILT_X, BLADE_HILT_Y, ZOMBIE_VISUALS, ZOMBIE_ANIMATIONS, SCREEN_UI, KNIGHT_VISUALS, KNIGHT_ANIMATIONS, KNIGHT_BLADE_TIP_X, KNIGHT_BLADE_TIP_Y, KNIGHT_BLADE_HILT_X, KNIGHT_BLADE_HILT_Y };
+    module.exports = { MOB_TYPES, BASE_STATS, ITEMS, ITEM_VISUALS, ANIMATIONS, SWORD_IMG_SIZE, BLADE_TIP_X, BLADE_TIP_Y, BLADE_HILT_X, BLADE_HILT_Y, ZOMBIE_VISUALS, ZOMBIE_ANIMATIONS, SCREEN_UI, KNIGHT_VISUALS, KNIGHT_ANIMATIONS, KNIGHT_BLADE_TIP_X, KNIGHT_BLADE_TIP_Y, KNIGHT_BLADE_HILT_X, KNIGHT_BLADE_HILT_Y };
   } else {
     window.BASE_STATS = BASE_STATS;
     window.ITEMS = ITEMS;
@@ -145,6 +151,7 @@
     window.BLADE_HILT_Y = BLADE_HILT_Y;
     window.ZOMBIE_VISUALS = ZOMBIE_VISUALS;
     window.ZOMBIE_ANIMATIONS = ZOMBIE_ANIMATIONS;
+    window.MOB_TYPES = MOB_TYPES;
     window.SCREEN_UI = SCREEN_UI;
     window.KNIGHT_VISUALS = KNIGHT_VISUALS;
     window.KNIGHT_ANIMATIONS = KNIGHT_ANIMATIONS;

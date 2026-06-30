@@ -5,15 +5,43 @@ const {
 function processPlayerMovement(p) {
   if (p.attackCooldown > 0) p.attackCooldown--;
 
-  p.velX += p.input.dx * p.speed * 0.12;
-  p.velY += p.input.dy * p.speed * 0.12;
-  p.velX *= 0.88;
-  p.velY *= 0.88;
+  if (p.sprint && p.energy > 0 && !p._sprintDepleted) {
+    p.energy = Math.max(0, p.energy - 1.5);
+  } else if (p.sprint && p.energy === 0 && !p._sprintDepleted) {
+    p._sprintDepleted = true;
+    p.sprintEndCooldown = Date.now();
+  } else if ((!p.sprint || p._sprintDepleted) && Date.now() - p.sprintEndCooldown >= 3000) {
+    p.energy = Math.min(p.maxEnergy || 100, p.energy + 0.5);
+  }
+
+  const canSprint = p.sprint && p.energy > 0 && !p._sprintDepleted;
+  const speedBonus = canSprint ? 2 : 0;
+  const curSpeed = p.speed + speedBonus;
+
+  if (p.sprint && p.energy > 0 && !p._sprintDepleted) {
+    p.velX += p.input.dx * curSpeed * 0.35;
+    p.velY += p.input.dy * curSpeed * 0.35;
+    p.velX *= 0.85;
+    p.velY *= 0.85;
+  } else {
+    p.velX += p.input.dx * curSpeed * 0.12;
+    p.velY += p.input.dy * curSpeed * 0.12;
+    p.velX *= 0.88;
+    p.velY *= 0.88;
+  }
 
   const speed = Math.sqrt(p.velX * p.velX + p.velY * p.velY);
-  if (speed > p.speed) {
-    p.velX = (p.velX / speed) * p.speed;
-    p.velY = (p.velY / speed) * p.speed;
+  if (speed > curSpeed) {
+    p.velX = (p.velX / speed) * curSpeed;
+    p.velY = (p.velY / speed) * curSpeed;
+  }
+
+  if (!p.sprint || p.energy <= 0 || p._sprintDepleted) {
+    const snapSpeed = Math.sqrt(p.velX * p.velX + p.velY * p.velY);
+    if (snapSpeed > p.speed) {
+      p.velX = (p.velX / snapSpeed) * p.speed;
+      p.velY = (p.velY / snapSpeed) * p.speed;
+    }
   }
 
   p.x += p.velX;

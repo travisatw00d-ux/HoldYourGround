@@ -1,0 +1,20 @@
+{"frames": {
+
+"zombieminibig.png":
+{
+	"frame": {"x":1,"y":1,"w":670,"h":914},
+	"rotated": false,
+	"trimmed": true,
+	"spriteSourceSize": {"x":300,"y":139,"w":670,"h":914},
+	"sourceSize": {"w":1254,"h":1254}
+}},
+"meta": {
+	"app": "https://www.codeandweb.com/texturepacker",
+	"version": "1.0",
+	"image": "Minis.png",
+	"format": "RGBA8888",
+	"size": {"w":672,"h":916},
+	"scale": "1",
+	"smartupdate": "$TexturePacker:SmartUpdate:edc10d05ad1e6b17fabdc6bd833d1b4b:d1ad35c573131130b52acb77c6b67752:785fd8b32c65ef67da1ed394eaabd4e7$"
+}
+}

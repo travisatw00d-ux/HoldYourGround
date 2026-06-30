@@ -263,8 +263,16 @@ function drawKnightHand(ctx, p, sx, sy) {
   ctx.restore();
 }
 
-function drawZombieHand(ctx, z, szx, szy, angle, handKey, lvl) {
-  const isTroll = lvl >= 6;
+function getMobSpritePrefix(z) {
+  const mobTypes = window.MOB_TYPES || [];
+  const mt = mobTypes[z.mobType];
+  if (mt && mt.id === 'troll') return 'troll';
+  return 'zombie';
+}
+
+function drawZombieHand(ctx, z, szx, szy, angle, handKey) {
+  const prefix = getMobSpritePrefix(z);
+  const isTroll = prefix === 'troll';
   const fname = handKey === 'left_hand' ? (isTroll ? 'trolllefthand.png' : 'zombielefthand.png') : (isTroll ? 'trollrighthand.png' : 'zombierighthand.png');
   const frame = state.spriteFrames?.[fname]?.frame;
   if (!frame) return;
@@ -377,10 +385,11 @@ export function drawPlayer(ctx, p, sx, sy, alpha, topKills) {
 }
 
 export function drawZombie(ctx, z, szx, szy, zombieAngle) {
-  const headKey = z.lvl >= 6 ? 'trollhead.png' : 'zombiehead.png';
+  const prefix = getMobSpritePrefix(z);
+  const headKey = prefix === 'troll' ? 'trollhead.png' : 'zombiehead.png';
   const headFrame = state.spriteFrames?.[headKey]?.frame;
   if (headFrame) {
-    const headScale = (z.lvl >= 6 ? 1.1 : 1.0);
+    const headScale = prefix === 'troll' ? 1.1 : 1.0;
     const sz = (40 * headScale) / Math.max(headFrame.w, headFrame.h);
     ctx.save();
     ctx.translate(szx, szy);
@@ -388,8 +397,8 @@ export function drawZombie(ctx, z, szx, szy, zombieAngle) {
     ctx.drawImage(getSpriteFromSheet(state.spriteSheet, headFrame.w * sz, headFrame.h * sz, headFrame), -(headFrame.w * sz) / 2, -(headFrame.h * sz) / 2, headFrame.w * sz, headFrame.h * sz);
     ctx.restore();
   }
-  drawZombieHand(ctx, z, szx, szy, zombieAngle, 'left_hand', z.lvl);
-  drawZombieHand(ctx, z, szx, szy, zombieAngle, 'right_hand', z.lvl);
+  drawZombieHand(ctx, z, szx, szy, zombieAngle, 'left_hand');
+  drawZombieHand(ctx, z, szx, szy, zombieAngle, 'right_hand');
   ctx.fillStyle = '#ff6666';
   ctx.fillText(z.label || 'zombie', szx, szy - 30);
   drawHealthBar(ctx, szx, szy - 24, 30, 3, z.health, z.maxHealth);

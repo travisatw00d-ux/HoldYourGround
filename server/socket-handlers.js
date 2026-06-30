@@ -2,6 +2,7 @@ const { WORLD_W, WORLD_H, MAX_PLAYERS } = require('./config');
 const auth = require('./auth');
 const playerMod = require('./player');
 const roomManager = require('./game-loop');
+const expMod = require('./exp');
 const fs = require('fs');
 const path = require('path');
 
@@ -114,9 +115,9 @@ module.exports = function registerSocket(socket, { io, broadcastRoomList, broadc
     room.respawnPlayer(socket.id);
   });
 
-  socket.on('input', ({ dx, dy, angle }) => {
+  socket.on('input', ({ dx, dy, angle, sprint }) => {
     const room = roomManager.getPlayerRoom(socket.id);
-    if (room) room.handleInput(socket.id, { dx, dy, angle });
+    if (room) room.handleInput(socket.id, { dx, dy, angle, sprint });
   });
 
   socket.on('attack', ({ facingAngle }) => {
@@ -150,6 +151,28 @@ module.exports = function registerSocket(socket, { io, broadcastRoomList, broadc
   socket.on('killAllMobs', () => {
     const room = roomManager.getPlayerRoom(socket.id);
     if (room) room.killAllMobs();
+  });
+
+  socket.on('adminAdvancePhase', () => {
+    const room = roomManager.getPlayerRoom(socket.id);
+    if (room) room._advancePhase();
+  });
+
+  socket.on('adminSetLevel', ({ delta }) => {
+    const room = roomManager.getPlayerRoom(socket.id);
+    if (!room) return;
+    const p = room.players[socket.id];
+    if (!p) return;
+    p.lvl = Math.max(1, (p.lvl || 1) + delta);
+    const totalExp = expMod.cumulativeExp(p.lvl, 0);
+    p.exp = totalExp;
+    room._persistedExp.set(socket.id, totalExp);
+    playerMod.recalcStats(p);
+    const expToNext = expMod.getExpToNext(p.lvl);
+    socket.emit('accountUpdate', { exp: p.exp, level: p.lvl, expToNext, gold: p.gold });
+    for (const oid in room.players) {
+      room.io.to(oid).emit('playerInfo', playerMod.playerInfoObj(p));
+    }
   });
 
   socket.on('leaveRoom', () => {
@@ -203,6 +226,8 @@ module.exports = function registerSocket(socket, { io, broadcastRoomList, broadc
     if (!p) return;
     p.isSpectator = true;
     p.alive = false;
+    p.sprint = false;
+    p.sprintEndCooldown = 0;
     const living = Object.values(room.players).find(p2 => p2.alive && p2.id !== socket.id);
     if (living) { p.x = living.x; p.y = living.y; }
     for (const oid in room.players) {

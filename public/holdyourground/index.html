@@ -223,7 +223,45 @@
             <span class="settings-label">Kill All Mobs</span>
             <button id="killMobsBtn" style="padding:6px 16px;font-size:0.85rem">Kill</button>
           </div>
+          <div class="settings-row" style="margin-top:8px">
+            <span class="settings-label">Next Phase</span>
+            <button id="nextPhaseBtn" style="padding:6px 16px;font-size:0.85rem">Advance</button>
+          </div>
+          <div class="settings-row" style="margin-top:8px">
+            <span class="settings-label">Level</span>
+            <button id="levelMinusBtn" style="padding:2px 10px;font-size:1.1rem">−</button>
+            <span id="adminLevelDisplay" style="color:#FFC83D;font-weight:700;min-width:28px;text-align:center;display:inline-block">1</span>
+            <button id="levelPlusBtn" style="padding:2px 10px;font-size:1.1rem">+</button>
+          </div>
         </div>
+      </div>
+    </div>
+
+    <!-- Next Wave Popup -->
+    <div id="nwpOverlay" class="nwp-overlay"></div>
+    <div id="nextWaveTab" class="nwp-tab hidden">▶</div>
+    <div id="nextWavePopup" class="nwp-shell hidden">
+      <button class="nwp-close" id="nwpClose">&times;</button>
+      <div class="nwp-title" id="nwpTitle">NEXT WAVE</div>
+      <div class="nwp-divider"></div>
+      <div class="nwp-list" id="nwpList"></div>
+      <div id="nwpMore" class="nwp-more"></div>
+      <div class="nwp-summary">
+        <span>SL <span id="nwpSL">—</span></span>
+        <span>Wave <span id="nwpWave">—</span></span>
+        <span>Total <span id="nwpTotal" style="color:#FFC83D;font-weight:700;">—</span></span>
+      </div>
+      <div id="nwpIncoming" class="nwp-incoming-section" style="display:none;">
+        <div class="nwp-incoming-label">INCOMING</div>
+        <div id="nwpIncomingList"></div>
+      </div>
+      <div style="text-align:center;color:rgba(255,255,255,0.2);font-size:0.55rem;padding:1px 0 2px;flex-shrink:0;">[Tab] to toggle</div>
+      <div class="nwp-grid" id="nwpGrid"></div>
+      <div class="nwp-details">
+        <span>SL <b id="dSL" style="color:#fff;">—</b></span>
+        <span>Wave <b id="dWave" style="color:#fff;">—</b></span>
+        <span>Total <b id="dTotal" style="color:#FFC83D;">—</b></span>
+        <span>Types <b id="dTypes" style="color:#fff;">—</b></span>
       </div>
     </div>
 

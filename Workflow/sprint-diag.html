@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sprint Key Diagnostic</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #111;
+    color: #ccc;
+    font-family: 'Consolas', 'Courier New', monospace;
+    padding: 20px;
+    font-size: 14px;
+  }
+  h1 { color: #FFC83D; font-size: 1.2rem; margin-bottom: 12px; letter-spacing: 1px; }
+  h2 { color: #888; font-size: 0.85rem; margin: 16px 0 6px; text-transform: uppercase; letter-spacing: 1px; }
+
+  #status { color: #4ade80; font-size: 0.75rem; margin-bottom: 12px; }
+
+  .key-grid {
+    display: grid;
+    grid-template-columns: repeat(8, 70px);
+    gap: 6px;
+    margin-bottom: 8px;
+  }
+  .key-cell {
+    background: #1a1a2e;
+    border: 1px solid #333;
+    border-radius: 6px;
+    padding: 6px 4px;
+    text-align: center;
+    transition: background 0.1s, border-color 0.1s;
+  }
+  .key-cell .label { font-size: 0.65rem; color: #666; text-transform: uppercase; }
+  .key-cell .value { font-size: 1rem; font-weight: 700; margin-top: 2px; }
+  .key-cell.pressed { background: #1a3a1a; border-color: #4ade80; }
+  .key-cell.pressed .value { color: #4ade80; }
+  .key-cell.stuck { background: #3a1a1a; border-color: #ef4444; animation: pulse 1s infinite; }
+  .key-cell.stuck .value { color: #ef4444; }
+  .key-cell.mismatch { border-color: #ffaa00; }
+  .key-cell.mismatch .value { color: #ffaa00; }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+
+  .legend { display: flex; gap: 16px; font-size: 0.65rem; margin-bottom: 10px; }
+  .legend span { display: flex; align-items: center; gap: 4px; }
+  .legend .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+  .legend .dot.green { background: #4ade80; }
+  .legend .dot.red { background: #ef4444; }
+  .legend .dot.yellow { background: #ffaa00; }
+
+  .packet-log {
+    background: #0a0a0f;
+    border: 1px solid #222;
+    border-radius: 6px;
+    padding: 8px;
+    max-height: 200px;
+    overflow-y: auto;
+    font-size: 0.75rem;
+    line-height: 1.6;
+  }
+  .packet-log .entry { padding: 2px 0; border-bottom: 1px solid rgba(255,255,255,0.03); }
+  .packet-log .entry .t { color: #555; }
+  .packet-log .entry .dx { color: #4a9eff; }
+  .packet-log .entry .dy { color: #4a9eff; }
+  .packet-log .entry .sprint { color: #FFC83D; font-weight: 700; }
+
+  .summary {
+    margin-top: 12px;
+    display: flex;
+    gap: 16px;
+    font-size: 0.75rem;
+    flex-wrap: wrap;
+  }
+  .summary .stat { background: #1a1a2e; border: 1px solid #333; border-radius: 6px; padding: 6px 10px; }
+  .summary .stat .label { color: #666; }
+  .summary .stat .val { color: #fff; font-weight: 700; margin-left: 4px; }
+
+  .alert { color: #ef4444; font-weight: 700; font-size: 0.75rem; margin-top: 6px; display: none; }
+  .alert.visible { display: block; }
+  .alert.yellow { color: #ffaa00; }
+</style>
+</head>
+<body>
+
+<h1>⏎ Sprint Key Diagnostic</h1>
+<p id="status">Status: Waiting for keyboard input...</p>
+
+<div class="summary">
+  <div class="stat"><span class="label">Last Event:</span><span class="val" id="lastEventTime">—</span></div>
+  <div class="stat"><span class="label">Age:</span><span class="val" id="lastAge">—</span></div>
+  <div class="stat"><span class="label">Packets:</span><span class="val" id="packetCount">0</span></div>
+</div>
+
+<div id="alert" class="alert">⚠ Stuck keys detected (held > 3s without new event)!</div>
+<div id="caseAlert" class="alert yellow">⚠ Case mismatch detected! Upper/lower differ — this is the bug.</div>
+
+<div class="legend">
+  <span><span class="dot green"></span> Pressed</span>
+  <span><span class="dot yellow"></span> Case mismatch</span>
+  <span><span class="dot red"></span> Stuck</span>
+</div>
+
+<h2>Keyboard State (upper / lower case)</h2>
+<div class="key-grid" id="keyGrid">
+  <div class="key-cell" data-key="w"><div class="label">W (lower)</div><div class="value">⬆</div></div>
+  <div class="key-cell" data-key="W"><div class="label">W (UPPER)</div><div class="value">⬆</div></div>
+  <div class="key-cell" data-key="a"><div class="label">a (lower)</div><div class="value">⬅</div></div>
+  <div class="key-cell" data-key="A"><div class="label">A (UPPER)</div><div class="value">⬅</div></div>
+  <div class="key-cell" data-key="s"><div class="label">s (lower)</div><div class="value">⬇</div></div>
+  <div class="key-cell" data-key="S"><div class="label">S (UPPER)</div><div class="value">⬇</div></div>
+  <div class="key-cell" data-key="d"><div class="label">d (lower)</div><div class="value">➡</div></div>
+  <div class="key-cell" data-key="D"><div class="label">D (UPPER)</div><div class="value">➡</div></div>
+  <div class="key-cell" data-key="Shift"><div class="label">Shift</div><div class="value">⚡</div></div>
+  <div class="key-cell" data-key="ArrowUp"><div class="label">▲ Up</div><div class="value">⬆</div></div>
+  <div class="key-cell" data-key="ArrowDown"><div class="label">▼ Dn</div><div class="value">⬇</div></div>
+  <div class="key-cell" data-key="ArrowLeft"><div class="label">◀ Left</div><div class="value">⬅</div></div>
+  <div class="key-cell" data-key="ArrowRight"><div class="label">▶ Right</div><div class="value">➡</div></div>
+</div>
+
+<h2>Energy & Physics State</h2>
+<div class="summary" id="energyDisplay">
+  <div class="stat"><span class="label">Energy</span><span class="val" id="energyVal">100</span></div>
+  <div class="stat"><span class="label">Sprint</span><span class="val" id="sprintVal">OFF</span></div>
+  <div class="stat"><span class="label">p.speed</span><span class="val" id="speedVal">7</span></div>
+  <div class="stat"><span class="label">curSpeed</span><span class="val" id="curSpeedVal">7</span></div>
+  <div class="stat"><span class="label">Velocity</span><span class="val" id="velVal">0.0</span></div>
+  <div class="stat"><span class="label">Input</span><span class="val" id="inputVal">(0,0)</span></div>
+</div>
+
+<h2>Last 10 Inputs</h2>
+<div id="packetLog" class="packet-log">
+  <div style="color:#444">Waiting for keyboard events...</div>
+</div>
+
+<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;align-items:center">
+  <button id="freezeBtn" style="background:#333;border:1px solid #555;border-radius:4px;padding:6px 14px;color:#fff;font-size:0.75rem;cursor:pointer">❄ Freeze</button>
+  <button id="copyBtn" style="background:#333;border:1px solid #555;border-radius:4px;padding:6px 14px;color:#fff;font-size:0.75rem;cursor:pointer">📋 Copy Report</button>
+  <span id="freezeLabel" style="color:#FFC83D;font-size:0.7rem;display:none">❄ FROZEN</span>
+</div>
+<p style="color:#555;font-size:0.65rem;margin-top:8px">
+  <b style="color:#FFC83D">Test:</b> Hold Shift+W in the game window, then release Shift first, then release W.<br>
+  <b style="color:#ffaa00">Yellow border</b> = upper/lower case mismatch — the key is stuck in one case!<br>
+  <b style="color:#ef4444">Red pulsing</b> = stuck key (> 3s without event).
+</p>
+
+<script>
+const keys = {};
+const keyTimers = {};
+const lastPressTime = {};
+let lastKeyTime = 0;
+let eventCount = 0;
+const packetHistory = [];
+const STUCK_MS = 3000;
+
+// Energy simulation (matches server physics)
+let simEnergy = 100;
+let simMaxEnergy = 100;
+let simVelX = 0;
+let simVelY = 0;
+let simPosX = 1600;
+let simPosY = 1200;
+const ARENA_W = 3200;
+const ARENA_H = 2400;
+const PLAYER_RAD = 20;
+let simSprintEndCooldown = 0;
+let simLoggedZero = false;
+let simZeroTickCount = 0;
+let frozen = false;
+let zeroPacketSkip = 0;
+
+const cellEls = {};
+document.querySelectorAll('.key-cell').forEach(el => {
+  cellEls[el.dataset.key] = el;
+});
+
+function setBothCases(key, value) {
+  keys[key] = value;
+  if (key >= 'a' && key <= 'z') keys[key.toUpperCase()] = value;
+  if (key >= 'A' && key <= 'Z') keys[key.toLowerCase()] = value;
+}
+
+function updateCell(displayKey, pressed) {
+  const el = cellEls[displayKey];
+  if (!el) return;
+  el.classList.toggle('pressed', pressed);
+
+  // Stuck check: use lowercase key for letter keys to avoid case-split timers
+  const timerKey = (displayKey >= 'a' && displayKey <= 'z') || (displayKey >= 'A' && displayKey <= 'Z') ? displayKey.toLowerCase() : displayKey;
+  const isStuck = pressed && lastPressTime[timerKey] && (Date.now() - lastPressTime[timerKey] > STUCK_MS);
+  el.classList.toggle('stuck', isStuck);
+
+  // Mismatch check: for letter keys, upper vs lower
+  if (displayKey >= 'a' && displayKey <= 'z') {
+    const upper = displayKey.toUpperCase();
+    el.classList.toggle('mismatch', keys[displayKey] !== keys[upper]);
+  } else if (displayKey >= 'A' && displayKey <= 'Z') {
+    const lower = displayKey.toLowerCase();
+    el.classList.toggle('mismatch', keys[displayKey] !== keys[lower]);
+  } else {
+    el.classList.remove('mismatch');
+  }
+}
+
+function clearKeyTimerBoth(key) {
+  if (keyTimers[key]) { clearTimeout(keyTimers[key]); delete keyTimers[key]; }
+  if (key >= 'a' && key <= 'z' && keyTimers[key.toUpperCase()]) { clearTimeout(keyTimers[key.toUpperCase()]); delete keyTimers[key.toUpperCase()]; }
+  if (key >= 'A' && key <= 'Z' && keyTimers[key.toLowerCase()]) { clearTimeout(keyTimers[key.toLowerCase()]); delete keyTimers[key.toLowerCase()]; }
+}
+
+function updateAllCells() {
+  for (const cellKey of Object.keys(cellEls)) {
+    const isPressed = !!keys[cellKey] || !!(cellKey === 'Shift' && keys['Shift']);
+    updateCell(cellKey, isPressed);
+  }
+}
+
+function simulateGetInput() {
+  let dx = 0;
+  let dy = 0;
+  if (keys['w'] || keys['W'] || keys['ArrowUp']) dy = -1;
+  if (keys['s'] || keys['S'] || keys['ArrowDown']) dy = 1;
+  if (keys['a'] || keys['A'] || keys['ArrowLeft']) dx = -1;
+  if (keys['d'] || keys['D'] || keys['ArrowRight']) dx = 1;
+  const len = Math.sqrt(dx * dx + dy * dy);
+  if (len > 0) { dx = +(dx / len).toFixed(3); dy = +(dy / len).toFixed(3); }
+  return { dx, dy, sprint: !!keys['Shift'] };
+}
+
+function simulatePhysics() {
+  const sprinting = !!keys['Shift'];
+  const input = simulateGetInput();
+
+  // Store pre-energy values for logging
+  const preEnergy = simEnergy;
+  const preVelX = simVelX;
+  const preVelY = simVelY;
+
+  // Energy drain/regen (matches server physics.js)
+  if (sprinting && simEnergy > 0) {
+    simEnergy = Math.max(0, simEnergy - 1.5);
+  } else if (!sprinting && Date.now() - simSprintEndCooldown >= 3000) {
+    simEnergy = Math.min(simMaxEnergy, simEnergy + 0.5);
+  }
+
+  const speedBonus = (sprinting && simEnergy > 0) ? 3 : 0;
+  const curSpeed = 7 + speedBonus;
+
+  // Pre-physics velocity
+  const preVel = Math.sqrt(simVelX * simVelX + simVelY * simVelY);
+
+  simVelX += input.dx * curSpeed * 0.12;
+  simVelY += input.dy * curSpeed * 0.12;
+  simVelX *= 0.88;
+  simVelY *= 0.88;
+  const vel = Math.sqrt(simVelX * simVelX + simVelY * simVelY);
+  if (vel > curSpeed) { simVelX = (simVelX / vel) * curSpeed; simVelY = (simVelY / vel) * curSpeed; }
+
+  // Coasting clamp (matches server physics.js lines 28-33)
+  if (input.dx === 0 && input.dy === 0 && vel > 7) {
+    simVelX = (simVelX / vel) * 7;
+    simVelY = (simVelY / vel) * 7;
+  }
+
+  const postVel = Math.sqrt(simVelX * simVelX + simVelY * simVelY);
+
+  // Position update + arena bounds clamp (matches server physics.js)
+  simPosX += simVelX;
+  simPosY += simVelY;
+  simPosX = Math.max(PLAYER_RAD, Math.min(ARENA_W - PLAYER_RAD, simPosX));
+  simPosY = Math.max(PLAYER_RAD, Math.min(ARENA_H - PLAYER_RAD, simPosY));
+
+  // Stop logging early if at arena edge and input points into wall
+  const atLeft = simPosX <= PLAYER_RAD + 1;
+  const atRight = simPosX >= ARENA_W - PLAYER_RAD - 1;
+  const atTop = simPosY <= PLAYER_RAD + 1;
+  const atBottom = simPosY >= ARENA_H - PLAYER_RAD - 1;
+  const pushingIntoWall = (atLeft && input.dx < 0) || (atRight && input.dx > 0) || (atTop && input.dy < 0) || (atBottom && input.dy > 0);
+
+  // DETAILED LOGGING when energy transitioned to/at 0 while sprinting
+  const energyJustHitZero = (preEnergy > 0 && simEnergy === 0);
+  const energyIsZeroSprinting = (simEnergy === 0 && sprinting);
+
+  if (energyJustHitZero || energyIsZeroSprinting) {
+    simZeroTickCount++;
+    if (energyJustHitZero) {
+      simLoggedZero = true;
+      console.log('=== ENERGY HIT ZERO ========================');
+      console.log('  tick=' + simZeroTickCount + ' (energy just reached 0)');
+    } else if (simLoggedZero && simZeroTickCount <= 30) {
+      console.log('=== ENERGY ZERO TICK ' + simZeroTickCount + ' ====================');
+    } else if (!simLoggedZero) {
+      // don't log
+    }
+
+    if (simZeroTickCount <= 30) {
+      console.log('  sprint=' + sprinting + ' dx=' + input.dx + ' dy=' + input.dy + ' energy=' + simEnergy.toFixed(1));
+      console.log('  speed=7  speedBonus=' + speedBonus + '  curSpeed=' + curSpeed);
+      console.log('  preVel=(' + preVelX.toFixed(2) + ',' + preVelY.toFixed(2) + ')  |vel|=' + preVel.toFixed(2));
+      console.log('  postVel=(' + simVelX.toFixed(2) + ',' + simVelY.toFixed(2) + ')  |vel|=' + postVel.toFixed(2));
+      if (input.dx === 0 && input.dy === 0) console.log('  ** INPUT IS ZERO **');
+      if (postVel < 0.5) console.log('  ** VELOCITY NEAR ZERO **');
+      if (curSpeed === 0) console.log('  ** CURSPEED IS ZERO **');
+      console.log('');
+    }
+  } else {
+    simZeroTickCount = 0;
+  }
+
+  if (sprinting && simEnergy > 0) simLoggedZero = false;
+  if (!sprinting) { simLoggedZero = false; simZeroTickCount = 0; }
+
+  // Update display
+  document.getElementById('energyVal').textContent = Math.round(simEnergy);
+  document.getElementById('sprintVal').textContent = sprinting ? 'ON' : 'OFF';
+  document.getElementById('sprintVal').style.color = sprinting ? '#4ade80' : '#666';
+  document.getElementById('speedVal').textContent = '7';
+  document.getElementById('curSpeedVal').textContent = curSpeed;
+  document.getElementById('velVal').textContent = postVel.toFixed(1);
+  document.getElementById('inputVal').textContent = '(' + input.dx + ', ' + input.dy + ')';
+}
+
+function pushPacket() {
+  if (frozen) return;
+  const input = simulateGetInput();
+  const isZero = input.dx === 0 && input.dy === 0 && !input.sprint;
+  if (isZero) {
+    zeroPacketSkip++;
+    if (zeroPacketSkip % 10 !== 0) return; // only keep 1 in 10 zero packets
+  }
+  packetHistory.push({ t: Date.now(), ...input });
+  if (packetHistory.length > 10) packetHistory.shift();
+  renderPackets();
+}
+
+function renderPackets() {
+  const log = document.getElementById('packetLog');
+  const now = Date.now();
+  log.innerHTML = packetHistory.slice().reverse().map(p => {
+    const age = now - p.t;
+    return `<div class="entry">
+      <span class="t">-${age}ms</span>
+      dx=<span class="dx">${p.dx}</span>
+      dy=<span class="dy">${p.dy}</span>
+      <span class="sprint">${p.sprint ? '⚡SPRINT' : ''}</span>
+      ${p.dx !== 0 || p.dy !== 0 ? ' 🟢MOVING' : ''}
+    </div>`;
+  }).join('');
+  document.getElementById('packetCount').textContent = packetHistory.length;
+}
+
+function updateStats() {
+  const now = Date.now();
+  const age = now - lastKeyTime;
+  document.getElementById('lastEventTime').textContent = lastKeyTime ? new Date(lastKeyTime).toLocaleTimeString() : '—';
+  document.getElementById('lastAge').textContent = lastKeyTime ? age + 'ms' : '—';
+
+  // Stuck keys — use lowercase for letter keys to avoid case-split
+  let anyStuck = false;
+  for (const cellKey of Object.keys(cellEls)) {
+    if (cellKey === 'Shift') {
+      if (keys['Shift'] && lastPressTime['Shift'] && (now - lastPressTime['Shift'] > STUCK_MS)) anyStuck = true;
+    } else if (cellKey >= 'a' && cellKey <= 'z') {
+      if (keys[cellKey] && lastPressTime[cellKey] && (now - lastPressTime[cellKey] > STUCK_MS)) anyStuck = true;
+    }
+  }
+  document.getElementById('alert').classList.toggle('visible', anyStuck);
+
+  // Case mismatch
+  let anyMismatch = false;
+  for (const c of 'wasd') {
+    if (keys[c] !== keys[c.toUpperCase()]) { anyMismatch = true; break; }
+  }
+  document.getElementById('caseAlert').classList.toggle('visible', anyMismatch);
+}
+
+document.getElementById('freezeBtn').addEventListener('click', () => {
+  frozen = !frozen;
+  document.getElementById('freezeBtn').textContent = frozen ? '▶ Resume' : '❄ Freeze';
+  document.getElementById('freezeBtn').style.background = frozen ? '#3a1a1a' : '#333';
+  document.getElementById('freezeBtn').style.borderColor = frozen ? '#ef4444' : '#555';
+  document.getElementById('freezeLabel').style.display = frozen ? 'block' : 'none';
+});
+
+document.getElementById('copyBtn').addEventListener('click', () => {
+  const lines = ['=== SPRINT DIAG REPORT ==='];
+  lines.push('Time: ' + new Date().toLocaleTimeString());
+  lines.push('Keys: ' + Object.keys(keys).filter(k => keys[k]).join(', ') || '(none)');
+  lines.push('Energy: ' + Math.round(simEnergy) + '/' + simMaxEnergy);
+  lines.push('Sprint: ' + (!!keys['Shift'] ? 'ON' : 'OFF'));
+  lines.push('Velocity: (' + simVelX.toFixed(2) + ', ' + simVelY.toFixed(2) + ')');
+  lines.push('');
+  lines.push('Last 10 inputs:');
+  const pkts = packetHistory.slice();
+  for (const p of pkts.reverse()) {
+    lines.push('  dx=' + p.dx + ' dy=' + p.dy + ' sprint=' + p.sprint + ' age=' + (Date.now() - p.t) + 'ms');
+  }
+  lines.push('');
+  if (packetHistory.length > 0) {
+    const last = packetHistory[packetHistory.length - 1];
+    const moving = last.dx !== 0 || last.dy !== 0;
+    lines.push('Last input MOVING: ' + moving);
+  }
+  navigator.clipboard.writeText(lines.join('\n')).then(() => {
+    document.getElementById('copyBtn').textContent = '✅ Copied!';
+    setTimeout(() => document.getElementById('copyBtn').textContent = '📋 Copy Report', 2000);
+  }).catch(() => {});
+});
+
+function handleKeyEvent(e, isDown) {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  eventCount++;
+  lastKeyTime = Date.now();
+
+  // Clear old timer for this key and its opposite case
+  clearKeyTimerBoth(e.key);
+
+  if (isDown) {
+    // Set both cases for letter keys
+    setBothCases(e.key, true);
+    // Only set the exact key — the game does it this way
+    keys[e.key] = true;
+
+    // Timer: auto-clear after 2s
+    keyTimers[e.key] = setTimeout(() => {
+      setBothCases(e.key, false);
+      keys[e.key] = false;
+      delete keyTimers[e.key];
+      updateAllCells();
+    }, 5000);
+    const pressKey = (e.key >= 'a' && e.key <= 'z') || (e.key >= 'A' && e.key <= 'Z') ? e.key.toLowerCase() : e.key;
+    lastPressTime[pressKey] = Date.now();
+  } else {
+    // Clear both cases for letter keys
+    setBothCases(e.key, false);
+    keys[e.key] = false;
+    clearKeyTimerBoth(e.key);
+  }
+
+  updateAllCells();
+  pushPacket();
+  renderPackets();
+  updateStats();
+  const action = isDown ? 'DOWN' : 'UP  ';
+  document.getElementById('status').textContent = `Status: Active — ${eventCount} events — ${action} key="${e.key}"`;
+}
+
+document.addEventListener('keydown', (e) => handleKeyEvent(e, true));
+document.addEventListener('keyup', (e) => handleKeyEvent(e, false));
+
+window.addEventListener('blur', () => {
+  for (const key in keys) keys[key] = false;
+  for (const key in keyTimers) { clearTimeout(keyTimers[key]); delete keyTimers[key]; }
+  updateAllCells();
+  document.getElementById('status').textContent = 'Status: Window blurred — keys cleared';
+});
+
+// Physics tick (~33ms matching server 30Hz)
+setInterval(() => {
+  if (!!keys['Shift'] !== (document.getElementById('sprintVal').textContent === 'ON')) {
+    simSprintEndCooldown = Date.now();
+  }
+  simulatePhysics();
+}, 33);
+
+// Heartbeat every 200ms
+setInterval(() => {
+  updateAllCells();
+  updateStats();
+  pushPacket();
+}, 200);
+
+setTimeout(() => pushPacket(), 100);
+
+console.log('[SPRINT-DIAG] Diagnostic loaded. Case mismatch tracking active.');
+</script>
+</body>
+</html>

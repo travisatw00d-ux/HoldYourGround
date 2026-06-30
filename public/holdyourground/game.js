@@ -3,6 +3,7 @@ import { connect } from './modules/net.js';
 import { onRoomList, onAuthSuccess, onGuestJoined, onLobbyCount } from './modules/callback-registry.js';
 import { setupInput } from './modules/input.js';
 import { startRender, stopRender, resizeViewport } from './modules/render.js';
+import { resetWavePopup, toggleNWPopup } from './modules/net-events.js';
 
 const canvas = document.getElementById('canvas');
 const menu = document.getElementById('menu');
@@ -36,6 +37,10 @@ const settingsClose = document.getElementById('settingsClose');
 const fullscreenToggle = document.getElementById('fullscreenToggle');
 const godModeToggle = document.getElementById('godModeToggle');
 const killMobsBtn = document.getElementById('killMobsBtn');
+const nextPhaseBtn = document.getElementById('nextPhaseBtn');
+const levelMinusBtn = document.getElementById('levelMinusBtn');
+const levelPlusBtn = document.getElementById('levelPlusBtn');
+const adminLevelDisplay = document.getElementById('adminLevelDisplay');
 const adminSettings = document.getElementById('adminSettings');
 const escapeMenu = document.getElementById('escapeMenu');
 const escapeStep1 = document.getElementById('escapeStep1');
@@ -67,6 +72,7 @@ function showScreen(id) {
   hotbarEl.classList.add('hidden');
   settingsPanel.classList.add('hidden');
   document.getElementById('loadingOverlay').classList.add('hidden');
+  resetWavePopup();
   state.screen = id;
   if (id === 'menu') menu.classList.remove('hidden');
   if (id === 'eliminated') eliminated.classList.remove('hidden');
@@ -281,6 +287,21 @@ killMobsBtn.addEventListener('click', () => {
   socket.emit('killAllMobs');
 });
 
+nextPhaseBtn.addEventListener('click', () => {
+  socket.emit('adminAdvancePhase');
+});
+
+levelMinusBtn.addEventListener('click', () => {
+  socket.emit('adminSetLevel', { delta: -1 });
+});
+levelPlusBtn.addEventListener('click', () => {
+  socket.emit('adminSetLevel', { delta: 1 });
+});
+
+socket.on('accountUpdate', ({ level }) => {
+  if (adminLevelDisplay) adminLevelDisplay.textContent = level;
+});
+
 function hideEscapeMenu() {
   escapeMenu.classList.add('hidden');
   escapeStep2.classList.add('hidden');
@@ -330,6 +351,7 @@ function leaveToMenu() {
   welcomeMsg.textContent = 'Ready For Battle?';
   state.screen = 'menu';
   selectedRoomId = null;
+  resetWavePopup();
   logScreenState('afterLeave');
   setTimeout(() => logScreenState('200ms'), 200);
 }
@@ -441,6 +463,10 @@ document.addEventListener('keydown', (e) => {
     } else {
       wrapper.requestFullscreen().catch(() => {});
     }
+  }
+  if (e.key === 'Tab') {
+    e.preventDefault();
+    toggleNWPopup();
   }
 });
 

@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Next Wave — Tall Narrow Popup</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #1a1a2e;
+    min-height: 100vh;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    overflow: hidden;
+  }
+  /* Game bg simulation */
+  #gameBg {
+    position: fixed; inset: 0;
+    background: linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    z-index: 0;
+  }
+
+  /* Controls overlay */
+  #controls {
+    position: fixed; top: 16px; left: 50%; transform: translateX(-50%);
+    z-index: 10; display: flex; gap: 10px;
+  }
+  #controls button {
+    background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.15); border-radius: 8px;
+    padding: 10px 22px; color: #fff; font-size: 0.9rem; font-weight: 600; cursor: pointer;
+  }
+  #controls button:hover { background: rgba(255,255,255,0.18); }
+  #controls button.active { background: rgba(255,255,255,0.2); border-color: #FFC83D; }
+
+  /* ---- OVERLAY ---- */
+  #nwpOverlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.3);
+    z-index: 199; opacity: 0; pointer-events: none; transition: opacity 0.2s ease;
+  }
+  #nwpOverlay.visible { opacity: 1; pointer-events: auto; }
+
+  /* ---- POPUP SHELL ---- */
+  .nwp-shell {
+    position: fixed;
+    left: 24px;
+    top: 50%;
+    transform: translateY(-50%) translateX(-120%);
+    background: rgba(20,20,20,0.45);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 14px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+    width: 200px;
+    z-index: 100;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+    transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1), width 0.35s cubic-bezier(0.22, 1, 0.36, 1), left 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+    opacity: 0;
+    pointer-events: none;
+    cursor: pointer;
+  }
+  .nwp-shell.in { transform: translateY(-50%) translateX(0); opacity: 1; pointer-events: auto; }
+  .nwp-shell.out { transform: translateY(-50%) translateX(-120%); opacity: 0; pointer-events: none; }
+
+  .nwp-shell .title {
+    text-align: center;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: #FFC83D;
+    font-size: 20px;
+    letter-spacing: 2px;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+    padding: 14px 12px 0;
+    flex-shrink: 0;
+  }
+  .nwp-close {
+    position: absolute; top: 8px; right: 8px;
+    width: 24px; height: 24px; border-radius: 50%;
+    background: rgba(255,255,255,0.06); border: none;
+    color: rgba(255,255,255,0.35); font-size: 14px; line-height: 24px;
+    text-align: center; cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+    z-index: 5;
+  }
+  .nwp-close:hover { background: rgba(255,255,255,0.15); color: #fff; }
+  .nwp-shell .divider {
+    height: 1px;
+    background: rgba(255,255,255,0.12);
+    margin: 6px 12px 8px;
+    flex-shrink: 0;
+  }
+
+  /* ---- COLLAPSED: TALL SCROLLABLE LIST ---- */
+  .nwp-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 0 6px 8px;
+    overflow-y: auto;
+    flex: 1;
+    min-height: 0;
+  }
+  .nwp-list::-webkit-scrollbar { width: 3px; }
+  .nwp-list::-webkit-scrollbar-track { background: transparent; }
+  .nwp-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 3px; }
+
+  .nwp-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 6px;
+    border-radius: 6px;
+    transition: background 0.15s, transform 0.15s;
+    min-height: 28px;
+  }
+  .nwp-row:hover { background: rgba(255,255,255,0.06); transform: translateX(2px); }
+  .nwp-row .icon { width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; font-size: 14px; border-radius: 4px; background: rgba(255,255,255,0.04); flex-shrink: 0; }
+  .nwp-row .name { flex: 1; text-transform: uppercase; color: #fff; font-weight: 600; font-size: 10px; letter-spacing: 0.5px; text-shadow: 0 1px 3px rgba(0,0,0,0.5); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .nwp-row .count { font-size: 20px; font-weight: 700; color: #fff; text-shadow: 0 1px 0 #000, 1px 0 0 #000, 0 -1px 0 #000, -1px 0 0 #000, 0 2px 4px rgba(0,0,0,0.5); white-space: nowrap; }
+  .nwp-more { text-align: center; color: rgba(255,255,255,0.25); font-size: 0.7rem; padding: 4px 0 2px; }
+
+  /* ---- SUMMARY BAR (collapsed) ---- */
+  .nwp-summary {
+    display: flex;
+    justify-content: space-between;
+    padding: 6px 10px 10px;
+    color: rgba(255,255,255,0.3);
+    font-size: 0.65rem;
+    border-top: 1px solid rgba(255,255,255,0.06);
+    margin: 0 2px;
+    flex-shrink: 0;
+  }
+
+  /* ---- EXPANDED: WIDER + GRID ---- */
+  .nwp-shell.expanded {
+    width: 380px;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 200;
+    cursor: default;
+  }
+  .nwp-shell.expanded.in { transform: translate(-50%, -50%); }
+  .nwp-grid {
+    display: none;
+    padding: 0 8px 10px;
+  }
+  .nwp-shell.expanded .nwp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; max-height: 55vh; overflow-y: auto; }
+  .nwp-grid::-webkit-scrollbar { width: 4px; }
+  .nwp-grid::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 3px; }
+  .nwp-grid .grid-cell {
+    display: flex; align-items: center; gap: 6px; padding: 4px 6px; border-radius: 6px; min-height: 30px; font-size: 0.8rem;
+    transition: background 0.15s;
+  }
+  .nwp-grid .grid-cell:hover { background: rgba(255,255,255,0.05); }
+  .nwp-grid .grid-cell .icon { font-size: 14px; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; border-radius: 4px; background: rgba(255,255,255,0.04); flex-shrink: 0; }
+  .nwp-grid .grid-cell .name { flex: 1; color: #fff; font-weight: 600; font-size: 10px; letter-spacing: 0.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .nwp-grid .grid-cell .count { font-size: 16px; font-weight: 700; color: #fff; text-shadow: 0 1px 0 #000, 0 1px 3px rgba(0,0,0,0.5); }
+
+  /* Expanded details panel */
+  .nwp-details {
+    display: none;
+    padding: 8px 12px 12px;
+    border-top: 1px solid rgba(255,255,255,0.06);
+    color: rgba(255,255,255,0.35);
+    font-size: 0.7rem;
+  }
+  .nwp-shell.expanded .nwp-details { display: flex; gap: 16px; justify-content: center; }
+  .nwp-details span { white-space: nowrap; }
+
+  /* ---- LABEL ---- */
+  .nwp-label {
+    position: fixed; left: 240px; top: 50%; transform: translateY(-50%);
+    color: rgba(255,255,255,0.15); font-size: 0.75rem; z-index: 99; pointer-events: none;
+    transition: opacity 0.2s;
+  }
+  .nwp-shell.expanded ~ .nwp-label { opacity: 0; }
+
+  /* Mobile */
+  @media (max-width: 600px) { .nwp-shell { width: 170px; } .nwp-shell.expanded { width: 320px; left: 50%; transform: translate(-50%, -50%); } }
+</style>
+</head>
+<body>
+
+<div id="gameBg"></div>
+
+<div id="controls">
+  <button data-wave="small">3 Mobs (SL 8)</button>
+  <button data-wave="mid">8 Mobs (SL 35)</button>
+  <button data-wave="big" class="active">25 Mobs (SL 100)</button>
+  <button id="showBtn" style="background:#FFC83D;color:#000;">Show Popup</button>
+</div>
+
+<!-- Overlay -->
+<div id="nwpOverlay"></div>
+
+<!-- Label -->
+<div class="nwp-label">Auto-hides after 4s  •  Click popup to expand  •  X to dismiss</div>
+
+<!-- POPUP -->
+<div class="nwp-shell" id="popup">
+  <button class="nwp-close" id="closeBtn">&times;</button>
+  <div class="title">NEXT WAVE</div>
+  <div class="divider"></div>
+  <div class="nwp-list" id="nwpList"></div>
+  <div id="nwpMore" class="nwp-more"></div>
+  <div class="nwp-summary">
+    <span>SL <span id="nwpSL">—</span></span>
+    <span>Wave <span id="nwpWave">—</span></span>
+    <span>Total <span id="nwpTotal" style="color:#FFC83D;font-weight:700;">—</span></span>
+  </div>
+  <div class="nwp-grid" id="nwpGrid"></div>
+  <div class="nwp-details">
+    <span>Server Level <b id="dSL" style="color:#fff;">—</b></span>
+    <span>Wave <b id="dWave" style="color:#fff;">—</b></span>
+    <span>Total <b id="dTotal" style="color:#FFC83D;">—</b></span>
+    <span>Types <b id="dTypes" style="color:#fff;">—</b></span>
+  </div>
+</div>
+
+<script>
+const popup = document.getElementById('popup');
+const list = document.getElementById('nwpList');
+const grid = document.getElementById('nwpGrid');
+const overlay = document.getElementById('nwpOverlay');
+let hideTimer = null;
+
+const EMOJIS = ['🧟','👹','👺','💀','👊','🐀','🦇','🐍','🕷️','🐺','🐻','🦅','🐗','🦂','🐉','👾','🪱','🦈','🐊','🦏','🐘','🦣','🐙','🦑','🐲'];
+const NAMES = ['ZOMBIES','TROLLS','GOBLINS','SKELETONS','ORCS','RATS','BATS','SNAKES','SPIDERS','WOLVES','BEARS','HARPIERS','BOARS','SCORPIONS','WYRMS','VOIDLINGS','WORMS','SHARKS','CROCODILES','RHINOS','ELEPHANTS','MAMMOTHS','KRAKEN','SQUIDS','DRAGONS'];
+
+function buildEnemies(count) {
+  const arr = [];
+  for (let i = 0; i < count; i++) {
+    arr.push({ emoji: EMOJIS[i], name: NAMES[i], cnt: Math.floor(5 + Math.random() * 35 + (i < 3 ? 40 : 0)) });
+  }
+  return arr;
+}
+
+function hidePopup() {
+  clearTimeout(hideTimer);
+  popup.classList.remove('in', 'expanded');
+  popup.classList.add('out');
+  overlay.classList.remove('visible');
+}
+
+function showPopup() {
+  clearTimeout(hideTimer);
+  popup.classList.remove('out', 'expanded');
+  overlay.classList.remove('visible');
+  void popup.offsetWidth; // force reflow
+  popup.classList.add('in');
+  hideTimer = setTimeout(hidePopup, 4000);
+}
+
+function render(enemies, sl, wave) {
+  const total = enemies.reduce((s, e) => s + e.cnt, 0);
+
+  const top3 = enemies.slice(-3).reverse();
+  const rest = enemies.slice(0, -3);
+  list.innerHTML = top3.map(e => `
+    <div class="nwp-row">
+      <div class="icon">${e.emoji}</div>
+      <span class="name">${e.name}</span>
+      <span class="count">&times;${e.cnt}</span>
+    </div>
+  `).join('');
+  document.getElementById('nwpMore').textContent = rest.length > 0 ? rest.length + ' other types' : '';
+
+  grid.innerHTML = enemies.map(e => `
+    <div class="grid-cell">
+      <div class="icon">${e.emoji}</div>
+      <span class="name">${e.name}</span>
+      <span class="count">&times;${e.cnt}</span>
+    </div>
+  `).join('');
+
+  ['nwpSL','dSL'].forEach(id => document.getElementById(id).textContent = sl);
+  ['nwpWave','dWave'].forEach(id => document.getElementById(id).textContent = wave);
+  ['nwpTotal','dTotal'].forEach(id => document.getElementById(id).textContent = total);
+  document.getElementById('dTypes').textContent = enemies.length;
+}
+
+function setWave(n) {
+  const map = { small: 3, mid: 8, big: 25 };
+  const enemies = buildEnemies(map[n]);
+  const sl = map[n] === 25 ? 100 : map[n] === 8 ? 35 : 8;
+  const wave = map[n] === 25 ? 45 : map[n] === 8 ? 14 : 5;
+  render(enemies, sl, wave);
+}
+
+// Click popup to expand
+popup.addEventListener('click', function(e) {
+  if (e.target.closest('.nwp-grid') || !this.classList.contains('in')) return;
+  clearTimeout(hideTimer);
+  this.classList.add('expanded');
+  overlay.classList.add('visible');
+});
+
+// Close button (dismiss entirely)
+document.getElementById('closeBtn').addEventListener('click', function(e) {
+  e.stopPropagation();
+  hidePopup();
+});
+
+// Click overlay to close expanded
+overlay.addEventListener('click', function() {
+  popup.classList.remove('expanded');
+  this.classList.remove('visible');
+  hideTimer = setTimeout(hidePopup, 4000);
+});
+
+// "Show Popup" button
+document.getElementById('showBtn').addEventListener('click', function() {
+  popup.style.display = ''; // re-show if was hidden
+  showPopup();
+});
+
+// Wave buttons — update data, hide popup
+document.querySelectorAll('#controls button[data-wave]').forEach(btn => {
+  btn.addEventListener('click', function() {
+    document.querySelectorAll('#controls button[data-wave]').forEach(b => b.classList.remove('active'));
+    this.classList.add('active');
+    setWave(this.dataset.wave);
+    popup.classList.remove('expanded');
+    overlay.classList.remove('visible');
+    hidePopup();
+  });
+});
+
+// Init — start hidden
+setWave('big');
+</script>
+</body>
+</html>

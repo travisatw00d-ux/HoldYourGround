@@ -896,3 +896,154 @@ button:active {
   padding: 8px 18px;
   font-size: 0.85rem;
 }
+
+/* ---- Next Wave Popup ---- */
+.nwp-tab {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 20px;
+  height: 48px;
+  background: rgba(20,20,20,0.45);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-left: none;
+  border-radius: 0 8px 8px 0;
+  color: rgba(255,255,255,0.5);
+  font-size: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 99;
+  transition: background 0.15s;
+}
+.nwp-tab:hover { background: rgba(255,255,255,0.1); color: #fff; }
+
+.nwp-shell {
+  position: absolute;
+  left: 16px;
+  top: 50%;
+  transform: translateY(-50%) translateX(-120%);
+  background: rgba(20,20,20,0.45);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 14px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+  width: 200px;
+  z-index: 100;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  opacity: 0;
+  pointer-events: none;
+  cursor: pointer;
+  transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.25s ease, width 0.35s cubic-bezier(0.22, 1, 0.36, 1), left 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.nwp-shell.in { transform: translateY(-50%) translateX(0); opacity: 1; pointer-events: auto; }
+.nwp-shell.out { transform: translateY(-50%) translateX(-120%); opacity: 0; pointer-events: none; }
+
+.nwp-shell .nwp-close {
+  position: absolute; top: 6px; right: 6px;
+  width: 22px; height: 22px; border-radius: 50%;
+  background: rgba(255,255,255,0.06); border: none;
+  color: rgba(255,255,255,0.35); font-size: 13px; line-height: 22px;
+  text-align: center; cursor: pointer; z-index: 5;
+  transition: background 0.15s, color 0.15s;
+}
+.nwp-shell .nwp-close:hover { background: rgba(255,255,255,0.15); color: #fff; }
+
+.nwp-shell .nwp-title {
+  text-align: center; font-weight: 700; text-transform: uppercase;
+  color: #FFC83D; font-size: 18px; letter-spacing: 2px;
+  text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+  padding: 12px 10px 0; flex-shrink: 0;
+}
+.nwp-shell .nwp-divider {
+  height: 1px; background: rgba(255,255,255,0.12);
+  margin: 5px 10px 7px; flex-shrink: 0;
+}
+
+.nwp-shell .nwp-list {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 0 6px 4px; overflow-y: auto; flex: 1; min-height: 0;
+}
+.nwp-shell .nwp-list::-webkit-scrollbar { width: 3px; }
+.nwp-shell .nwp-list::-webkit-scrollbar-track { background: transparent; }
+.nwp-shell .nwp-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 3px; }
+
+.nwp-row {
+  display: flex; align-items: center; gap: 6px;
+  padding: 3px 6px; border-radius: 6px;
+  transition: background 0.15s, transform 0.15s;
+  min-height: 28px;
+}
+.nwp-row:hover { background: rgba(255,255,255,0.06); transform: translateX(2px); }
+.nwp-row { min-height: 52px; }
+.nwp-row .icon { width: 48px; height: 48px; display: flex; align-items: center; justify-content: center; font-size: 24px; border-radius: 6px; background: rgba(255,255,255,0.04); flex-shrink: 0; }
+.nwp-row .icon img { width: 100%; height: 100%; object-fit: contain; }
+.nwp-row .name { flex: 1; text-transform: uppercase; color: #fff; font-weight: 600; font-size: 10px; letter-spacing: 0.5px; text-shadow: 0 1px 3px rgba(0,0,0,0.5); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nwp-row .count { font-size: 20px; font-weight: 700; color: #fff; text-shadow: 0 1px 0 #000,1px 0 0 #000,0 -1px 0 #000,-1px 0 0 #000,0 2px 4px rgba(0,0,0,0.5); white-space: nowrap; }
+
+.nwp-more { text-align: center; color: rgba(255,255,255,0.25); font-size: 0.7rem; padding: 2px 0; flex-shrink: 0; }
+
+.nwp-summary {
+  display: flex; justify-content: space-between;
+  padding: 4px 8px 8px; color: rgba(255,255,255,0.3);
+  font-size: 0.65rem; border-top: 1px solid rgba(255,255,255,0.06);
+  flex-shrink: 0;
+}
+
+/* Expanded state */
+.nwp-shell.expanded {
+  width: 360px; left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 200; cursor: default;
+}
+.nwp-shell.expanded.in { transform: translate(-50%, -50%); }
+
+.nwp-grid { display: none; padding: 0 8px 8px; }
+.nwp-shell.expanded .nwp-grid {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 3px; max-height: 55vh; overflow-y: auto;
+}
+.nwp-grid::-webkit-scrollbar { width: 4px; }
+.nwp-grid::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 3px; }
+.nwp-grid .grid-cell {
+  display: flex; align-items: center; gap: 6px;
+  padding: 4px 6px; border-radius: 6px; min-height: 30px; font-size: 0.8rem;
+  transition: background 0.15s;
+}
+.nwp-grid .grid-cell:hover { background: rgba(255,255,255,0.05); }
+.nwp-grid .grid-cell { min-height: 36px; }
+.nwp-grid .grid-cell .icon { width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; font-size: 16px; border-radius: 4px; background: rgba(255,255,255,0.04); flex-shrink: 0; }
+.nwp-grid .grid-cell .icon img { width: 100%; height: 100%; object-fit: contain; }
+.nwp-grid .grid-cell .name { flex: 1; color: #fff; font-weight: 600; font-size: 10px; letter-spacing: 0.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nwp-grid .grid-cell .count { font-size: 15px; font-weight: 700; color: #fff; text-shadow: 0 1px 0 #000,0 1px 3px rgba(0,0,0,0.5); }
+
+.nwp-details {
+  display: none; padding: 6px 10px 10px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+  color: rgba(255,255,255,0.35); font-size: 0.7rem;
+}
+.nwp-shell.expanded .nwp-details { display: flex; gap: 14px; justify-content: center; }
+
+/* Incoming section (nighttime only) */
+.nwp-incoming-section { padding: 1px 8px 4px; border-top: 1px solid rgba(255,255,255,0.06); margin-top: 2px; }
+.nwp-incoming-label { text-align:center;font-size:0.55rem;color:rgba(255,255,255,0.2);letter-spacing:1px;margin-bottom:2px;text-transform:uppercase; }
+.nwp-inc-row { display:flex;align-items:center;gap:5px;padding:1px 4px;min-height:18px; }
+.nwp-inc-row .icon { width:16px;height:16px;display:flex;align-items:center;justify-content:center;flex-shrink:0; }
+.nwp-inc-row .icon img { width:16px;height:16px;display:block; }
+.nwp-inc-row .name { flex:1;font-size:8px;color:rgba(255,255,255,0.3);text-transform:uppercase;letter-spacing:0.3px; }
+.nwp-inc-row .count { font-size:13px;font-weight:600;color:rgba(255,255,255,0.3); }
+
+/* Overlay for expanded */
+.nwp-overlay {
+  position: absolute; inset: 0; background: rgba(0,0,0,0.3);
+  z-index: 199; opacity: 0; pointer-events: none; transition: opacity 0.2s ease;
+}
+.nwp-overlay.visible { opacity: 1; pointer-events: auto; }

@@ -8,7 +8,8 @@ const {
 } = require('./config');
 const SpatialGrid = require('./spatial-grid');
 const playerMod = require('./player');
-const zombieMod = require('./zombie');
+const { initEnemies, buildSpawnPool } = require('./zombie');
+const { MOB_TYPES } = require('./mob-config');
 const zombieAi = require('./zombie-ai');
 const physics = require('./physics');
 const sword = require('./sword');
@@ -18,16 +19,27 @@ const db = require('./db');
 
 const DIAG_LOG = path.join(__dirname, '..', 'Workflow', 'diag-log.json');
 
+function getWaveComposition(pool) {
+  const counts = new Map();
+  for (const mt of pool) {
+    const idx = MOB_TYPES.indexOf(mt);
+    counts.set(idx, (counts.get(idx) || 0) + 1);
+  }
+  return Array.from(counts.entries()).map(([mobType, count]) => ({ mobType, count }));
+}
+
 class Room {
   constructor(id) {
     this.id = id;
     this.io = null;
     this.players = {};
-    this.zombies = zombieMod.initZombies(this.players);
+    this.mobSpawnPool = buildSpawnPool(1);
+    this.zombies = initEnemies(this.mobSpawnPool, 1, this.players);
     this.grid = new SpatialGrid(120, WORLD_W, WORLD_H);
     this.lastBroadcast = 0;
     this.lastEmitTime = 0;
     this.currentServerLevel = 0;
+    this.waveServerLevel = 1;
     this._playerList = [];
     this._viewZ = [];
     this._emptyTimeout = null;
@@ -157,6 +169,11 @@ class Room {
     if (!p || p.isSpectator) return;
     p.input = { dx: data.dx, dy: data.dy };
     if (typeof data.angle === 'number') p.facingAngle = data.angle;
+    if (typeof data.sprint === 'boolean') {
+      if (data.sprint && !p.sprint) p._sprintDepleted = false;
+      if (p.sprint && !data.sprint && !p._sprintDepleted) p.sprintEndCooldown = Date.now();
+      p.sprint = data.sprint;
+    }
   }
 
   handleAttack(id, facingAngle) {
@@ -206,6 +223,8 @@ class Room {
     this.matchPhase = 'daytime';
     this.phaseTimer = DAYTIME_MS;
     this.zombies.length = 0;
+    this.waveServerLevel = Math.max(1, this._computeServerLevel());
+    this.mobSpawnPool = buildSpawnPool(this.waveServerLevel);
     this.grid.clear();
     const readySet = this._endGameReady || new Set();
     let firstReady = null;
@@ -220,8 +239,14 @@ class Room {
         if (firstReady) { p.x = firstReady.x; p.y = firstReady.y; }
       } else if (readySet.size > 0 || !isRestart || !p.isSpectator) {
         p.isSpectator = false;
-        p.lvl = 1; p.exp = 0; p.gold = 0;
-        this._persistedExp.delete(p.id);
+        if (this._persistedExp.has(id)) {
+          const totalExp = this._persistedExp.get(id);
+          p.lvl = Math.max(1, expMod.fromCumulativeExp(totalExp));
+          p.exp = totalExp - expMod.cumulativeExp(p.lvl - 1);
+          p.gold = 0;
+        } else {
+          p.lvl = 1; p.exp = 0; p.gold = 0;
+        }
         playerMod.recalcStats(p);
         if (!p.alive) playerMod.respawnPlayer(id, this.players, this.zombies);
       }
@@ -258,6 +283,10 @@ class Room {
       }
     }
     this.io.to('room:' + this.id).emit('matchPhase', matchData);
+    this.io.to('room:' + this.id).emit('waveComposition', {
+      wave: this.currentWave, serverLevel: this.waveServerLevel,
+      enemies: getWaveComposition(this.mobSpawnPool)
+    });
     this._joinQueue = this._joinQueue.filter(id => this.players[id]?.isSpectator);
     this._broadcastLobbyUpdate();
   }
@@ -272,22 +301,25 @@ class Room {
   }
 
   _advancePhase() {
+    console.log('[PHASE] advance from=' + this.matchPhase + ' zombies.length=' + this.zombies.length);
     switch (this.matchPhase) {
       case 'daytime':
         try { fs.appendFileSync(DIAG_LOG, JSON.stringify({ t: Date.now(), action: 'daytime→nighttime', playerCount: Object.keys(this.players).length }) + '\n'); } catch (e) {}
+        this.waveServerLevel = Math.max(1, this._computeServerLevel());
+        this.mobSpawnPool = buildSpawnPool(this.waveServerLevel);
         this.matchPhase = 'nighttime';
-        this.phaseTimer = NIGHTTIME_MS;
-        this.io.to('room:' + this.id).emit('matchPhase', { phase: 'nighttime', timer: NIGHTTIME_MS, wave: this.currentWave, activePlayers: this.getActivePlayerIds() });
+        this.phaseTimer = 0;
+        this.zombies.length = 0;
+        zombieAi.ensureCount(this.zombies, this.mobSpawnPool, this.waveServerLevel, this.players, 100 + (this.waveServerLevel - 1));
+        this.io.to('room:' + this.id).emit('matchPhase', { phase: 'nighttime', timer: 0, wave: this.currentWave, activePlayers: this.getActivePlayerIds() });
+        this.io.to('room:' + this.id).emit('waveComposition', {
+          wave: this.currentWave, serverLevel: this.waveServerLevel,
+          enemies: getWaveComposition(this.mobSpawnPool)
+        });
         break;
       case 'nighttime': {
         const anyAlive = Object.values(this.players).some(p => p.alive);
         if (!anyAlive) { this._endMatch(); return; }
-        this.matchPhase = 'waveOver';
-        this.phaseTimer = 0;
-        this.io.to('room:' + this.id).emit('matchPhase', { phase: 'waveOver', timer: 0, wave: this.currentWave, activePlayers: this.getActivePlayerIds() });
-        break;
-      }
-      case 'waveOver': {
         this.matchPhase = 'intermission';
         this.phaseTimer = INTERMISSION_MS;
         this.io.to('room:' + this.id).emit('matchPhase', { phase: 'intermission', timer: INTERMISSION_MS, wave: this.currentWave, activePlayers: this.getActivePlayerIds() });
@@ -305,9 +337,15 @@ class Room {
           }
         }
         this.currentWave++;
+        this.waveServerLevel = Math.max(1, this._computeServerLevel());
+        this.mobSpawnPool = buildSpawnPool(this.waveServerLevel);
         this.matchPhase = 'daytime';
         this.phaseTimer = DAYTIME_MS;
         this.io.to('room:' + this.id).emit('matchPhase', { phase: 'daytime', timer: DAYTIME_MS, wave: this.currentWave, activePlayers: this.getActivePlayerIds() });
+        this.io.to('room:' + this.id).emit('waveComposition', {
+          wave: this.currentWave, serverLevel: this.waveServerLevel,
+          enemies: getWaveComposition(this.mobSpawnPool)
+        });
         break;
       }
     }
@@ -342,7 +380,8 @@ class Room {
     this._endGameReady = new Set();
     this._lastEndGameBroadcast = 0;
     this._lobbyOrder = Object.keys(this.players);
-    this.zombies = zombieMod.initZombies(this.players);
+    this.mobSpawnPool = buildSpawnPool(this.currentServerLevel || 1);
+    this.zombies = initEnemies(this.mobSpawnPool, this.currentServerLevel || 1, this.players);
     this.grid.clear();
     for (const id in this.players) {
       if (!this.players[id].alive) playerMod.respawnPlayer(id, this.players, this.zombies);
@@ -384,7 +423,7 @@ class Room {
     if (this.matchPhase === 'ended') { this._timerEndReset(); return; }
     this.killAllMobs();
     this._advancePhase();
-    if (this.matchPhase === 'waveOver') {
+    if (this.matchPhase !== 'daytime' && this.matchPhase !== 'intermission') {
       this._advancePhase();
     }
   }
@@ -395,7 +434,6 @@ class Room {
         case 'hitConfirm': this.io.to(e.to).emit('hitConfirm', { targetId: e.targetId, dmg: e.dmg, x: e.x, y: e.y }); break;
         case 'gotHit': this.io.to(e.to).emit('gotHit', { attackerId: e.attackerId, dmg: e.dmg, health: e.health }); break;
         case 'eliminated': this.io.to(e.to).emit('eliminated', { kills: e.kills }); break;
-        case 'zombieMerge': this.io.to('room:' + this.id).emit('zombieMerge', { x: e.x, y: e.y }); break;
         case 'zombieKilled': this._awardExp(e.playerId, e.zombieLvl); break;
         case 'zombieAttackStart': this.io.to(e.to).emit('zombieAttackStart', { zombieId: e.zombieId }); break;
       }
@@ -435,6 +473,8 @@ class Room {
     return total;
   }
 
+
+
   _getSortedPlayerStats() {
     return Object.values(this.players).filter(p => !p.isSpectator).map(p => ({ name: p.name, level: p.lvl || 1, kills: p.kills || 0 })).sort((a, b) => b.level - a.level);
   }
@@ -458,7 +498,9 @@ class Room {
     this._roundSaved = false;
     this._lastEndGameBroadcast = 0;
     this._lobbyOrder = Object.keys(this.players);
-    this.zombies = zombieMod.initZombies(this.players);
+    const sl = Math.max(1, this._computeServerLevel());
+    this.mobSpawnPool = buildSpawnPool(sl);
+    this.zombies = initEnemies(this.mobSpawnPool, sl, this.players);
     this.grid.clear();
     this._endGameReady = new Set(readySnapshot);
     for (const id in this.players) {
@@ -606,6 +648,7 @@ class Room {
       this.phaseTimer -= TICK_MS;
       if (this.phaseTimer <= 0) {
         this.phaseTimer = 0;
+        console.log('[PHASE] timer expired phase=' + this.matchPhase);
         if (this.matchPhase === 'ended') { this._timerEndReset(); return; }
         this._advancePhase();
       }
@@ -644,19 +687,18 @@ class Room {
     for (const z of this.zombies) { if (z.alive) this.grid.insertZombie(z); }
     for (const id in this.players) { const p = this.players[id]; if (p.alive) this.grid.insertPlayer(p); }
 
-    if (this.matchPhase === 'nighttime' || this.matchPhase === 'waveOver') {
+    if (this.matchPhase === 'nighttime') {
       zombieAi.tickTargeting(this.zombies, this.players);
-      zombieAi.moveAll(this.zombies);
+      zombieAi.moveAll(this.zombies, this.players);
+      zombieAi.processZombieSeparation(this.zombies, this.grid);
+      zombieAi.processWallCohesion(this.zombies, this.grid);
       this.grid.clearZombies();
       for (const z of this.zombies) { if (z.alive) this.grid.insertZombie(z); }
       const attackEvents = zombieAi.processZombieAttacks(this.zombies, this.players, this.grid, this.id);
       this.emitEvents(attackEvents);
       physics.processPlayerCollision(this.players);
-      if (this.matchPhase === 'nighttime') {
-        zombieAi.ensureCount(this.zombies, this.players);
-        zombieAi.reviveDead(this.zombies, this.players);
-      }
       if (!Object.values(this.players).some(p => p.alive)) { this._endMatch(); return; }
+      zombieAi.ensureCount(this.zombies, this.mobSpawnPool, this.waveServerLevel, this.players, 100 + (this.waveServerLevel - 1));
     }
 
     for (const id of ids) {
@@ -676,12 +718,7 @@ class Room {
       }
     }
 
-    if (this.matchPhase === 'nighttime' || this.matchPhase === 'waveOver') {
-      const mergeEvents = zombieAi.processMerge(this.zombies, this.grid);
-      this.emitEvents(mergeEvents);
-    }
-
-    if (this.matchPhase === 'waveOver' && this.zombies.every(z => !z.alive)) this._advancePhase();
+    if (this.matchPhase === 'nighttime' && this.zombies.length > 0 && this.zombies.every(z => !z.alive)) this._advancePhase();
 
     if (tickStart - this.lastBroadcast < BROADCAST_MS) {
       if (tickStart % (BROADCAST_MS * 20) < TICK_MS) {
@@ -734,6 +771,10 @@ class Room {
     if (this.lastEmitTime && emitTime - this.lastEmitTime > 100) console.log(`[room ${this.id}] STALL broadcast gap=${emitTime - this.lastEmitTime}ms`);
     this.lastEmitTime = emitTime;
 
+    // Compute true alive count (all zombies, not view-culled)
+    let serverAlive = 0;
+    for (const z of this.zombies) { if (z.alive) serverAlive++; }
+
     // Phase 1: Build one view-culled buffer + zombie list per alive active player
     const bufs = new Map();
     for (const id in this.players) {
@@ -755,7 +796,7 @@ class Room {
         this._viewZ.push(z);
       }
       const zlist = this._viewZ.slice();
-      bufs.set(id, { buf: bp.buildStateBuffer(playerBlock, this._playerList.length, this.currentServerLevel, zlist, emitTime, false, p.cameraZoom || 1, p.viewW || VIEW_W, p.viewH || VIEW_H), zombies: zlist, zoom: p.cameraZoom || 1, viewW: p.viewW || VIEW_W, viewH: p.viewH || VIEW_H });
+      bufs.set(id, { buf: bp.buildStateBuffer(playerBlock, this._playerList.length, this.currentServerLevel, zlist, emitTime, false, p.cameraZoom || 1, p.viewW || VIEW_W, p.viewH || VIEW_H, this.zombies.length, serverAlive), zombies: zlist, zoom: p.cameraZoom || 1, viewW: p.viewW || VIEW_W, viewH: p.viewH || VIEW_H });
     }
 
     // Phase 2: Emit to all connections
@@ -770,7 +811,7 @@ class Room {
         const targetId = this.spectatorFollows.get(id);
         const targetEntry = targetId ? bufs.get(targetId) : null;
         if (targetEntry && p.isSpectator) {
-          const specBuf = bp.buildStateBuffer(playerBlock, this._playerList.length, this.currentServerLevel, targetEntry.zombies, emitTime, true, targetEntry.zoom, targetEntry.viewW, targetEntry.viewH);
+          const specBuf = bp.buildStateBuffer(playerBlock, this._playerList.length, this.currentServerLevel, targetEntry.zombies, emitTime, true, targetEntry.zoom, targetEntry.viewW, targetEntry.viewH, this.zombies.length, serverAlive);
           this.io.to(id).emit('state', specBuf);
           p._lastStateSent = tickStart;
           specCount++;
@@ -778,7 +819,7 @@ class Room {
           this.io.to(id).emit('state', targetEntry.buf);
           p._lastStateSent = tickStart;
         } else {
-          const emptyBuf = bp.buildStateBuffer(playerBlock, this._playerList.length, this.currentServerLevel, [], emitTime, p.isSpectator, 1, VIEW_W, VIEW_H);
+          const emptyBuf = bp.buildStateBuffer(playerBlock, this._playerList.length, this.currentServerLevel, [], emitTime, p.isSpectator, 1, VIEW_W, VIEW_H, this.zombies.length, serverAlive);
           this.io.to(id).emit('state', emptyBuf);
           p._lastStateSent = tickStart;
         }

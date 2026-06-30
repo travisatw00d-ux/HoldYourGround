@@ -72,6 +72,8 @@ function addPlayer(id, name, players, zombies, accountType, accountId) {
     viewH: 600,
     fullscreen: false,
     godMode: false,
+    sprint: false,
+    sprintEndCooldown: 0,
     isSpectator: false
   };
   recalcStats(players[id]);
@@ -107,6 +109,9 @@ function respawnPlayer(id, players, zombies) {
   p.prevCf = -1;
   p.godMode = false;
   p.isSpectator = false;
+  p.sprint = false;
+  p.energy = p.maxEnergy || 100;
+  p.sprintEndCooldown = 0;
 }
 
 function playerInfoObj(p) {
