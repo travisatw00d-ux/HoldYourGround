@@ -105,6 +105,29 @@ select {
 
     <button class="btn" id="setKfBtn">Set Keyframe</button>
 
+    <div class="section-title" style="margin-top:12px">Hitbox</div>
+    <div class="ctrl-group">
+      <label>Blade W <span class="val" id="bladeWVal">6</span></label>
+      <input type="range" id="bladeWSlider" min="1" max="20" step="0.5" value="6">
+    </div>
+    <div class="ctrl-group">
+      <label>Tip X <span class="val" id="tipXVal">-10</span></label>
+      <input type="range" id="tipXSlider" min="-50" max="50" step="1" value="-10">
+    </div>
+    <div class="ctrl-group">
+      <label>Tip Y <span class="val" id="tipYVal">-87</span></label>
+      <input type="range" id="tipYSlider" min="-120" max="20" step="1" value="-87">
+    </div>
+    <div class="ctrl-group">
+      <label>Hilt X <span class="val" id="hiltXVal">0</span></label>
+      <input type="range" id="hiltXSlider" min="-50" max="50" step="1" value="0">
+    </div>
+    <div class="ctrl-group">
+      <label>Hilt Y <span class="val" id="hiltYVal">16</span></label>
+      <input type="range" id="hiltYSlider" min="-20" max="60" step="1" value="16">
+    </div>
+    <div class="status" style="font-size:0.7rem;color:#666;text-align:center">Drag tip/hilt circles on canvas or use sliders</div>
+
     <div class="section-title">Keyframes</div>
     <div class="kf-list" id="kfList"></div>
 
@@ -189,6 +212,10 @@ let selectedKF = 0;
 let playing = false;
 let playFrame = 0;
 let animRAF = null;
+
+// ─── Hitbox state ───
+let hbTipX = -10, hbTipY = -87, hbHiltX = 0, hbHiltY = 16, hbBladeW = 6;
+let dragHitbox = null; // 'tip' or 'hilt'
 
 // Sprite sheet
 let sheetImg = null;
@@ -418,21 +445,15 @@ function drawKnight() {
   const handFrame = getKnightFrame('T1KnightLeftHand.png');
   const headFrame = getKnightFrame('T1KnightHead.png');
 
-  // Native sizes from spritesheet JSON
-  const swordSW = (knightFrames?.['T1KnightSword.png']?.sourceSize?.w) || 128;
-  const swordSH = (knightFrames?.['T1KnightSword.png']?.sourceSize?.h) || 128;
-  const handSW  = (knightFrames?.['T1KnightLeftHand.png']?.sourceSize?.w) || 96;
-  const handSH  = (knightFrames?.['T1KnightLeftHand.png']?.sourceSize?.h) || 96;
-
   // Ghost from last saved keyframe
   const kfs = getKeyframesRef();
   if (!playing && kfs.length > 0) {
     const ghost = kfs[kfs.length - 1];
     if (swordFrame && ghost.sword) {
-      drawKnightSprite(swordFrame, ghost.sword.offsetX, ghost.sword.offsetY, swordSW * ghost.sword.scale, swordSH * ghost.sword.scale, ghost.sword.rotation, 0.2);
+      drawKnightSprite(swordFrame, ghost.sword.offsetX, ghost.sword.offsetY, swordFrame.w * ghost.sword.scale, swordFrame.h * ghost.sword.scale, ghost.sword.rotation, 0.2);
     }
     if (handFrame && ghost.hand) {
-      drawKnightSprite(handFrame, ghost.hand.offsetX, ghost.hand.offsetY, handSW * ghost.hand.scale, handSH * ghost.hand.scale, ghost.hand.rotation, 0.2);
+      drawKnightSprite(handFrame, ghost.hand.offsetX, ghost.hand.offsetY, handFrame.w * ghost.hand.scale, handFrame.h * ghost.hand.scale, ghost.hand.rotation, 0.2);
     }
   }
 
@@ -448,10 +469,15 @@ function drawKnight() {
   const curHand  = playing ? getInterpolatedPose(playFrame, kfs, 'hand') : knightHandPose;
 
   if (swordFrame && curSword) {
-    drawKnightSprite(swordFrame, curSword.offsetX, curSword.offsetY, swordSW * curSword.scale, swordSH * curSword.scale, curSword.rotation, 1.0);
+    drawKnightSprite(swordFrame, curSword.offsetX, curSword.offsetY, swordFrame.w * curSword.scale, swordFrame.h * curSword.scale, curSword.rotation, 1.0);
   }
   if (handFrame && curHand) {
-    drawKnightSprite(handFrame, curHand.offsetX, curHand.offsetY, handSW * curHand.scale, handSH * curHand.scale, curHand.rotation, 1.0);
+    drawKnightSprite(handFrame, curHand.offsetX, curHand.offsetY, handFrame.w * curHand.scale, handFrame.h * curHand.scale, curHand.rotation, 1.0);
+  }
+
+  // Hitbox overlay
+  if (curSword) {
+    drawHitbox(ctx, curSword.offsetX, curSword.offsetY, curSword.scale, curSword.rotation);
   }
 
   // Drag hint
@@ -465,6 +491,81 @@ function drawKnight() {
   }
 }
 
+// ─── Hitbox drawing ───
+function drawHitbox(ctx, ox, oy, scl, rot) {
+  const sx = CX + ox, sy = CY + oy;
+  const cosR = Math.cos(rot), sinR = Math.sin(rot);
+
+  const tipX = sx + (hbTipX * cosR - hbTipY * sinR) * scl;
+  const tipY = sy + (hbTipX * sinR + hbTipY * cosR) * scl;
+  const hiltX = sx + (hbHiltX * cosR - hbHiltY * sinR) * scl;
+  const hiltY = sy + (hbHiltX * sinR + hbHiltY * cosR) * scl;
+
+  // Blade segment
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,0.4)';
+  ctx.shadowBlur = 6;
+  ctx.strokeStyle = 'rgba(255, 200, 0, 0.7)';
+  ctx.lineWidth = hbBladeW * 2;
+  ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(hiltX, hiltY); ctx.lineTo(tipX, tipY); ctx.stroke();
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = 'rgba(200, 120, 0, 0.9)';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(hiltX, hiltY); ctx.lineTo(tipX, tipY); ctx.stroke();
+  ctx.restore();
+
+  // Perpendicular direction (for label offset)
+  const dx = tipX - hiltX, dy = tipY - hiltY;
+  const len = Math.sqrt(dx * dx + dy * dy) || 1;
+  const px = -dy / len, py = dx / len;
+  const labelOff = 22;
+
+  // Tip marker (small dot + leader line + label)
+  ctx.save();
+  ctx.fillStyle = '#FFD700';
+  ctx.beginPath(); ctx.arc(tipX, tipY, 3, 0, Math.PI * 2); ctx.fill();
+  const tLx = tipX + px * labelOff, tLy = tipY + py * labelOff;
+  ctx.strokeStyle = 'rgba(255,200,0,0.4)';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(tipX, tipY); ctx.lineTo(tLx, tLy); ctx.stroke();
+  ctx.fillStyle = '#000';
+  ctx.font = 'bold 10px monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('tip (' + hbTipX + ',' + hbTipY + ')', tLx, tLy);
+  ctx.restore();
+
+  // Hilt marker (small dot + leader line + label)
+  ctx.save();
+  ctx.fillStyle = '#FF6B6B';
+  ctx.beginPath(); ctx.arc(hiltX, hiltY, 3, 0, Math.PI * 2); ctx.fill();
+  const hLx = hiltX - px * labelOff, hLy = hiltY - py * labelOff;
+  ctx.strokeStyle = 'rgba(255,100,100,0.4)';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(hiltX, hiltY); ctx.lineTo(hLx, hLy); ctx.stroke();
+  ctx.fillStyle = '#000';
+  ctx.font = 'bold 10px monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('hilt (' + hbHiltX + ',' + hbHiltY + ')', hLx, hLy);
+  ctx.restore();
+
+  // BladeW label (offset perpendicular from midpoint)
+  ctx.save();
+  const mx = (tipX + hiltX) / 2, my = (tipY + hiltY) / 2;
+  const wLx = mx + px * (labelOff + 10), wLy = my + py * (labelOff + 10);
+  ctx.strokeStyle = 'rgba(255,200,0,0.3)';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(mx, my); ctx.lineTo(wLx, wLy); ctx.stroke();
+  ctx.fillStyle = '#FFD700';
+  ctx.font = 'bold 10px monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('w=' + hbBladeW, wLx, wLy);
+  ctx.restore();
+}
+
 // ─── Input ───
 
 function getPos(e) {
@@ -475,9 +576,11 @@ function getPos(e) {
 function getHitRadius() {
   if (mode === 'sword') return SWORD_NATIVE_SIZE * scale / 2 + 15;
   if (mode === 'knight') {
-    const handSW = (knightFrames?.['T1KnightLeftHand.png']?.sourceSize?.w) || 96;
-    const base = activeKnightItem === 'sword' ? 128 : handSW;
-    return Math.max(base, 40) * scale / 2 + 15;
+    const swordFrame = getKnightFrame('T1KnightSword.png');
+    const handFrame = getKnightFrame('T1KnightLeftHand.png');
+    const f = activeKnightItem === 'sword' ? swordFrame : handFrame;
+    const base = f ? Math.max(f.w, f.h) : 40;
+    return base * scale / 2 + 15;
   }
   const handName = activeHand === 'left' ? 'zombielefthand.png' : 'zombierighthand.png';
   const frame = getFrame(handName);
@@ -485,8 +588,36 @@ function getHitRadius() {
   return Math.max(frame.w, frame.h) * scale / 2 + 15;
 }
 
+function hitboxMarkerAt(p) {
+  if (mode !== 'knight') return null;
+  const curSword = playing ? getInterpolatedPose(playFrame, getKeyframesRef(), 'sword') : knightSwordPose;
+  if (!curSword) return null;
+  const sx = CX + curSword.offsetX, sy = CY + curSword.offsetY;
+  const rot = curSword.rotation;
+  const cosR = Math.cos(rot), sinR = Math.sin(rot);
+  const scl = curSword.scale;
+  const tipX = sx + (hbTipX * cosR - hbTipY * sinR) * scl;
+  const tipY = sy + (hbTipX * sinR + hbTipY * cosR) * scl;
+  const hiltX = sx + (hbHiltX * cosR - hbHiltY * sinR) * scl;
+  const hiltY = sy + (hbHiltX * sinR + hbHiltY * cosR) * scl;
+  const dTip = Math.hypot(p.x - tipX, p.y - tipY);
+  const dHilt = Math.hypot(p.x - hiltX, p.y - hiltY);
+  const thresh = 10;
+  if (dTip < thresh) return 'tip';
+  if (dHilt < thresh) return 'hilt';
+  return null;
+}
+
 canvas.addEventListener('mousedown', (e) => {
   const p = getPos(e);
+  if (mode === 'knight' && !playing) {
+    const marker = hitboxMarkerAt(p);
+    if (marker) {
+      dragHitbox = marker;
+      canvas.style.cursor = 'grabbing';
+      return;
+    }
+  }
   const dx = p.x - (CX + offsetX);
   const dy = p.y - (CY + offsetY);
   const rad = getHitRadius();
@@ -498,23 +629,52 @@ canvas.addEventListener('mousedown', (e) => {
   }
 });
 
+function applyDragHitbox(p) {
+  const curSword = knightSwordPose;
+  if (!curSword) return;
+  const sx = CX + curSword.offsetX, sy = CY + curSword.offsetY;
+  const rot = curSword.rotation;
+  const cosR = Math.cos(rot), sinR = Math.sin(rot);
+  const scl = curSword.scale;
+  // Inverse transform: map canvas point back to local blade coords
+  const lx = (p.x - sx) / scl, ly = (p.y - sy) / scl;
+  // Inverse rotation
+  const localX = lx * cosR + ly * sinR;
+  const localY = -lx * sinR + ly * cosR;
+  if (dragHitbox === 'tip') {
+    hbTipX = Math.round(localX); hbTipY = Math.round(localY);
+  } else {
+    hbHiltX = Math.round(localX); hbHiltY = Math.round(localY);
+  }
+  syncHitboxUI();
+}
+
 canvas.addEventListener('mousemove', (e) => {
   const p = getPos(e);
+  if (dragHitbox) {
+    applyDragHitbox(p);
+    draw();
+    return;
+  }
   if (dragging) {
     offsetX = Math.round(p.x - CX - dragOffX);
     offsetY = Math.round(p.y - CY - dragOffY);
     commitActivePose();
     draw();
   } else {
-    const dx = p.x - (CX + offsetX);
-    const dy = p.y - (CY + offsetY);
-    const rad = getHitRadius();
-    canvas.style.cursor = Math.sqrt(dx * dx + dy * dy) < rad ? 'grab' : 'default';
+    if (mode === 'knight' && !playing && hitboxMarkerAt(p)) {
+      canvas.style.cursor = 'pointer';
+    } else {
+      const dx = p.x - (CX + offsetX);
+      const dy = p.y - (CY + offsetY);
+      const rad = getHitRadius();
+      canvas.style.cursor = Math.sqrt(dx * dx + dy * dy) < rad ? 'grab' : 'default';
+    }
   }
 });
 
-canvas.addEventListener('mouseup', () => { dragging = false; canvas.style.cursor = 'default'; });
-canvas.addEventListener('mouseleave', () => { dragging = false; canvas.style.cursor = 'default'; });
+canvas.addEventListener('mouseup', () => { dragging = false; dragHitbox = null; canvas.style.cursor = 'default'; });
+canvas.addEventListener('mouseleave', () => { dragging = false; dragHitbox = null; canvas.style.cursor = 'default'; });
 
 // ─── Sliders ───
 
@@ -525,6 +685,32 @@ const rotVal = document.getElementById('rotVal');
 
 scaleSlider.addEventListener('input', () => { scale = parseFloat(scaleSlider.value); commitActivePose(); draw(); });
 rotSlider.addEventListener('input', () => { rotation = parseFloat(rotSlider.value); commitActivePose(); draw(); });
+
+// ─── Hitbox sliders ───
+const bladeWSlider = document.getElementById('bladeWSlider');
+const tipXSlider = document.getElementById('tipXSlider');
+const tipYSlider = document.getElementById('tipYSlider');
+const hiltXSlider = document.getElementById('hiltXSlider');
+const hiltYSlider = document.getElementById('hiltYSlider');
+const bladeWVal = document.getElementById('bladeWVal');
+const tipXVal = document.getElementById('tipXVal');
+const tipYVal = document.getElementById('tipYVal');
+const hiltXVal = document.getElementById('hiltXVal');
+const hiltYVal = document.getElementById('hiltYVal');
+
+function syncHitboxUI() {
+  bladeWSlider.value = hbBladeW; bladeWVal.textContent = hbBladeW;
+  tipXSlider.value = hbTipX; tipXVal.textContent = hbTipX;
+  tipYSlider.value = hbTipY; tipYVal.textContent = hbTipY;
+  hiltXSlider.value = hbHiltX; hiltXVal.textContent = hbHiltX;
+  hiltYSlider.value = hbHiltY; hiltYVal.textContent = hbHiltY;
+}
+
+bladeWSlider.addEventListener('input', () => { hbBladeW = parseFloat(bladeWSlider.value); bladeWVal.textContent = hbBladeW; draw(); });
+tipXSlider.addEventListener('input', () => { hbTipX = parseInt(tipXSlider.value); tipXVal.textContent = hbTipX; draw(); });
+tipYSlider.addEventListener('input', () => { hbTipY = parseInt(tipYSlider.value); tipYVal.textContent = hbTipY; draw(); });
+hiltXSlider.addEventListener('input', () => { hbHiltX = parseInt(hiltXSlider.value); hiltXVal.textContent = hbHiltX; draw(); });
+hiltYSlider.addEventListener('input', () => { hbHiltY = parseInt(hiltYSlider.value); hiltYVal.textContent = hbHiltY; draw(); });
 
 // ─── Sync slider values back to the active hand's stored pose ───
 
@@ -735,6 +921,14 @@ function updateOutput() {
       text += '  }\n';
       text += '}';
     }
+  }
+  if (mode === 'knight' && kfs.length >= 2) {
+    text += '\n\n// Hitbox constants (paste into shared/data.js)\n';
+    text += 'BLADE_W: ' + hbBladeW + ',\n';
+    text += 'KNIGHT_BLADE_TIP_X: ' + hbTipX + ',\n';
+    text += 'KNIGHT_BLADE_TIP_Y: ' + hbTipY + ',\n';
+    text += 'KNIGHT_BLADE_HILT_X: ' + hbHiltX + ',\n';
+    text += 'KNIGHT_BLADE_HILT_Y: ' + hbHiltY + ',\n';
   }
   output.textContent = text;
 }
@@ -993,6 +1187,13 @@ document.getElementById('saveBtn').addEventListener('click', () => {
     text += '  }\n';
     text += '}';
   }
+  // Append hitbox constants
+  text += '\n\n// Hitbox constants (paste into shared/data.js)\n';
+  text += 'BLADE_W: ' + hbBladeW + ',\n';
+  text += 'KNIGHT_BLADE_TIP_X: ' + hbTipX + ',\n';
+  text += 'KNIGHT_BLADE_TIP_Y: ' + hbTipY + ',\n';
+  text += 'KNIGHT_BLADE_HILT_X: ' + hbHiltX + ',\n';
+  text += 'KNIGHT_BLADE_HILT_Y: ' + hbHiltY + ',\n';
   output.textContent = text;
   navigator.clipboard.writeText(text);
   const orig = document.getElementById('saveBtn').textContent;

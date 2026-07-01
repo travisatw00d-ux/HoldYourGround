@@ -295,9 +295,10 @@ function drawDebugSwordHitbox(ctx, p, sx, sy, isKnight) {
   const seg = getBladeSegment(p, sx, sy, isKnight);
   if (!seg) return;
   const { hiltX, hiltY, tipX, tipY } = seg;
+  const bw = window.BLADE_W ?? 6;
   ctx.save();
   ctx.strokeStyle = 'rgba(255, 200, 0, 0.25)';
-  ctx.lineWidth = 24;
+  ctx.lineWidth = bw * 2;
   ctx.lineCap = 'round';
   ctx.beginPath(); ctx.moveTo(hiltX, hiltY); ctx.lineTo(tipX, tipY); ctx.stroke();
   ctx.strokeStyle = 'rgba(255, 200, 0, 0.8)';
@@ -310,7 +311,7 @@ function drawDebugSwordHitbox(ctx, p, sx, sy, isKnight) {
   ctx.fillStyle = 'rgba(255,200,0,0.7)';
   ctx.font = '10px monospace';
   ctx.textAlign = 'left';
-  ctx.fillText('hitbox (bladeW=12)', tipX + 6, tipY - 6);
+  ctx.fillText('hitbox (bladeW=' + bw + ')', tipX + 6, tipY - 6);
   ctx.restore();
 }
 

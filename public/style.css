@@ -921,6 +921,7 @@ button:active {
   transition: background 0.15s;
 }
 .nwp-tab:hover { background: rgba(255,255,255,0.1); color: #fff; }
+.nwp-tab.hidden { display: none; }
 
 .nwp-shell {
   position: absolute;

@@ -1,4 +1,4 @@
-const { BLADE_TIP_X, BLADE_TIP_Y, BLADE_HILT_X, BLADE_HILT_Y, ATTACK_SPEED_MULT, ATTACK_KNOCKBACK, KNIGHT_BLADE_TIP_X, KNIGHT_BLADE_TIP_Y, KNIGHT_BLADE_HILT_X, KNIGHT_BLADE_HILT_Y } = require('./config');
+const { BLADE_TIP_X, BLADE_TIP_Y, BLADE_HILT_X, BLADE_HILT_Y, BLADE_W, ATTACK_SPEED_MULT, ATTACK_KNOCKBACK, KNIGHT_BLADE_TIP_X, KNIGHT_BLADE_TIP_Y, KNIGHT_BLADE_HILT_X, KNIGHT_BLADE_HILT_Y } = require('./config');
 
 function animTotal(anim) {
   return anim._total || (anim._total = anim.segments.reduce((a, b) => a + b, 0));
@@ -41,7 +41,7 @@ function checkSwordHit(p, zombies, players, grid) {
   const totalFrames = animTotal(p.attackAnim);
   const totalTicks = Math.ceil(totalFrames / (2 * ATTACK_SPEED_MULT));
   const currentCf = Math.min(Math.floor((p.attackFrame / totalTicks) * totalFrames), totalFrames - 1);
-  const bladeW = 12;
+  const bladeW = BLADE_W;
   const angle = (p.attacking && p.attackLockedAngle != null) ? p.attackLockedAngle : (p.facingAngle || 0);
 
   const cfs = [];

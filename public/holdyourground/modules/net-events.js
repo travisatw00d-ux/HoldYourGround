@@ -618,6 +618,7 @@ export function registerEvents(socket) {
     document.getElementById('nwpWave').textContent = data.wave;
     document.getElementById('dWave').textContent = data.wave;
     populateNWRows(data.enemies);
+    document.getElementById('nextWaveTab')?.classList.remove('hidden');
   });
 
   // Popup click bindings (wired once)
