@@ -50,7 +50,7 @@ export function setupInput(socket, canvas) {
       if (targetId) socket.emit('spectateTarget', { targetId });
       return;
     }
-    if (!e.getModifierState('Shift') && keys['Shift']) keys['Shift'] = false;
+    if (typeof e.getModifierState === 'function' && !e.getModifierState('Shift') && keys['Shift']) keys['Shift'] = false;
     keys[e.key] = true;
     syncKeyCase(e.key, true);
     setKeyTimer(e.key);
@@ -77,7 +77,7 @@ export function setupInput(socket, canvas) {
   });
 
   document.addEventListener('keyup', (e) => {
-    if (!e.getModifierState('Shift') && keys['Shift']) keys['Shift'] = false;
+    if (typeof e.getModifierState === 'function' && !e.getModifierState('Shift') && keys['Shift']) keys['Shift'] = false;
     clearKeyTimer(e.key);
     keys[e.key] = false;
     syncKeyCase(e.key, false);
