@@ -6,7 +6,7 @@ const expMod = require('./exp');
 const fs = require('fs');
 const path = require('path');
 
-const CLIENT_DIAG_DIR = path.join(__dirname, '..', 'Workflow');
+const CLIENT_DIAG_DIR = path.join(__dirname, '..', 'diagnostics');
 const activeSessions = new Map();
 
 module.exports = function registerSocket(socket, { io, broadcastRoomList, broadcastLobbyUpdate, joinLobby, leaveLobby }) {
@@ -62,7 +62,10 @@ module.exports = function registerSocket(socket, { io, broadcastRoomList, broadc
   function joinRoom(socket, roomId, name) {
     const room = roomManager.getRoom(roomId);
     if (!room) { socket.emit('error', 'Room not found'); return; }
-    const accountType = socket.account ? socket.account.accountType || 'basic' : 'guest';
+    let accountType = 'guest';
+    if (socket.account) {
+      accountType = socket.account.isAdmin ? 'admin' : (socket.account.accountType || 'basic');
+    }
     const accountId = socket.account ? socket.account.id : null;
 
     leaveLobby(socket);

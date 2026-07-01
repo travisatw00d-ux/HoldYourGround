@@ -320,6 +320,69 @@ export function drawHUD(ctx) {
     }
     endHUDTransform(ctx, tf);
   }
+  const vs = 0.471 + 0.529 * (state.viewH / 1080);
+
+  // Phase name text overlay
+  const phaseNameEl = state.hudLayout?.find(e => e.name === 'PhaseName');
+  if (phaseNameEl) {
+    const names = { daytime: 'Daytime', nighttime: 'Nighttime', intermission: 'Intermission' };
+    const text = names[state.matchPhase] || state.matchPhase || '';
+    const tx = (phaseNameEl.x + (phaseNameEl.textX || 0)) * vs;
+    const ty = (phaseNameEl.y + (phaseNameEl.textY || 0)) * vs;
+    const tSize = (phaseNameEl.textSize || 28) * vs;
+    ctx.save();
+    ctx.font = '700 ' + tSize + 'px "Teko", "Rajdhani", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.lineJoin = 'round';
+    ctx.miterLimit = 2;
+    ctx.shadowColor = 'rgba(0,0,0,0.45)';
+    ctx.shadowBlur = 3 * vs;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(text, tx + 1 * vs, ty + 2 * vs);
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = '#111';
+    ctx.lineWidth = 6 * vs;
+    ctx.strokeText(text, tx, ty);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(text, tx, ty);
+    ctx.restore();
+  }
+
+  // Phase timer text overlay
+  const phaseTimerEl = state.hudLayout?.find(e => e.name === 'PhaseTimer');
+  if (phaseTimerEl) {
+    let text = '';
+    if (state.matchPhase === 'nighttime' && state.waveStartTime > 0) {
+      const elapsed = Math.floor((performance.now() - state.waveStartTime) / 1000);
+      text = elapsed + 's';
+    } else if (state.matchPhase && state.matchPhase !== 'waiting' && state.phaseTimerStart > 0) {
+      const elapsed = performance.now() - state.phaseStartedAt;
+      const remaining = Math.max(0, state.phaseTimerStart - elapsed);
+      text = Math.ceil(remaining / 1000) + 's';
+    }
+    const tx = (phaseTimerEl.x + (phaseTimerEl.textX || 0)) * vs;
+    const ty = (phaseTimerEl.y + (phaseTimerEl.textY || 0)) * vs;
+    const tSize = (phaseTimerEl.textSize || 28) * vs;
+    ctx.save();
+    ctx.font = '700 ' + tSize + 'px "Teko", "Rajdhani", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.lineJoin = 'round';
+    ctx.miterLimit = 2;
+    ctx.shadowColor = 'rgba(0,0,0,0.45)';
+    ctx.shadowBlur = 3 * vs;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(text, tx + 1 * vs, ty + 2 * vs);
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = '#111';
+    ctx.lineWidth = 6 * vs;
+    ctx.strokeText(text, tx, ty);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(text, tx, ty);
+    ctx.restore();
+  }
+
   const hudTF = applyHUDTransform(ctx, ax, ay);
 
   // Health bar text overlay

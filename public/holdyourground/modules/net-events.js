@@ -1,8 +1,8 @@
 import { state } from './state.js';
 import { resetKeys } from './input.js';
 import { startRender, stopRender, generateBackground } from './render.js';
-import { updateLeaderboard, updateHotbar } from './render-ui.js';
-import { startAttackAnim, drawKnightPreview } from './render-entity.js';
+import { updateLeaderboard } from './render-ui.js';
+import { startAttackAnim } from './render-entity.js';
 import { callbacks } from './callback-registry.js';
 
 const textDecoder = new TextDecoder();
@@ -23,7 +23,9 @@ function renderResults({ serverLevel, playerStats, wave }) {
 
 function renderLobbyCards() {
   const players = state.lobbyPlayers;
-  const hasAssets = state.knightSheet && state.knightFrames;
+  const frameData = state.cardFrames?.['KnightCard.png'];
+  const hasAssets = state.cardSheet && frameData;
+  const nameColors = { guest: '#eee', basic: '#228B22', admin: '#FFD700' };
   for (let i = 0; i < 10; i++) {
     const card = document.querySelector(`.lobby-card[data-slot="${i}"]`);
     if (!card) continue;
@@ -35,14 +37,22 @@ function renderLobbyCards() {
       const p = players[i];
       card.classList.remove('empty');
       nameEl.textContent = p.name;
+      nameEl.style.color = nameColors[p.accountType] || '#eee';
       expEl.textContent = 'Exp: ' + (p.exp || 0);
       if (hasAssets) {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        drawKnightPreview(ctx, canvas.width, canvas.height);
+        const f = frameData.frame;
+        const scale = Math.min(canvas.width / f.w, canvas.height / f.h);
+        const dw = f.w * scale;
+        const dh = f.h * scale;
+        const dx = (canvas.width - dw) / 2;
+        const dy = (canvas.height - dh) / 2;
+        ctx.drawImage(state.cardSheet, f.x, f.y, f.w, f.h, dx, dy, dw, dh);
       }
     } else {
       card.classList.add('empty');
       nameEl.textContent = 'Waiting...';
+      nameEl.style.color = '';
       expEl.textContent = '';
       ctx.clearRect(0, 0, canvas.width, canvas.height);
     }
@@ -423,7 +433,6 @@ export function registerEvents(socket) {
       state.lastEmitTime = emitTime;
       state.lastPacketBytes = u8.byteLength;
       updateLeaderboard();
-      updateHotbar();
     } catch (e) {
       console.error(`[HYG] state buffer error at offset=${o} playerCount=${playerCount} zombieCount=${zombieCount} bytes=${u8.byteLength}:`, e);
       state.players = {}; state.zombies = [];
@@ -472,7 +481,7 @@ export function registerEvents(socket) {
     state.localAnim = null; state.isDeadSpectating = false; state.screen = 'playing';
     document.getElementById('menu').classList.add('hidden');
     ['eliminated', 'waitingRespawn'].forEach(id => document.getElementById(id).classList.add('hidden'));
-    ['hud', 'hotbarInventory', 'settingsBtn'].forEach(id => document.getElementById(id).classList.remove('hidden'));
+  ['hud', 'settingsBtn'].forEach(id => document.getElementById(id).classList.remove('hidden'));
     state.cameraZoom = 1.0;
     socket.emit('cameraZoom', { zoom: 1.0, viewW: state.viewW, viewH: state.viewH });
     startRender(socket);
@@ -546,9 +555,7 @@ export function registerEvents(socket) {
     if (phase === 'nighttime') state.waveStartTime = performance.now();
     state.currentWave = wave;
     if (activePlayers) state.isSpectator = !activePlayers.includes(state.myId);
-    document.getElementById('phaseDisplay').classList.toggle('hidden', phase === 'waiting' || phase === 'ended');
-    const names = { daytime: 'Daytime', nighttime: 'Nighttime', intermission: 'Intermission' };
-    document.getElementById('phaseName').textContent = names[phase] || phase;
+    document.getElementById('phaseDisplay').classList.add('hidden');
     document.getElementById('nwpTitle').textContent = phase === 'nighttime' ? 'THIS WAVE' : 'NEXT WAVE';
 
     if (phase === 'ended' && (state.screen === 'lobby' || state.screen === 'joining' || state.screen === 'results' || state.screen === 'playing')) {
@@ -611,7 +618,6 @@ export function registerEvents(socket) {
     document.getElementById('nwpWave').textContent = data.wave;
     document.getElementById('dWave').textContent = data.wave;
     populateNWRows(data.enemies);
-    showNWPopup();
   });
 
   // Popup click bindings (wired once)
@@ -761,7 +767,7 @@ function preRenderMiniIcons() {
 }
 
 async function loadGameAssets() {
-  const [sheet, meta, kSheet, kMeta, hSheet, hMeta, layout, mSheet, mMeta] = await Promise.all([
+  const [sheet, meta, kSheet, kMeta, hSheet, hMeta, layout, mSheet, mMeta, cSheet, cMeta] = await Promise.all([
     loadImage('/images/spritesheet.png'),
     fetch('/images/spritesheet.json').then(r => r.json()),
     loadImage('/images/KnightSheet.png'),
@@ -770,7 +776,9 @@ async function loadGameAssets() {
     fetch('/images/HUD.json').then(r => r.json()),
     fetch('/holdyourground/hud-layout.json').then(r => r.json()).catch(() => null),
     loadImage('/images/Minis.png'),
-    fetch('/images/Minis.json').then(r => r.json())
+    fetch('/images/Minis.json').then(r => r.json()),
+    loadImage('/images/CardSheet.png'),
+    fetch('/images/CardSheet.json').then(r => r.json())
   ]);
   state.spriteSheet = sheet;
   state.spriteFrames = meta.frames;
@@ -781,6 +789,8 @@ async function loadGameAssets() {
   state.hudLayout = layout;
   state.miniSheet = mSheet;
   state.miniFrames = mMeta.frames;
+  state.cardSheet = cSheet;
+  state.cardFrames = cMeta.frames;
 
   const gearFrame = state.hudFrames?.['settingsgear.png']?.frame;
   if (gearFrame) {
@@ -832,7 +842,7 @@ async function enterGame(socket) {
   if (!document.getElementById('resultsOverlay').classList.contains('hidden')) {
     document.getElementById('joinGameBtn').classList.add('hidden');
   }
-  ['hud', 'hotbarInventory', 'settingsBtn'].forEach(id => document.getElementById(id).classList.remove('hidden'));
+  ['hud', 'settingsBtn'].forEach(id => document.getElementById(id).classList.remove('hidden'));
   if (!state.isSpectator) {
   }
   startRender(socket);

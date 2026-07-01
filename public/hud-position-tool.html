@@ -337,7 +337,7 @@ function renderControls() {
     fillGroup.classList.add('hidden');
   }
   const textGroup = document.getElementById('textGroup');
-  if (item.name === 'ServerLevel.png' || item.name === 'PlayerLevel' || item.name === 'PlayerName' || item.name === 'StatsHotkey') {
+  if (item.name === 'ServerLevel.png' || item.name === 'PlayerLevel' || item.name === 'PlayerName' || item.name === 'StatsHotkey' || item.name === 'PhaseName' || item.name === 'PhaseTimer') {
     textGroup.classList.remove('hidden');
     document.getElementById('textX').value = item.textX ?? 0;
     document.getElementById('textY').value = item.textY ?? 0;
@@ -371,7 +371,7 @@ function renderOutput() {
       obj.fillW = i.fillW ?? i.frame?.spriteSourceSize?.w;
       obj.fillH = i.fillH ?? i.frame?.spriteSourceSize?.h;
     }
-    if (i.name === 'ServerLevel.png' || i.name === 'PlayerLevel' || i.name === 'PlayerName' || i.name === 'StatsHotkey') {
+    if (i.name === 'ServerLevel.png' || i.name === 'PlayerLevel' || i.name === 'PlayerName' || i.name === 'StatsHotkey' || i.name === 'PhaseName' || i.name === 'PhaseTimer') {
       if (i.textX) obj.textX = i.textX;
       if (i.textY) obj.textY = i.textY;
       if (i.textSize) obj.textSize = i.textSize;
@@ -598,7 +598,9 @@ function render() {
   for (const preview of [
     { name: 'ServerLevel.png', text: '12', key: 'textSize', defSize: 32 },
     { name: 'PlayerLevel', text: '5', key: 'textSize', defSize: 28 },
-    { name: 'StatsHotkey', text: 'C', key: 'textSize', defSize: 28 }
+    { name: 'StatsHotkey', text: 'C', key: 'textSize', defSize: 28 },
+    { name: 'PhaseName', text: 'Nighttime', key: 'textSize', defSize: 28 },
+    { name: 'PhaseTimer', text: '10s', key: 'textSize', defSize: 28 }
   ]) {
     const el = items.find(i => i.name === preview.name && i.visible !== false);
     if (!el) continue;

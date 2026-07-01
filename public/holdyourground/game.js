@@ -78,7 +78,7 @@ function showScreen(id) {
   if (id === 'eliminated') eliminated.classList.remove('hidden');
   if (id === 'waitingRespawn') waitingRespawn.classList.remove('hidden');
   if (id === 'lobby') lobbyScreen.classList.remove('hidden');
-  if (id === 'playing') { hud.classList.remove('hidden'); hotbarEl.classList.remove('hidden'); settingsBtn.classList.remove('hidden'); }
+  if (id === 'playing') { hud.classList.remove('hidden'); settingsBtn.classList.remove('hidden'); }
 }
 
 showScreen('menu');

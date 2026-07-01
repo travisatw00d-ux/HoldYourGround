@@ -190,8 +190,7 @@ export function startAttackAnim(lockedAngle) {
   if (state.localAnim) return;
   const me = state.players[state.myId];
   if (!me) return;
-  const knightKey = me.lvl >= 20 ? 'T3KnightHead.png' : me.lvl >= 10 ? 'T2KnightHead.png' : 'T1KnightHead.png';
-  const knightFrame = state.knightFrames?.[knightKey]?.frame;
+  const knightFrame = state.knightFrames?.['T1KnightHead.png']?.frame;
   if (knightFrame) {
     const anim = window.KNIGHT_ANIMATIONS?.attack;
     if (!anim || !anim.knight_sword || anim.knight_sword.keyframes.length < 2) return;
@@ -347,8 +346,7 @@ export function drawKnightPreview(ctx, cw, ch) {
 }
 
 export function drawPlayer(ctx, p, sx, sy, alpha, topKills) {
-  const knightKey = p.lvl >= 20 ? 'T3KnightHead.png' : p.lvl >= 10 ? 'T2KnightHead.png' : 'T1KnightHead.png';
-  const knightFrame = state.knightFrames?.[knightKey]?.frame;
+  const knightFrame = state.knightFrames?.['T1KnightHead.png']?.frame;
   const isKnight = !!knightFrame;
 
   if (knightFrame) {

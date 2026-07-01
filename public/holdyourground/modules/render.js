@@ -49,16 +49,13 @@ function render() {
   if (state.matchPhase === 'nighttime' && state.waveStartTime > 0) {
     const elapsed = Math.floor((performance.now() - state.waveStartTime) / 1000);
     const prev = state._lastWaveSec || -1;
-    if (elapsed !== prev) { document.getElementById('phaseTimer').textContent = elapsed + 's'; state._lastWaveSec = elapsed; }
+    if (elapsed !== prev) { state._lastWaveSec = elapsed; }
   } else if (state.matchPhase === 'daytime' && state.phaseTimer > 0 && state.phaseTimer <= 10000 && !state._wavePopupTriggered && state.waveComposition && state._showNWPopup) {
     state._wavePopupTriggered = true;
     state._showNWPopup();
   } else if (state.matchPhase && state.matchPhase !== 'waiting' && state.phaseTimerStart > 0) {
     const elapsed = performance.now() - state.phaseStartedAt;
     const remaining = Math.max(0, state.phaseTimerStart - elapsed);
-    const seconds = Math.ceil(remaining / 1000);
-    const prevSeconds = Math.ceil(state.phaseTimer / 1000);
-    if (seconds !== prevSeconds) document.getElementById('phaseTimer').textContent = seconds + 's';
     state.phaseTimer = remaining;
   }
 
@@ -148,7 +145,7 @@ function render() {
     }
     drawPlayer(ctx, p, sx, sy, alpha, topKills);
     if (state.debugHitbox) {
-      const knightFrame = state.knightFrames?.[`T${p.lvl >= 20 ? 3 : p.lvl >= 10 ? 2 : 1}KnightHead.png`]?.frame;
+      const knightFrame = state.knightFrames?.['T1KnightHead.png']?.frame;
       drawDebugSwordHitbox(ctx, p, sx, sy, !!knightFrame);
     }
   }
