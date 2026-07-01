@@ -331,6 +331,8 @@ class Room {
             this._diag(id, 'intermission→daytime_respawn', {});
             playerMod.respawnPlayer(id, this.players, this.zombies);
             this.io.to(id).emit('respawned');
+            const rt = expMod.getExpToNext(this.players[id].lvl);
+            this.io.to(id).emit('accountUpdate', { exp: this.players[id].exp, level: this.players[id].lvl, expToNext: rt, gold: this.players[id].gold });
           } else {
             const p = this.players[id];
             this._diag(id, 'intermission→daytime_skip', { reason: p.alive ? 'already alive' : 'is spectator', alive: p.alive, isSpectator: p.isSpectator });
