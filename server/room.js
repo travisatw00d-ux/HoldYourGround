@@ -179,9 +179,10 @@ class Room {
   handleAttack(id, facingAngle) {
     const p = this.players[id];
     if (!p || !p.alive || p.isSpectator || p.attackCooldown > 0 || p.attacking) return;
+    const style = p.attackStyle || 'jab';
     const anim = p.playerClass === 'knight'
-      ? KNIGHT_ANIMATIONS?.attack
-      : ANIMATIONS[p.currentItem]?.attack;
+      ? KNIGHT_ANIMATIONS?.[style]
+      : ANIMATIONS[p.currentItem]?.[style];
     if (!anim) return;
     const kfData = p.playerClass === 'knight' ? anim.knight_sword : anim;
     if (!kfData || kfData.keyframes.length < 2) return;

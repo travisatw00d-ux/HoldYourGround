@@ -1,4 +1,5 @@
 import { state } from './state.js';
+import { startIdleTransition } from './render-entity.js';
 
 const keys = {};
 const keyTimers = {};
@@ -73,6 +74,13 @@ export function setupInput(socket, canvas) {
       state.showHudDebug = !state.showHudDebug;
       if (state.showHudDebug) { state.debugHitbox = false; state.showDiag = false; }
       console.log('[HYG] HUD debug:', state.showHudDebug);
+    }
+    if (e.key === ' ') {
+      e.preventDefault();
+      const newStyle = state.attackStyle === 'jab' ? 'swing' : 'jab';
+      startIdleTransition(newStyle);
+      socket.emit('toggleAttackStyle');
+      state.attackStyle = newStyle;
     }
   });
 

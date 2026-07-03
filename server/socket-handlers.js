@@ -143,6 +143,15 @@ module.exports = function registerSocket(socket, { io, broadcastRoomList, broadc
     if (room) room.setCameraZoom(socket.id, data);
   });
 
+  socket.on('toggleAttackStyle', () => {
+    const room = roomManager.getPlayerRoom(socket.id);
+    if (!room) return;
+    const p = room.players[socket.id];
+    if (!p) return;
+    p.attackStyle = p.attackStyle === 'jab' ? 'swing' : 'jab';
+    socket.emit('attackStyleChanged', { attackStyle: p.attackStyle });
+  });
+
   socket.on('toggleGodMode', () => {
     const room = roomManager.getPlayerRoom(socket.id);
     if (room) {

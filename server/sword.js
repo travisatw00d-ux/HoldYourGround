@@ -44,17 +44,22 @@ function checkSwordHit(p, zombies, players, grid) {
   const bladeW = BLADE_W;
   const angle = (p.attacking && p.attackLockedAngle != null) ? p.attackLockedAngle : (p.facingAngle || 0);
 
+  // Swing only deals damage on the forward swing (first half)
+  const halfFrames = p.attackStyle === 'swing' ? Math.floor(totalFrames / 2) : totalFrames;
+
   const cfs = [];
   if (p.prevCf >= 0 && p.prevCf !== currentCf) {
     const span = currentCf - p.prevCf;
     const steps = Math.min(8, Math.ceil(span));
     for (let s = 1; s <= steps; s++) {
-      cfs.push(p.prevCf + span * (s / steps));
+      const cf = p.prevCf + span * (s / steps);
+      if (cf < halfFrames) cfs.push(cf);
     }
-  } else {
+  } else if (currentCf < halfFrames) {
     cfs.push(currentCf);
   }
   p.prevCf = currentCf;
+  if (cfs.length === 0) return events;
 
   const nearbyZombies = grid.getNearbyZombies(p.x, p.y);
 
@@ -84,7 +89,8 @@ function checkSwordHit(p, zombies, players, grid) {
       if (p.attackHitIds.includes(z.id)) continue;
       const d2 = distToSegSq(z.x, z.y, hiltX, hiltY, tipX, tipY);
       if (d2 < (bladeW + z.radius) * (bladeW + z.radius)) {
-        z.health -= p.attackDmg;
+        const dmgMult = p.attackStyle === 'swing' ? 0.7 : 1.0;
+        z.health -= Math.round(p.attackDmg * dmgMult);
         const kzx = z.x - p.x, kzy = z.y - p.y;
         const kzd = Math.sqrt(kzx * kzx + kzy * kzy) || 1;
         z.x += (kzx / kzd) * ATTACK_KNOCKBACK * 3;
@@ -95,7 +101,7 @@ function checkSwordHit(p, zombies, players, grid) {
           p.kills++;
           events.push({ type: 'zombieKilled', playerId: p.id, zombieLvl: z.lvl });
         }
-        events.push({ type: 'hitConfirm', to: p.id, targetId: z.id, dmg: p.attackDmg, x: z.x, y: z.y });
+        events.push({ type: 'hitConfirm', to: p.id, targetId: z.id, dmg: Math.round(p.attackDmg * dmgMult), x: z.x, y: z.y });
       }
     }
   }

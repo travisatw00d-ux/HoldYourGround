@@ -53,6 +53,8 @@ export const state = {
   zombieAnims: {},
   showHudDebug: false,
   waveComposition: null,
+  attackStyle: 'jab',
+  idleTransition: null,
   isSpectator: false,
   isDeadSpectating: false,
   queuedPlayers: [],

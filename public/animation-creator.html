@@ -165,8 +165,8 @@ const ZOMBIE_INITIAL_LEFT  = { offsetX: 16, offsetY: -20, scale: 0.230, rotation
 const ZOMBIE_INITIAL_RIGHT = { offsetX: 16, offsetY: 20,  scale: 0.230, rotation: -1.55 };
 const SWORD_INITIAL        = { offsetX: 23, offsetY: 24,  scale: 0.047, rotation: 0.59 };
 
-const KNIGHT_INITIAL_SWORD = { offsetX: 19, offsetY: 37, scale: 0.430, rotation: 1.65 };
-const KNIGHT_INITIAL_HAND  = { offsetX: 25, offsetY: -17, scale: 0.383, rotation: 0.14 };
+const KNIGHT_INITIAL_SWORD = { offsetX: 25, offsetY: -43, scale: 0.430, rotation: -0.42 };
+const KNIGHT_INITIAL_HAND  = { offsetX: 3, offsetY: -33, scale: 0.383, rotation: -0.09 };
 
 // ─── Sword data (unchanged) ───
 
@@ -214,7 +214,7 @@ let playFrame = 0;
 let animRAF = null;
 
 // ─── Hitbox state ───
-let hbTipX = -10, hbTipY = -87, hbHiltX = 0, hbHiltY = 16, hbBladeW = 6;
+let hbTipX = -5, hbTipY = -74, hbHiltX = 4, hbHiltY = 16, hbBladeW = 6;
 let dragHitbox = null; // 'tip' or 'hilt'
 
 // Sprite sheet

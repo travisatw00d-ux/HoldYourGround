@@ -30,6 +30,7 @@ app.get('/', (req, res) => { res.set('Cache-Control', 'no-store'); res.sendFile(
 app.get('/version', (req, res) => { res.set('Cache-Control', 'no-store'); res.send('1'); });
 app.use(express.static('public', { setHeaders: (res) => { res.set('Cache-Control', 'no-store'); } }));
 app.use('/images', express.static('images', { setHeaders: (res) => { res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate'); res.set('Pragma', 'no-cache'); res.set('Expires', '0'); } }));
+app.use('/workflow', express.static('Workflow', { setHeaders: (res) => { res.set('Cache-Control', 'no-store'); } }));
 app.get('/health', (req, res) => res.send('OK'));
 
 const lobbySockets = new Set();

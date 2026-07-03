@@ -181,7 +181,7 @@ Promise.all([
   hudFrames = json.frames;
   const layoutMap = {};
   for (const el of layoutArr) layoutMap[el.name] = el;
-  const names = Object.keys(hudFrames);
+  const names = Object.keys(hudFrames).filter(name => name !== 'Activated.png');
   let autoIdx = 0;
   items = names.map((name) => {
     const f = hudFrames[name];
@@ -207,10 +207,18 @@ Promise.all([
   // Add virtual elements from layout that aren't in HUD frames
   for (const laid of layoutArr) {
     if (!hudFrames[laid.name] && !items.find(i => i.name === laid.name)) {
+      let virtualFrame = null;
+      let virtW = 80, virtH = 30;
+      // Highlights use Activated.png sprite (hidden from layer list but assigned as frame)
+      if ((laid.name === 'JabHighlight' || laid.name === 'SwingHighlight') && hudFrames['Activated.png']) {
+        virtualFrame = hudFrames['Activated.png'];
+        virtW = laid.w || virtualFrame.sourceSize.w;
+        virtH = laid.h || virtualFrame.sourceSize.h;
+      }
       items.push({
-        name: laid.name, x: laid.x, y: laid.y, w: 80, h: 30,
-        zIndex: laid.zIndex, visible: true, scale: 1.0,
-        textX: laid.textX, textY: laid.textY, textSize: laid.textSize, frame: null
+        name: laid.name, x: laid.x, y: laid.y, w: virtW, h: virtH,
+        zIndex: laid.zIndex, visible: true, scale: laid.scale || 1.0,
+        textX: laid.textX, textY: laid.textY, textSize: laid.textSize, frame: virtualFrame
       });
     }
   }
@@ -410,6 +418,8 @@ function render() {
     if (frame && hudSheet.complete) {
       const fr = frame.frame;
       const sss = frame.spriteSourceSize;
+      const dw = sss.w * item.scale;
+      const dh = sss.h * item.scale;
 
       // Dynamic fill for HealthBar
       if (item.name === 'HealthBar.png' && item.fillVisible !== false) {
@@ -525,25 +535,48 @@ function render() {
 
       // Skip sprite draw for text-only virtual elements
       if (item.name !== 'PlayerLevel') {
-        ctx.drawImage(hudSheet, fr.x, fr.y, sss.w, sss.h, item.x + sss.x * item.scale, item.y + sss.y * item.scale, sss.w * item.scale, sss.h * item.scale);
+        let dx, dy;
+        let drawW = dw, drawH = dh;
+        // Attack icons and highlights use right/bottom anchoring, matching the game
+        if (item.name === 'JabAttack.png' || item.name === 'SwingAttack.png' || item.name === 'JabHighlight' || item.name === 'SwingHighlight') {
+          const right = W - (item.x + sss.x * item.scale) - sss.w * item.scale;
+          const bottom = H - (item.y + sss.y * item.scale) - sss.h * item.scale;
+          dx = W - right - dw;
+          dy = H - bottom - dh;
+        } else {
+          dx = item.x + sss.x * item.scale;
+          dy = item.y + sss.y * item.scale;
+        }
+        ctx.drawImage(hudSheet, fr.x, fr.y, sss.w, sss.h, dx, dy, drawW, drawH);
       }
     }
 
     // Selection highlight
     if (idx === selectedIdx) {
+      let hx = item.x, hy = item.y;
+      // Attack icons and highlights anchored to bottom-right — shift selection box to match
+      if (item.name === 'JabAttack.png' || item.name === 'SwingAttack.png' || item.name === 'JabHighlight' || item.name === 'SwingHighlight') {
+        const sss2 = item.frame.spriteSourceSize;
+        const dw2 = sss2.w * item.scale;
+        const dh2 = sss2.h * item.scale;
+        const right = W - (item.x + sss2.x * item.scale) - sss2.w * item.scale;
+        const bottom = H - (item.y + sss2.y * item.scale) - sss2.h * item.scale;
+        hx = W - right - dw2;
+        hy = H - bottom - dh2;
+      }
       ctx.strokeStyle = '#4ECDC4'; ctx.lineWidth = 2;
-      ctx.strokeRect(item.x - 1, item.y - 1, sw + 2, sh + 2);
-      // Resize handles
+      ctx.strokeRect(hx - 1, hy - 1, sw + 2, sh + 2);
       const hs = 6;
       ctx.fillStyle = '#4ECDC4';
-      [[item.x, item.y], [item.x + sw, item.y], [item.x, item.y + sh], [item.x + sw, item.y + sh]].forEach(([hx, hy]) => {
-        ctx.fillRect(hx - hs/2, hy - hs/2, hs, hs);
+      [[hx, hy], [hx + sw, hy], [hx, hy + sh], [hx + sw, hy + sh]].forEach(([hp, hp2]) => {
+        ctx.fillRect(hp - hs/2, hp2 - hs/2, hs, hs);
       });
     }
 
     // Name label
     ctx.fillStyle = 'rgba(255,255,255,0.3)'; ctx.font = '9px monospace'; ctx.textAlign = 'left';
-    ctx.fillText(item.name.replace('.png',''), item.x, item.y + sh + 12);
+    let labelX = item.x, labelY = item.y + sh + 12;
+    ctx.fillText(item.name.replace('.png',''), labelX, labelY);
 
     ctx.restore();
   }

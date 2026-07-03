@@ -72,6 +72,7 @@ function addPlayer(id, name, players, zombies, accountType, accountId) {
     viewH: 600,
     fullscreen: false,
     godMode: false,
+    attackStyle: 'jab',
     sprint: false,
     sprintEndCooldown: 0,
     isSpectator: false

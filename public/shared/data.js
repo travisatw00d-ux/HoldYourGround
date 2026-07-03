@@ -33,7 +33,7 @@
 
   const ANIMATIONS = {
     wooden_sword: {
-      attack: {
+      jab: {
         keyframes: [
           { offsetX: 23, offsetY: 24, scale: 0.047, rotation: 0.76 },
           { offsetX: 51, offsetY: 19, scale: 0.047, rotation: 0.69 },
@@ -42,6 +42,13 @@
           { offsetX: 23, offsetY: 24, scale: 0.047, rotation: 0.76 },
         ],
         segments: [19, 19, 17, 17]
+      },
+      swing: {
+        keyframes: [
+          { offsetX: 23, offsetY: 24, scale: 0.047, rotation: 0.76 },
+          { offsetX: 23, offsetY: 24, scale: 0.047, rotation: 0.76 },
+        ],
+        segments: [10]
       }
     }
   };
@@ -103,22 +110,18 @@
   const KNIGHT_BLADE_HILT_Y = 16;
 
   const KNIGHT_VISUALS = {
-    knight_sword: {
-      offsetX: 19,
-      offsetY: 37,
-      scale: 0.430,
-      rotation: 1.65
+    jab: {
+      knight_sword: { offsetX: 19, offsetY: 37, scale: 0.43, rotation: 1.65 },
+      knight_hand:  { offsetX: 25, offsetY: -17, scale: 0.383, rotation: 0.14 }
     },
-    knight_hand: {
-      offsetX: 25,
-      offsetY: -17,
-      scale: 0.383,
-      rotation: 0.14
+    swing: {
+      knight_sword: { offsetX: 25, offsetY: -43, scale: 0.43, rotation: -0.42 },
+      knight_hand:  { offsetX: 3, offsetY: -33, scale: 0.383, rotation: -0.09 }
     }
   };
 
   const KNIGHT_ANIMATIONS = {
-    attack: {
+    jab: {
       segments: [30, 30],
       knight_sword: {
         keyframes: [
@@ -132,6 +135,59 @@
           { offsetX: 25, offsetY: -17, scale: 0.383, rotation: 0.14 },
           { offsetX: 7, offsetY: -31, scale: 0.383, rotation: -0.22 },
           { offsetX: 25, offsetY: -17, scale: 0.383, rotation: 0.14 },
+        ]
+      }
+    },
+    swing: {
+      segments: [3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3],
+      knight_sword: {
+        keyframes: [
+          { offsetX: 25, offsetY: -43, scale: 0.43, rotation: -0.42 },
+          { offsetX: 28, offsetY: -42, scale: 0.43, rotation: -0.33 },
+          { offsetX: 36, offsetY: -37, scale: 0.43, rotation: -0.09 },
+          { offsetX: 46, offsetY: -28, scale: 0.43, rotation: 0.27 },
+          { offsetX: 54, offsetY: -13, scale: 0.43, rotation: 0.71 },
+          { offsetX: 58, offsetY: 6, scale: 0.43, rotation: 1.18 },
+          { offsetX: 56, offsetY: 26, scale: 0.43, rotation: 1.65 },
+          { offsetX: 47, offsetY: 43, scale: 0.43, rotation: 2.09 },
+          { offsetX: 35, offsetY: 55, scale: 0.43, rotation: 2.45 },
+          { offsetX: 26, offsetY: 62, scale: 0.43, rotation: 2.69 },
+          { offsetX: 22, offsetY: 64, scale: 0.43, rotation: 2.78 },
+          { offsetX: 26, offsetY: 62, scale: 0.43, rotation: 2.69 },
+          { offsetX: 35, offsetY: 55, scale: 0.43, rotation: 2.45 },
+          { offsetX: 47, offsetY: 43, scale: 0.43, rotation: 2.09 },
+          { offsetX: 56, offsetY: 26, scale: 0.43, rotation: 1.65 },
+          { offsetX: 58, offsetY: 6, scale: 0.43, rotation: 1.18 },
+          { offsetX: 54, offsetY: -13, scale: 0.43, rotation: 0.71 },
+          { offsetX: 46, offsetY: -28, scale: 0.43, rotation: 0.27 },
+          { offsetX: 36, offsetY: -37, scale: 0.43, rotation: -0.09 },
+          { offsetX: 28, offsetY: -42, scale: 0.43, rotation: -0.33 },
+          { offsetX: 25, offsetY: -43, scale: 0.43, rotation: -0.42 },
+        ]
+      },
+      knight_hand: {
+        keyframes: [
+          { offsetX: 3, offsetY: -33, scale: 0.383, rotation: -0.09 },
+          { offsetX: 4, offsetY: -33, scale: 0.383, rotation: -0.08 },
+          { offsetX: 6, offsetY: -33, scale: 0.383, rotation: -0.07 },
+          { offsetX: 9, offsetY: -32, scale: 0.383, rotation: -0.04 },
+          { offsetX: 13, offsetY: -32, scale: 0.383, rotation: -0.01 },
+          { offsetX: 16, offsetY: -30, scale: 0.383, rotation: 0.02 },
+          { offsetX: 20, offsetY: -28, scale: 0.383, rotation: 0.05 },
+          { offsetX: 23, offsetY: -26, scale: 0.383, rotation: 0.08 },
+          { offsetX: 26, offsetY: -24, scale: 0.383, rotation: 0.11 },
+          { offsetX: 27, offsetY: -23, scale: 0.383, rotation: 0.12 },
+          { offsetX: 28, offsetY: -22, scale: 0.383, rotation: 0.13 },
+          { offsetX: 27, offsetY: -23, scale: 0.383, rotation: 0.12 },
+          { offsetX: 26, offsetY: -24, scale: 0.383, rotation: 0.11 },
+          { offsetX: 23, offsetY: -26, scale: 0.383, rotation: 0.08 },
+          { offsetX: 20, offsetY: -28, scale: 0.383, rotation: 0.05 },
+          { offsetX: 16, offsetY: -30, scale: 0.383, rotation: 0.02 },
+          { offsetX: 13, offsetY: -32, scale: 0.383, rotation: -0.01 },
+          { offsetX: 9, offsetY: -32, scale: 0.383, rotation: -0.04 },
+          { offsetX: 6, offsetY: -33, scale: 0.383, rotation: -0.07 },
+          { offsetX: 4, offsetY: -33, scale: 0.383, rotation: -0.08 },
+          { offsetX: 3, offsetY: -33, scale: 0.383, rotation: -0.09 },
         ]
       }
     }

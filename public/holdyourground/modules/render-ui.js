@@ -166,6 +166,24 @@ export function drawHUD(ctx) {
   const sorted = [...state.hudLayout].sort((a, b) => a.zIndex - b.zIndex);
   let hbEl = null;
   for (const el of sorted) {
+    // Attack style highlight (positioned via highlight's own layout x/y/scale)
+    if (el.name === 'JabHighlight' || el.name === 'SwingHighlight') {
+      const active = state.attackStyle === 'jab' ? 'JabHighlight' : 'SwingHighlight';
+      if (el.name !== active) continue;
+      const actFrame = state.hudFrames?.['Activated.png']?.frame;
+      const actSss = state.hudFrames?.['Activated.png']?.spriteSourceSize;
+      if (!actFrame || !actSss || !state.hudSheet) continue;
+      const scl = viewportScale;
+      const dw = actSss.w * el.scale * scl;
+      const dh = actSss.h * el.scale * scl;
+      const right = 1024 - (el.x + actSss.x * el.scale) - actSss.w * el.scale;
+      const bottom = 576 - (el.y + actSss.y * el.scale) - actSss.h * el.scale;
+      const dx = state.viewW - right * scl - dw;
+      const dy = state.viewH - bottom * scl - dh;
+      ctx.drawImage(state.hudSheet, actFrame.x, actFrame.y, actFrame.w, actFrame.h, dx, dy, dw, dh);
+      continue;
+    }
+
     const fd = state.hudFrames[el.name];
     if (!fd) continue;
     const isGroup = HUD_GROUP.includes(el.name);

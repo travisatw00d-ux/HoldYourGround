@@ -494,6 +494,10 @@ export function registerEvents(socket) {
     state.exp = exp; state.level = level; state.expToNext = expToNext; state.gold = gold;
   });
 
+  socket.on('attackStyleChanged', ({ attackStyle }) => {
+    state.attackStyle = attackStyle;
+  });
+
   socket.on('spectatorAssigned', () => {
     state.isSpectator = true;
     state.isDeadSpectating = false;
