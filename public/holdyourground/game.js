@@ -321,7 +321,7 @@ function clearCanvas() {
 }
 
 function logScreenState(tag) {
-  const ids = ['menu','lobbyScreen','resultsOverlay','eliminated','loadingOverlay','settingsBtn','settingsPanel','hud','hotbarInventory','phaseDisplay','waitingRespawn','joinGameBtn','escapeMenu','canvas'];
+  const ids = ['menu','lobbyScreen','resultsOverlay','eliminated','loadingOverlay','settingsBtn','settingsPanel','hud','hotbarInventory','waitingRespawn','joinGameBtn','escapeMenu','canvas'];
   let out = '[SCREEN-' + tag + '] scr=' + state.screen + ' ph=' + state.matchPhase + ' jE=' + state._joinedEnded;
   for (const id of ids) {
     const el = document.getElementById(id);
@@ -340,7 +340,6 @@ function leaveToMenu() {
   lobbyScreen.classList.add('hidden');
   document.getElementById('resultsOverlay').classList.add('hidden');
   document.getElementById('loadingOverlay').classList.add('hidden');
-  document.getElementById('phaseDisplay').classList.add('hidden');
   document.getElementById('joinGameBtn').classList.add('hidden');
   hotbarEl.classList.add('hidden');
   settingsPanel.classList.add('hidden');

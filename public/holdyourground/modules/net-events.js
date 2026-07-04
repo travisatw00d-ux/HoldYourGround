@@ -559,7 +559,6 @@ export function registerEvents(socket) {
     if (phase === 'nighttime') state.waveStartTime = performance.now();
     state.currentWave = wave;
     if (activePlayers) state.isSpectator = !activePlayers.includes(state.myId);
-    document.getElementById('phaseDisplay').classList.add('hidden');
     document.getElementById('nwpTitle').textContent = phase === 'nighttime' ? 'THIS WAVE' : 'NEXT WAVE';
 
     if (phase === 'ended' && (state.screen === 'lobby' || state.screen === 'joining' || state.screen === 'results' || state.screen === 'playing')) {
@@ -598,7 +597,7 @@ export function registerEvents(socket) {
     } else if (phase === 'waiting' && (state.screen === 'lobby' || state.screen === 'joining' || state.screen === 'results')) {
       await ensureAssets();
       document.getElementById('loadingOverlay').classList.add('hidden');
-      ['eliminated', 'waitingRespawn', 'settingsPanel', 'phaseDisplay', 'hud', 'hotbarInventory'].forEach(id => document.getElementById(id).classList.add('hidden'));
+      ['eliminated', 'waitingRespawn', 'settingsPanel', 'hud', 'hotbarInventory'].forEach(id => document.getElementById(id).classList.add('hidden'));
       document.getElementById('lobbyScreen').classList.remove('hidden');
       document.getElementById('lobbyStartBtn').classList.toggle('hidden', !!state.isSpectator);
       document.getElementById('resultsOverlay').classList.add('hidden');
@@ -668,7 +667,7 @@ export function registerEvents(socket) {
     state.matchPhase = 'ended'; state.isDeadSpectating = false;
     document.getElementById('loadingOverlay').classList.add('hidden');
     document.getElementById('resultsOverlay').classList.remove('hidden');
-    ['phaseDisplay', 'waitingRespawn'].forEach(id => document.getElementById(id).classList.add('hidden'));
+    ['waitingRespawn'].forEach(id => document.getElementById(id).classList.add('hidden'));
     ['menu', 'eliminated'].forEach(id => document.getElementById(id).classList.add('hidden'));
     document.getElementById('joinGameBtn').classList.add('hidden');
     ['hud', 'hotbarInventory', 'settingsBtn', 'settingsPanel'].forEach(id => document.getElementById(id).classList.add('hidden'));
@@ -688,7 +687,6 @@ export function registerEvents(socket) {
     document.getElementById('loadingOverlay').classList.add('hidden');
     state.matchPhase = 'waiting'; state.phaseTimer = 0; state.phaseTimerStart = 0; state.phaseStartedAt = 0;
     state.currentWave = 0; state.screen = 'lobby';
-    document.getElementById('phaseDisplay').classList.add('hidden');
     ['resultsOverlay', 'waitingRespawn', 'eliminated'].forEach(id => document.getElementById(id).classList.add('hidden'));
     document.getElementById('lobbyTimer').classList.add('hidden');
     document.getElementById('lobbyQueueInfo').classList.add('hidden');

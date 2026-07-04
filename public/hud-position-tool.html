@@ -204,11 +204,13 @@ Promise.all([
     };
   });
   selectedIdx = items.length > 0 ? 0 : -1;
+  // Remove standalone Activated.png — we use JabHighlight/SwingHighlight instead
+  items = items.filter(i => i.name !== 'Activated.png');
   // Add virtual elements from layout that aren't in HUD frames
   for (const laid of layoutArr) {
     if (!hudFrames[laid.name] && !items.find(i => i.name === laid.name)) {
       items.push({
-        name: laid.name, x: laid.x, y: laid.y, w: 80, h: 30,
+        name: laid.name, x: laid.x, y: laid.y, w: laid.w || 80, h: laid.h || 30,
         zIndex: laid.zIndex, visible: true, scale: 1.0,
         textX: laid.textX, textY: laid.textY, textSize: laid.textSize, frame: null
       });
@@ -399,12 +401,36 @@ function render() {
     const idx = items.indexOf(item);
     const frame = item.frame;
     if (!frame || !hudSheet.complete) {
-      if (item.name !== 'StatsHotkey') continue;
+      if (item.name !== 'StatsHotkey' && item.name !== 'JabHighlight' && item.name !== 'SwingHighlight') continue;
     }
 
     ctx.save();
 
     const sw = item.w * item.scale, sh = item.h * item.scale;
+
+    // Attack style highlight (anchored to the matching attack icon)
+    if (item.name === 'JabHighlight' || item.name === 'SwingHighlight') {
+      const actFrame = hudFrames?.['Activated.png']?.frame;
+      const iconName = item.name === 'JabHighlight' ? 'JabAttack.png' : 'SwingAttack.png';
+      const icon = items.find(i => i.name === iconName);
+      if (actFrame && hudSheet.complete && icon && icon.frame) {
+        const fr = icon.frame.frame;
+        const sss = icon.frame.spriteSourceSize;
+        const dw = sss.w * icon.scale;
+        const dh = sss.h * icon.scale;
+        const r = 1024 - (icon.x + sss.x * icon.scale) - sss.w * icon.scale;
+        const b = 576 - (icon.y + sss.y * icon.scale) - sss.h * icon.scale;
+        const dx = 1024 - r - dw;
+        const dy = 576 - b - dh;
+        ctx.drawImage(hudSheet, actFrame.x, actFrame.y, actFrame.w, actFrame.h, dx, dy, dw, dh);
+      }
+      ctx.fillStyle = '#fff';
+      ctx.font = '9px monospace';
+      ctx.textAlign = 'left';
+      ctx.fillText(item.name, item.x, item.y + sh + 12);
+      ctx.restore();
+      continue;
+    }
 
     // Sprite and dynamic fill drawing (only for items with sprites)
     if (frame && hudSheet.complete) {

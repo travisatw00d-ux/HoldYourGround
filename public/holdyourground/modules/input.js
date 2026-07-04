@@ -125,7 +125,7 @@ export function setupInput(socket, canvas) {
 
   canvas.addEventListener('mousedown', (e) => {
     if (e.button === 0 && state.screen === 'playing') {
-      socket.emit('attack', { facingAngle: state.players[state.myId]?.facingAngle || 0 });
+      socket.emit('attack', { facingAngle: state.players[state.myId]?.realAngle || state.players[state.myId]?.facingAngle || 0 });
     }
   });
 

@@ -2,8 +2,26 @@ import { state } from './state.js';
 
 const _spriteCache = new Map();
 
+let _leanRot = 0;
+
+function updateLean(p) {
+  if (!p) return;
+  const vx = p.x - p.px;
+  const vy = p.y - p.py;
+  const aim = p._smoothAngle ?? p.facingAngle ?? 0;
+  const localRight = -vx * Math.sin(aim) + vy * Math.cos(aim);
+  const targetLean = localRight * 0.04;
+  _leanRot += (targetLean - _leanRot) * 0.12;
+  if (Math.abs(_leanRot) < 0.0001) _leanRot = 0;
+}
+
 function smoothstep(t) {
   return t * t * (3 - 2 * t);
+}
+
+function getBreathScale(amp) {
+  const t = performance.now() / 3500 * Math.PI * 2;
+  return 1.0 + Math.sin(t) * (amp || 0.015);
 }
 
 function toPolar(x, y) {
@@ -32,6 +50,32 @@ function lerpPosePolar(from, to, t) {
   };
 }
 
+function getMovementBob(p) {
+  if (!p) return { x: 0, y: 0 };
+  const dx = p.x - p.px;
+  const dy = p.y - p.py;
+  const speed = Math.sqrt(dx * dx + dy * dy);
+  const t = performance.now() / 1000;
+  const freq = 1.2 + speed * 0.08;
+  const amp = Math.min(1.5, speed * 0.08);
+  return {
+    x: Math.cos(t * freq * Math.PI * 2) * amp * 0.4,
+    y: Math.sin(t * freq * Math.PI * 2) * amp * 0.6
+  };
+}
+
+function getIdleSway(handKey) {
+  const t = performance.now() / 1000;
+  const isSword = handKey === 'knight_sword';
+  const freq1 = isSword ? 0.35 : 0.4;
+  const freq2 = isSword ? 0.5 : 0.55;
+  return {
+    rotOffset: Math.sin(t * freq1 * Math.PI * 2) * (isSword ? 0.025 : 0.015),
+    xOffset: Math.sin(t * freq2 * Math.PI * 2) * (isSword ? 1.2 : 0.6),
+    yOffset: Math.sin(t * freq1 * Math.PI * 2 + 1.2) * (isSword ? 0.8 : 0.4)
+  };
+}
+
 function getKnightIdleVis(handKey) {
   if (state.idleTransition) {
     const elapsed = performance.now() - state.idleTransition.startTime;
@@ -41,10 +85,24 @@ function getKnightIdleVis(handKey) {
     const to = handKey === 'knight_sword' ? state.idleTransition.toSword : state.idleTransition.toHand;
     const vis = lerpPosePolar(from, to, t);
     if (t >= 1) state.idleTransition = null;
-    return vis;
+    const sway = getIdleSway(handKey);
+    return {
+      offsetX: vis.offsetX + sway.xOffset,
+      offsetY: vis.offsetY + sway.yOffset,
+      scale: vis.scale,
+      rotation: +(vis.rotation + sway.rotOffset).toFixed(2)
+    };
   }
   const style = state.attackStyle || 'jab';
-  return window.KNIGHT_VISUALS?.[style]?.[handKey];
+  const base = window.KNIGHT_VISUALS?.[style]?.[handKey];
+  if (!base) return null;
+  const sway = getIdleSway(handKey);
+  return {
+    offsetX: base.offsetX + sway.xOffset,
+    offsetY: base.offsetY + sway.yOffset,
+    scale: base.scale,
+    rotation: +(base.rotation + sway.rotOffset).toFixed(2)
+  };
 }
 
 function startIdleTransition(newStyle) {
@@ -412,10 +470,12 @@ export function drawKnightPreview(ctx, cw, ch) {
 export function drawPlayer(ctx, p, sx, sy, alpha, topKills) {
   const knightFrame = state.knightFrames?.['T1KnightHead.png']?.frame;
   const isKnight = !!knightFrame;
+  const bob = getMovementBob(p);
+  updateLean(p);
 
   if (knightFrame) {
-    drawKnightSword(ctx, p, sx, sy);
-    drawKnightHand(ctx, p, sx, sy);
+    drawKnightSword(ctx, p, sx + bob.x, sy + bob.y);
+    drawKnightHand(ctx, p, sx + bob.x, sy + bob.y);
   } else {
     drawSword(ctx, p, sx, sy);
   }
@@ -424,10 +484,11 @@ export function drawPlayer(ctx, p, sx, sy, alpha, topKills) {
   drawHealthBar(ctx, sx, sy - 36, 36, 4, p.health, p.maxHealth);
 
   if (knightFrame) {
-    const sz = 56 / Math.max(knightFrame.w, knightFrame.h);
+    const breath = getBreathScale(0.015);
+    const sz = (56 / Math.max(knightFrame.w, knightFrame.h)) * breath;
     ctx.save();
-    ctx.translate(sx, sy);
-    ctx.rotate((p._smoothAngle ?? p.facingAngle) - Math.PI / 2);
+    ctx.translate(sx + bob.x, sy + bob.y);
+    ctx.rotate((p._smoothAngle ?? p.facingAngle) - Math.PI / 2 + _leanRot);
     ctx.drawImage(getSpriteFromSheet(state.knightSheet, knightFrame.w * sz, knightFrame.h * sz, knightFrame), -(knightFrame.w * sz) / 2, -(knightFrame.h * sz) / 2, knightFrame.w * sz, knightFrame.h * sz);
     ctx.restore();
   } else {

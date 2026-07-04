@@ -44,8 +44,11 @@ function checkSwordHit(p, zombies, players, grid) {
   const bladeW = BLADE_W;
   const angle = (p.attacking && p.attackLockedAngle != null) ? p.attackLockedAngle : (p.facingAngle || 0);
 
-  // Swing only deals damage on the forward swing (first half)
-  const halfFrames = p.attackStyle === 'swing' ? Math.floor(totalFrames / 2) : totalFrames;
+  // Only deal damage on forward motion: sum segments up to the midpoint keyframe
+  const segs = p.attackAnim.segments;
+  const midKf = Math.floor(p.attackAnim.keyframes.length / 2);
+  let halfFrames = 0;
+  for (let i = 0; i < midKf; i++) halfFrames += segs[i];
 
   const cfs = [];
   if (p.prevCf >= 0 && p.prevCf !== currentCf) {
@@ -53,9 +56,9 @@ function checkSwordHit(p, zombies, players, grid) {
     const steps = Math.min(8, Math.ceil(span));
     for (let s = 1; s <= steps; s++) {
       const cf = p.prevCf + span * (s / steps);
-      if (cf < halfFrames) cfs.push(cf);
+      if (cf <= halfFrames + 1) cfs.push(cf);
     }
-  } else if (currentCf < halfFrames) {
+  } else if (currentCf <= halfFrames + 1) {
     cfs.push(currentCf);
   }
   p.prevCf = currentCf;

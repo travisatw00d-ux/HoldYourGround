@@ -87,13 +87,18 @@ function render() {
     const mex = me.px + (me.x - me.px) * alpha;
     const mey = me.py + (me.y - me.py) * alpha;
     const target = Math.atan2((state.mouseY / zoom + cam.y) - mey, (state.mouseX / zoom + cam.x) - mex);
+    me.realAngle = target;
+    me.visualAngle = me.visualAngle ?? me.facingAngle;
     if (state.localAnim) {
       const diff = target - state.localAnim.lockedAngle;
       const norm = Math.atan2(Math.sin(diff), Math.cos(diff));
-      me.facingAngle = state.localAnim.lockedAngle + Math.max(-5 * Math.PI / 180, Math.min(5 * Math.PI / 180, norm));
+      me.visualAngle = state.localAnim.lockedAngle + Math.max(-5 * Math.PI / 180, Math.min(5 * Math.PI / 180, norm));
     } else {
-      me.facingAngle = target;
+      const diff = target - me.visualAngle;
+      const norm = Math.atan2(Math.sin(diff), Math.cos(diff));
+      me.visualAngle += norm * 0.12;
     }
+    me._smoothAngle = me.visualAngle;
   }
 
   if (state.localAnim) {
@@ -218,7 +223,7 @@ export function startRender(socket) {
       const me = state.players[state.myId];
       if (me) {
         const zoom = state.cameraZoom;
-        input.angle = me.facingAngle || Math.atan2((state.mouseY / zoom + cam.y) - me.y, (state.mouseX / zoom + cam.x) - me.x);
+        input.angle = me.realAngle || Math.atan2((state.mouseY / zoom + cam.y) - me.y, (state.mouseX / zoom + cam.x) - me.x);
       }
       socket.emit('input', input);
     }
