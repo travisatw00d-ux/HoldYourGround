@@ -169,23 +169,26 @@ class Room {
     const p = this.players[id];
     if (!p || p.isSpectator) return;
     p.input = { dx: data.dx, dy: data.dy };
-    if (typeof data.angle === 'number' && !p.attacking) {
-      if (p._lastTurnTime != null) {
-        const dt = (Date.now() - p._lastTurnTime) / 1000;
-        const maxDelta = (p.turnSpeed || 18) * Math.min(dt, 0.1);
-        let diff = data.angle - p._lastSendAngle;
-        while (diff > Math.PI) diff -= Math.PI * 2;
-        while (diff < -Math.PI) diff += Math.PI * 2;
-        if (Math.abs(diff) > maxDelta) {
-          p.facingAngle = p._lastSendAngle + (diff > 0 ? maxDelta : -maxDelta);
+    if (typeof data.angle === 'number') {
+      p._lastMouseAngle = data.angle;
+      if (!p.attacking) {
+        if (p._lastTurnTime != null) {
+          const dt = (Date.now() - p._lastTurnTime) / 1000;
+          const maxDelta = (p.turnSpeed || 18) * Math.min(dt, 0.1);
+          let diff = data.angle - p._lastSendAngle;
+          while (diff > Math.PI) diff -= Math.PI * 2;
+          while (diff < -Math.PI) diff += Math.PI * 2;
+          if (Math.abs(diff) > maxDelta) {
+            p.facingAngle = p._lastSendAngle + (diff > 0 ? maxDelta : -maxDelta);
+          } else {
+            p.facingAngle = data.angle;
+          }
         } else {
           p.facingAngle = data.angle;
         }
-      } else {
-        p.facingAngle = data.angle;
+        p._lastSendAngle = p.facingAngle;
+        p._lastTurnTime = Date.now();
       }
-      p._lastSendAngle = p.facingAngle;
-      p._lastTurnTime = Date.now();
     }
     if (typeof data.sprint === 'boolean') {
       if (data.sprint && !p.sprint) p._sprintDepleted = false;
@@ -205,14 +208,15 @@ class Room {
       }
     }
     // Chain into next combo step if in chain window and not at cap
-    if (p.comboChainWindow && (p.comboStep || 0) < 4) {
+    const maxCombo = p.attackStyle === 'jab' ? 3 : 4;
+    if (p.comboChainWindow && (p.comboStep || 0) < maxCombo) {
       p._chainPendingAngle = typeof facingAngle === 'number' ? facingAngle : null;
       if (p._chainTickTarget <= 0) {
         p._chainTickTarget = this.tickNum + p._chainDelayTicks + (p.comboStep === 3 ? 2 : 0);
       }
       return;
     } else if (p.comboChainWindow) {
-      return; // step 4 can't chain
+      return; // at max step, can't chain
     } else {
       if (p.attackCooldown > 0) return;
       p._started = false;
@@ -222,6 +226,10 @@ class Room {
       p._chainPendingAngle = null;
       p._queuedChain = null;
       p._spinRemaining = 0;
+      p._lungeRemaining = 0;
+      p._combo3MidHit = false;
+      p._jabHitCleared = 0;
+      p._spinLungeAngle = 0;
     }
     p._lastAttackTime = Date.now();
     this._executeAttack(id, p.comboStep, typeof facingAngle === 'number' ? facingAngle : null);
@@ -257,7 +265,7 @@ class Room {
     const kfAnim = p.playerClass === 'knight'
       ? { keyframes: kfData.keyframes, segments: anim.segments }
       : anim;
-    if (typeof pendingAngle === 'number') p.facingAngle = pendingAngle;
+    if (typeof pendingAngle === 'number' && step < 4) p.facingAngle = pendingAngle;
     p.comboChainWindow = false;
     p.attackCooldown = 6;
     p.attacking = true;
@@ -268,7 +276,11 @@ class Room {
     p.attackStartTime = Date.now();
     p.prevCf = -1;
     p._started = true;
-    p._spinRemaining = step >= 4 ? 15 : 0;
+    p._spinRemaining = step >= 4 && p.attackStyle === 'swing' ? 15 : 0;
+    p._lungeRemaining = step === 4 ? (p.attackStyle === 'swing' ? 120 : 0) : (step === 3 ? 50 : (step >= 1 ? 30 : 0));
+    p._spinLungeAngle = step === 4 && p.attackStyle === 'swing' ? (typeof pendingAngle === 'number' ? pendingAngle : p._lastMouseAngle) : 0;
+    p._combo3MidHit = false;
+      p._jabHitCleared = 0;
     this.io.to(id).emit('attackStart', { lockedAngle: p.attackLockedAngle, comboStep: step });
   }
 
@@ -788,24 +800,41 @@ class Room {
         p._chainPendingAngle = p._queuedChain.angle;
         p._queuedChain = null;
       }
+      // Apply lunge
+      if (p._lungeRemaining > 0) {
+        let dirAngle = p.comboStep === 4 && p.attackStyle === 'swing' ? p._spinLungeAngle : p.attackLockedAngle;
+        if (p.comboStep === 4 && p.attackStyle === 'swing') {
+          const diff = p._lastMouseAngle - p._spinLungeAngle;
+          const clamped = Math.max(-0.25, Math.min(0.25, diff));
+          dirAngle = p._spinLungeAngle + clamped;
+        }
+        const perTick = p.comboStep === 4 && p.attackStyle === 'swing' ? 8 : 15;
+        const amount = Math.min(p._lungeRemaining, perTick);
+        p.x += Math.cos(dirAngle) * amount;
+        p.y += Math.sin(dirAngle) * amount;
+        p._lungeRemaining -= amount;
+      }
       p.attackFrame++;
       const totalFrames = sword.animTotal(p.attackAnim);
       const totalTicks = Math.ceil(totalFrames / (2 * ATTACK_SPEED_MULT));
       if (p.attackFrame >= totalTicks) {
-        if (!(p._spinRemaining > 0 && p.comboStep === 4)) {
+        const maxCombo = p.attackStyle === 'jab' ? 3 : 4;
+        if (!(p._spinRemaining > 0 && p.attackStyle === 'swing' && p.comboStep === 4)) {
           p.attackLockedAngle = p.facingAngle;
           p.attacking = false;
           p.attackAnim = null;
           p.attackHitIds = [];
           p.prevCf = -1;
-          if (p.comboStep >= 4) {
+          if (p.comboStep >= maxCombo) {
             p.comboChainWindow = false;
-            p.attackCooldown = 0;
+            p.attackCooldown = (p.attackStyle === 'swing' ? 16 : 20) + (p.comboStep - 1) * 8;
             p.comboStep = 0;
             p._started = false;
             p._spinRemaining = 0;
-            this.io.to(id).emit('comboWindowEnd');
-          this.io.to(id).emit('comboReady');
+        p._lungeRemaining = 0;
+            p._combo3MidHit = false;
+      p._jabHitCleared = 0;
+            p._spinLungeAngle = 0;
           } else {
             p.comboChainWindow = true;
             p.attackCooldown = Math.max(1, Math.round(p.attackSpeed / TICK_MS / 2));
@@ -819,7 +848,7 @@ class Room {
         }
       }
       // Spin phase — runs every tick independently
-      if (p._spinRemaining > 0 && p.comboStep === 4) {
+      if (p._spinRemaining > 0 && p.comboStep === 4 && p.attackStyle === 'swing') {
         p.attackLockedAngle += (Math.PI * 2) / 15;
         p._spinRemaining--;
         p.attackFrame = 4; // keep hitbox in hit zone (currentCf=30 < halfFrames+4)
@@ -830,7 +859,7 @@ class Room {
           p.attackHitIds = [];
           p.prevCf = -1;
           p.comboChainWindow = false;
-          p.attackCooldown = 20 + (p.comboStep - 1) * 8;
+          p.attackCooldown = (p.attackStyle === 'swing' ? 16 : 20) + (p.comboStep - 1) * 8;
           p.comboStep = 0;
           p._started = false;
           this.io.to(id).emit('comboWindowEnd');
@@ -855,6 +884,7 @@ class Room {
         p._chainPendingAngle = null;
         p._chainTickTarget = 0;
         p._spinRemaining = 0;
+        p._lungeRemaining = 0;
         this.io.to(id).emit('comboWindowEnd');
         this.io.to(id).emit('comboReady');
       }
@@ -868,9 +898,10 @@ class Room {
       p.comboStep = step;
       p._chainTickTarget = 0;
       p.attackCooldown = 0;
+      const chainAngle = p._chainPendingAngle;
       p._chainPendingAngle = null;
       p._lastAttackTime = Date.now();
-      this._executeAttack(id, step, null);
+      this._executeAttack(id, step, chainAngle);
     }
 
     if (this.matchPhase === 'nighttime' && this.zombies.length > 0 && this.zombies.every(z => !z.alive)) this._advancePhase();

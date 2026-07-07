@@ -303,7 +303,7 @@ export function registerEvents(socket) {
     state.players = {}; state.zombies = []; state.activePlayerCount = 0; state.lobbyPlayers = [];
     state.lbSig = ''; state.matchPhase = null; state.phaseTimer = 0; state.isSpectator = false;
     state.isDeadSpectating = false; state.queuedPlayers = []; state.spectatingTargetIndex = 0;
-    state.localAnim = null; state.currentWave = 0; state.serverLevel = 0;
+    state.localAnim = null; state._mirrorSword = false; state.currentWave = 0; state.serverLevel = 0;
     state.dmgNumbers = []; state.zombieAnims = {}; state.waveComposition = null;
     hideNWPopup();
     document.getElementById('menu').classList.add('hidden');
@@ -482,7 +482,7 @@ export function registerEvents(socket) {
   });
 
   socket.on('respawned', () => {
-    state.localAnim = null; state.isDeadSpectating = false; state.screen = 'playing';
+    state.localAnim = null; state._mirrorSword = false; state.isDeadSpectating = false; state.screen = 'playing';
     document.getElementById('menu').classList.add('hidden');
     ['eliminated', 'waitingRespawn'].forEach(id => document.getElementById(id).classList.add('hidden'));
   ['hud', 'settingsBtn'].forEach(id => document.getElementById(id).classList.remove('hidden'));
@@ -876,7 +876,7 @@ async function enterGame(socket) {
   state.level = 1; state.exp = 0; state.expToNext = 100; state.gold = 0;
   state.zombies = []; state.activePlayerCount = 0;
   state.dmgNumbers = []; state.zombieAnims = {}; state.waveComposition = null;
-  state.localAnim = null; state.lbSig = ''; state.hotSig = '';
+  state.localAnim = null; state._mirrorSword = false; state.lbSig = ''; state.hotSig = '';
   hideNWPopup();
   document.getElementById('eliminated').classList.add('hidden');
   document.getElementById('loadingOverlay').classList.add('hidden');

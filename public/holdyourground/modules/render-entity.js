@@ -331,7 +331,7 @@ export function startAttackAnim(lockedAngle, comboStep) {
     const locked = (typeof lockedAngle === 'number') ? lockedAngle : (me.facingAngle || 0);
     const doHold = isSwing && comboStep < 5;
     const holdFrame = doHold ? (comboStep === 3 ? totalFrames : halfFrames) : 0;
-    state.localAnim = { type: 'knight', knight_sword: { keyframes: anim.knight_sword.keyframes }, knight_hand: { keyframes: anim.knight_hand.keyframes }, segments: anim.segments, frame: 0, totalFrames, lockedAngle: locked, startTime: performance.now(), _holdFrame: holdFrame, _holding: doHold, _spinning: comboStep === 4, spinStartAngle: locked, spinStartTime: performance.now() };
+    state.localAnim = { type: 'knight', knight_sword: { keyframes: anim.knight_sword.keyframes }, knight_hand: { keyframes: anim.knight_hand.keyframes }, segments: anim.segments, frame: 0, totalFrames, lockedAngle: locked, startTime: performance.now(), _holdFrame: holdFrame, _holding: doHold, _spinning: comboStep === 4 && isSwing, spinStartAngle: locked, spinStartTime: performance.now() };
   } else {
     const anim = window.ANIMATIONS && window.ANIMATIONS[me.currentItem] && (window.ANIMATIONS[me.currentItem][comboKey] || window.ANIMATIONS[me.currentItem][style + '_combo1']);
     if (anim) {
@@ -343,7 +343,7 @@ export function startAttackAnim(lockedAngle, comboStep) {
       const locked = (typeof lockedAngle === 'number') ? lockedAngle : (me.facingAngle || 0);
       const doHold = isSwing && comboStep < 5;
       const holdFrame = doHold ? (comboStep === 3 ? totalFrames : halfFrames) : 0;
-      state.localAnim = { type: 'sword', keyframes: anim.keyframes, segments: anim.segments, frame: 0, totalFrames, lockedAngle: locked, startTime: performance.now(), _holdFrame: holdFrame, _holding: doHold, _spinning: comboStep === 4, spinStartAngle: locked, spinStartTime: performance.now() };
+      state.localAnim = { type: 'sword', keyframes: anim.keyframes, segments: anim.segments, frame: 0, totalFrames, lockedAngle: locked, startTime: performance.now(), _holdFrame: holdFrame, _holding: doHold, _spinning: comboStep === 4 && isSwing, spinStartAngle: locked, spinStartTime: performance.now() };
     }
   }
 }

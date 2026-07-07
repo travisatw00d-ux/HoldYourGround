@@ -45,6 +45,19 @@
         ],
         segments: [19, 19, 17, 17]
       },
+      jab_combo3: {
+        segments: [10,10,10,10,10,10],
+        keyframes: [
+          { offsetX: 23, offsetY: 24, scale: 0.047, rotation: 0.76 },
+          { offsetX: 85, offsetY: 15, scale: 0.047, rotation: 0.67 },
+          { offsetX: 23, offsetY: 24, scale: 0.047, rotation: 0.76 },
+          { offsetX: 85, offsetY: 15, scale: 0.047, rotation: 0.67 },
+          { offsetX: 23, offsetY: 24, scale: 0.047, rotation: 0.76 },
+          { offsetX: 85, offsetY: 15, scale: 0.047, rotation: 0.67 },
+          { offsetX: 23, offsetY: 24, scale: 0.047, rotation: 0.76 },
+        ],
+        segments: [10, 10, 10, 10, 10, 10]
+      },
     swing_combo1: {
         keyframes: [
           { offsetX: 23, offsetY: 24, scale: 0.047, rotation: 0.76 },
@@ -134,6 +147,31 @@
       },
       knight_hand: {
         keyframes: [
+          { offsetX: 25, offsetY: -17, scale: 0.383, rotation: 0.14 },
+          { offsetX: 7, offsetY: -31, scale: 0.383, rotation: -0.22 },
+          { offsetX: 25, offsetY: -17, scale: 0.383, rotation: 0.14 },
+        ]
+      }
+    },
+    jab_combo3: {
+      segments: [10,10,10,10,10,10],
+      knight_sword: {
+        keyframes: [
+          { offsetX: 19, offsetY: 37, scale: 0.43, rotation: 1.65 },
+          { offsetX: 77, offsetY: 17, scale: 0.43, rotation: 1.38 },
+          { offsetX: 19, offsetY: 37, scale: 0.43, rotation: 1.65 },
+          { offsetX: 77, offsetY: 17, scale: 0.43, rotation: 1.38 },
+          { offsetX: 19, offsetY: 37, scale: 0.43, rotation: 1.65 },
+          { offsetX: 77, offsetY: 17, scale: 0.43, rotation: 1.38 },
+          { offsetX: 19, offsetY: 37, scale: 0.43, rotation: 1.65 },
+        ]
+      },
+      knight_hand: {
+        keyframes: [
+          { offsetX: 25, offsetY: -17, scale: 0.383, rotation: 0.14 },
+          { offsetX: 7, offsetY: -31, scale: 0.383, rotation: -0.22 },
+          { offsetX: 25, offsetY: -17, scale: 0.383, rotation: 0.14 },
+          { offsetX: 7, offsetY: -31, scale: 0.383, rotation: -0.22 },
           { offsetX: 25, offsetY: -17, scale: 0.383, rotation: 0.14 },
           { offsetX: 7, offsetY: -31, scale: 0.383, rotation: -0.22 },
           { offsetX: 25, offsetY: -17, scale: 0.383, rotation: 0.14 },
@@ -247,7 +285,7 @@
       }
     },
     swing_combo3: {
-      segments: [2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2],
+      segments: [2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2],
       knight_sword: {
         keyframes: [
           { offsetX: 25, offsetY: -43, scale: 0.43, rotation: -0.42 },
@@ -271,16 +309,6 @@
           { offsetX: 35, offsetY: -68, scale: 0.43, rotation: -0.24 },
           { offsetX: 21, offsetY: -74, scale: 0.43, rotation: -0.50 },
           { offsetX: 16, offsetY: -76, scale: 0.43, rotation: -0.59 },
-          { offsetX: 21, offsetY: -74, scale: 0.43, rotation: -0.50 },
-          { offsetX: 35, offsetY: -68, scale: 0.43, rotation: -0.24 },
-          { offsetX: 53, offsetY: -54, scale: 0.43, rotation: 0.14 },
-          { offsetX: 67, offsetY: -32, scale: 0.43, rotation: 0.60 },
-          { offsetX: 73, offsetY: -4, scale: 0.43, rotation: 1.09 },
-          { offsetX: 68, offsetY: 23, scale: 0.43, rotation: 1.59 },
-          { offsetX: 54, offsetY: 44, scale: 0.43, rotation: 2.05 },
-          { offsetX: 39, offsetY: 57, scale: 0.43, rotation: 2.43 },
-          { offsetX: 27, offsetY: 62, scale: 0.43, rotation: 2.69 },
-          { offsetX: 22, offsetY: 64, scale: 0.43, rotation: 2.78 },
         ]
       },
       knight_hand: {
@@ -306,16 +334,6 @@
           { offsetX: 0, offsetY: -35, scale: 0.383, rotation: -0.26 },
           { offsetX: -3, offsetY: -35, scale: 0.383, rotation: -0.29 },
           { offsetX: -4, offsetY: -35, scale: 0.383, rotation: -0.30 },
-          { offsetX: -3, offsetY: -35, scale: 0.383, rotation: -0.29 },
-          { offsetX: 0, offsetY: -35, scale: 0.383, rotation: -0.26 },
-          { offsetX: 4, offsetY: -35, scale: 0.383, rotation: -0.21 },
-          { offsetX: 9, offsetY: -34, scale: 0.383, rotation: -0.15 },
-          { offsetX: 14, offsetY: -33, scale: 0.383, rotation: -0.08 },
-          { offsetX: 18, offsetY: -30, scale: 0.383, rotation: -0.02 },
-          { offsetX: 22, offsetY: -28, scale: 0.383, rotation: 0.04 },
-          { offsetX: 25, offsetY: -25, scale: 0.383, rotation: 0.09 },
-          { offsetX: 27, offsetY: -23, scale: 0.383, rotation: 0.12 },
-          { offsetX: 28, offsetY: -22, scale: 0.383, rotation: 0.13 },
         ]
       }
     }

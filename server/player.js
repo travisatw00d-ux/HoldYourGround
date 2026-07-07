@@ -86,6 +86,11 @@ function addPlayer(id, name, players, zombies, accountType, accountId) {
     sprint: false,
     sprintEndCooldown: 0,
     _spinRemaining: 0,
+    _lungeRemaining: 0,
+    _combo3MidHit: false,
+    _lastMouseAngle: 0,
+    _spinLungeAngle: 0,
+    _jabHitCleared: 0,
     isSpectator: false
   };
   recalcStats(players[id]);
@@ -132,6 +137,11 @@ function respawnPlayer(id, players, zombies) {
   p.sprint = false;
   p.energy = p.maxEnergy || 100;
   p.sprintEndCooldown = 0;
+  p._lungeRemaining = 0;
+  p._combo3MidHit = false;
+  p._lastMouseAngle = 0;
+  p._spinLungeAngle = 0;
+  p._jabHitCleared = 0;
   p._spinRemaining = 0;
 }
 

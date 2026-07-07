@@ -51,7 +51,10 @@ function checkSwordHit(p, zombies, players, grid) {
   for (let i = 0; i < midKf; i++) halfFrames += segs[i];
 
   const isSwing = p.attackStyle === 'swing';
+  const isJabFinal = p.comboStep === 3 && p.attackStyle === 'jab';
+  if (isJabFinal) halfFrames = totalFrames; // process all frames for triple jab
   p.comboChainWindow = currentCf < halfFrames + (isSwing ? 4 : 1);
+  if (isJabFinal && currentCf % 20 >= 10) p.comboChainWindow = false;
   const cfs = [];
   if (p.prevCf >= 0 && p.prevCf !== currentCf) {
     const span = currentCf - p.prevCf;
@@ -64,7 +67,36 @@ function checkSwordHit(p, zombies, players, grid) {
   } else if (currentCf <= halfFrames + (isSwing ? 4 : 1)) {
     cfs.push(currentCf);
   }
+  // Triple jab: only forward segments deal damage
+  if (isJabFinal && cfs.length > 0) {
+    for (let i = cfs.length - 1; i >= 0; i--) {
+      const cf = cfs[i];
+      let accum = 0;
+      let inForward = false;
+      for (let s = 0; s < segs.length; s++) {
+        if (cf < accum + segs[s]) {
+          inForward = s % 2 === 0;
+          break;
+        }
+        accum += segs[s];
+      }
+      if (!inForward) cfs.splice(i, 1);
+    }
+  }
   p.prevCf = currentCf;
+  // Combo3 double-hit: clear hit IDs at the transition between the two swings
+  if (p.comboStep === 3 && !p._combo3MidHit && currentCf >= Math.floor(totalFrames / 3)) {
+    p.attackHitIds = [];
+    p._combo3MidHit = true;
+  }
+  // Jab final triple-hit: clear hit IDs at each return transition
+  if (isJabFinal && p._jabHitCleared < 2) {
+    const trans = [10, 30];
+    if (currentCf >= trans[p._jabHitCleared]) {
+      p.attackHitIds = [];
+      p._jabHitCleared++;
+    }
+  }
   if (cfs.length === 0) return events;
 
   const nearbyZombies = grid.getNearbyZombies(p.x, p.y);
