@@ -3,7 +3,6 @@ const {
 } = require('./config');
 
 function processPlayerMovement(p) {
-  if (p.attackCooldown > 0) p.attackCooldown--;
 
   if (p.sprint && p.energy > 0 && !p._sprintDepleted) {
     p.energy = Math.max(0, p.energy - 1.5);

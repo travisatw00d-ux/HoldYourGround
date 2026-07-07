@@ -103,6 +103,12 @@ select {
       <input type="range" id="rotation" min="-3.14" max="3.14" step="0.01" value="0.59">
     </div>
 
+    <div class="ctrl-group">
+      <label style="display:flex;align-items:center;gap:6px;color:#999;font-size:0.78rem">
+        <input type="checkbox" id="mirrorToggle"> Mirrored Sword
+      </label>
+    </div>
+
     <button class="btn" id="setKfBtn">Set Keyframe</button>
 
     <div class="section-title" style="margin-top:12px">Hitbox</div>
@@ -165,8 +171,8 @@ const ZOMBIE_INITIAL_LEFT  = { offsetX: 16, offsetY: -20, scale: 0.230, rotation
 const ZOMBIE_INITIAL_RIGHT = { offsetX: 16, offsetY: 20,  scale: 0.230, rotation: -1.55 };
 const SWORD_INITIAL        = { offsetX: 23, offsetY: 24,  scale: 0.047, rotation: 0.59 };
 
-const KNIGHT_INITIAL_SWORD = { offsetX: 25, offsetY: -43, scale: 0.430, rotation: -0.42 };
-const KNIGHT_INITIAL_HAND  = { offsetX: 3, offsetY: -33, scale: 0.383, rotation: -0.09 };
+const KNIGHT_INITIAL_SWORD = { offsetX: 22, offsetY: 64, scale: 0.430, rotation: 2.78 };
+const KNIGHT_INITIAL_HAND  = { offsetX: 28, offsetY: -22, scale: 0.383, rotation: 0.13 };
 
 // ─── Sword data (unchanged) ───
 
@@ -183,9 +189,56 @@ let zombieSegments = [];
 
 // ─── Knight data ───
 
+const SWING_COMBO2_SWORD = [
+  { offsetX: 22, offsetY: 64, scale: 0.43, rotation: 2.78 },
+  { offsetX: 20, offsetY: 64, scale: 0.43, rotation: 2.78 },
+  { offsetX: 16, offsetY: 65, scale: 0.43, rotation: 2.78 },
+  { offsetX: 12, offsetY: 66, scale: 0.43, rotation: 2.78 },
+  { offsetX: 10, offsetY: 66, scale: 0.43, rotation: 2.78 },
+  { offsetX: 17, offsetY: 65, scale: 0.43, rotation: 2.64 },
+  { offsetX: 35, offsetY: 60, scale: 0.43, rotation: 2.25 },
+  { offsetX: 57, offsetY: 44, scale: 0.43, rotation: 1.71 },
+  { offsetX: 73, offsetY: 16, scale: 0.43, rotation: 1.09 },
+  { offsetX: 75, offsetY: -18, scale: 0.43, rotation: 0.48 },
+  { offsetX: 65, offsetY: -46, scale: 0.43, rotation: -0.06 },
+  { offsetX: 51, offsetY: -63, scale: 0.43, rotation: -0.45 },
+  { offsetX: 45, offsetY: -69, scale: 0.43, rotation: -0.59 },
+  { offsetX: 51, offsetY: -64, scale: 0.43, rotation: -0.45 },
+  { offsetX: 64, offsetY: -48, scale: 0.43, rotation: -0.06 },
+  { offsetX: 75, offsetY: -22, scale: 0.43, rotation: 0.48 },
+  { offsetX: 74, offsetY: 9, scale: 0.43, rotation: 1.09 },
+  { offsetX: 62, offsetY: 37, scale: 0.43, rotation: 1.71 },
+  { offsetX: 44, offsetY: 54, scale: 0.43, rotation: 2.25 },
+  { offsetX: 28, offsetY: 62, scale: 0.43, rotation: 2.64 },
+  { offsetX: 22, offsetY: 64, scale: 0.43, rotation: 2.78 },
+];
+const SWING_COMBO2_HAND = [
+  { offsetX: 28, offsetY: -22, scale: 0.383, rotation: 0.13 },
+  { offsetX: 28, offsetY: -22, scale: 0.383, rotation: 0.13 },
+  { offsetX: 28, offsetY: -22, scale: 0.383, rotation: 0.13 },
+  { offsetX: 28, offsetY: -22, scale: 0.383, rotation: 0.13 },
+  { offsetX: 28, offsetY: -22, scale: 0.383, rotation: 0.13 },
+  { offsetX: 27, offsetY: -23, scale: 0.383, rotation: 0.11 },
+  { offsetX: 24, offsetY: -26, scale: 0.383, rotation: 0.06 },
+  { offsetX: 20, offsetY: -30, scale: 0.383, rotation: -0.01 },
+  { offsetX: 14, offsetY: -33, scale: 0.383, rotation: -0.08 },
+  { offsetX: 7, offsetY: -35, scale: 0.383, rotation: -0.16 },
+  { offsetX: 2, offsetY: -35, scale: 0.383, rotation: -0.23 },
+  { offsetX: -2, offsetY: -35, scale: 0.383, rotation: -0.28 },
+  { offsetX: -4, offsetY: -35, scale: 0.383, rotation: -0.3 },
+  { offsetX: -2, offsetY: -35, scale: 0.383, rotation: -0.28 },
+  { offsetX: 2, offsetY: -35, scale: 0.383, rotation: -0.23 },
+  { offsetX: 7, offsetY: -35, scale: 0.383, rotation: -0.16 },
+  { offsetX: 14, offsetY: -33, scale: 0.383, rotation: -0.08 },
+  { offsetX: 20, offsetY: -30, scale: 0.383, rotation: -0.01 },
+  { offsetX: 24, offsetY: -26, scale: 0.383, rotation: 0.06 },
+  { offsetX: 27, offsetY: -23, scale: 0.383, rotation: 0.11 },
+  { offsetX: 28, offsetY: -22, scale: 0.383, rotation: 0.13 },
+];
+
 let knightKeyframes = [{
-  sword: { ...KNIGHT_INITIAL_SWORD },
-  hand:  { ...KNIGHT_INITIAL_HAND }
+  sword: { offsetX: 22, offsetY: 64, scale: 0.43, rotation: 2.78 },
+  hand:  { offsetX: 28, offsetY: -22, scale: 0.383, rotation: 0.13 }
 }];
 let knightSegments = [];
 let knightSwordPose = { ...knightKeyframes[0].sword };
@@ -220,6 +273,8 @@ let dragHitbox = null; // 'tip' or 'hilt'
 // Sprite sheet
 let sheetImg = null;
 let sheetFrames = null;
+let _mirrorSword = false;
+
 
 // Knight sprite sheet
 let knightSheet = null;
@@ -445,6 +500,20 @@ function drawKnight() {
   const handFrame = getKnightFrame('T1KnightLeftHand.png');
   const headFrame = getKnightFrame('T1KnightHead.png');
 
+  // Must be defined before ghost and current draw
+  const drawSwordArgs = (frame, ox, oy, sw, sh, rot, alpha) => {
+    if (_mirrorSword) {
+      ctx.save();
+      ctx.translate(CX + ox, CY + oy);
+      ctx.scale(-1, 1);
+      ctx.rotate(rot);
+      ctx.drawImage(knightSheet, frame.x, frame.y, frame.w, frame.h, -sw / 2, -sh / 2, sw, sh);
+      ctx.restore();
+    } else {
+      drawKnightSprite(frame, ox, oy, sw, sh, rot, alpha);
+    }
+  };
+
   // Ghost from last saved keyframe
   const kfs = getKeyframesRef();
   if (!playing && kfs.length > 0) {
@@ -469,7 +538,7 @@ function drawKnight() {
   const curHand  = playing ? getInterpolatedPose(playFrame, kfs, 'hand') : knightHandPose;
 
   if (swordFrame && curSword) {
-    drawKnightSprite(swordFrame, curSword.offsetX, curSword.offsetY, swordFrame.w * curSword.scale, swordFrame.h * curSword.scale, curSword.rotation, 1.0);
+    drawSwordArgs(swordFrame, curSword.offsetX, curSword.offsetY, swordFrame.w * curSword.scale, swordFrame.h * curSword.scale, curSword.rotation, 1.0);
   }
   if (handFrame && curHand) {
     drawKnightSprite(handFrame, curHand.offsetX, curHand.offsetY, handFrame.w * curHand.scale, handFrame.h * curHand.scale, curHand.rotation, 1.0);
@@ -477,7 +546,11 @@ function drawKnight() {
 
   // Hitbox overlay
   if (curSword) {
-    drawHitbox(ctx, curSword.offsetX, curSword.offsetY, curSword.scale, curSword.rotation);
+    if (_mirrorSword) {
+      drawHitbox(ctx, curSword.offsetX, curSword.offsetY, curSword.scale, -curSword.rotation, true);
+    } else {
+      drawHitbox(ctx, curSword.offsetX, curSword.offsetY, curSword.scale, curSword.rotation);
+    }
   }
 
   // Drag hint
@@ -492,14 +565,15 @@ function drawKnight() {
 }
 
 // ─── Hitbox drawing ───
-function drawHitbox(ctx, ox, oy, scl, rot) {
+function drawHitbox(ctx, ox, oy, scl, rot, flipX) {
   const sx = CX + ox, sy = CY + oy;
   const cosR = Math.cos(rot), sinR = Math.sin(rot);
+  const xm = flipX ? -1 : 1;
 
-  const tipX = sx + (hbTipX * cosR - hbTipY * sinR) * scl;
-  const tipY = sy + (hbTipX * sinR + hbTipY * cosR) * scl;
-  const hiltX = sx + (hbHiltX * cosR - hbHiltY * sinR) * scl;
-  const hiltY = sy + (hbHiltX * sinR + hbHiltY * cosR) * scl;
+  const tipX = sx + (hbTipX * xm * cosR - hbTipY * sinR) * scl;
+  const tipY = sy + (hbTipX * xm * sinR + hbTipY * cosR) * scl;
+  const hiltX = sx + (hbHiltX * xm * cosR - hbHiltY * sinR) * scl;
+  const hiltY = sy + (hbHiltX * xm * sinR + hbHiltY * cosR) * scl;
 
   // Blade segment
   ctx.save();
@@ -592,16 +666,17 @@ function hitboxMarkerAt(p) {
   if (mode !== 'knight') return null;
   const curSword = playing ? getInterpolatedPose(playFrame, getKeyframesRef(), 'sword') : knightSwordPose;
   if (!curSword) return null;
+  const mp = _mirrorSword ? { x: p.x, y: p.y } : p;
   const sx = CX + curSword.offsetX, sy = CY + curSword.offsetY;
-  const rot = curSword.rotation;
+  const rot = _mirrorSword ? -curSword.rotation : curSword.rotation;
   const cosR = Math.cos(rot), sinR = Math.sin(rot);
   const scl = curSword.scale;
   const tipX = sx + (hbTipX * cosR - hbTipY * sinR) * scl;
   const tipY = sy + (hbTipX * sinR + hbTipY * cosR) * scl;
   const hiltX = sx + (hbHiltX * cosR - hbHiltY * sinR) * scl;
   const hiltY = sy + (hbHiltX * sinR + hbHiltY * cosR) * scl;
-  const dTip = Math.hypot(p.x - tipX, p.y - tipY);
-  const dHilt = Math.hypot(p.x - hiltX, p.y - hiltY);
+  const dTip = Math.hypot(mp.x - tipX, mp.y - tipY);
+  const dHilt = Math.hypot(mp.x - hiltX, mp.y - hiltY);
   const thresh = 10;
   if (dTip < thresh) return 'tip';
   if (dHilt < thresh) return 'hilt';
@@ -632,12 +707,13 @@ canvas.addEventListener('mousedown', (e) => {
 function applyDragHitbox(p) {
   const curSword = knightSwordPose;
   if (!curSword) return;
+  const mp = p.x;
   const sx = CX + curSword.offsetX, sy = CY + curSword.offsetY;
   const rot = curSword.rotation;
   const cosR = Math.cos(rot), sinR = Math.sin(rot);
   const scl = curSword.scale;
   // Inverse transform: map canvas point back to local blade coords
-  const lx = (p.x - sx) / scl, ly = (p.y - sy) / scl;
+  const lx = (mp - sx) / scl, ly = (p.y - sy) / scl;
   // Inverse rotation
   const localX = lx * cosR + ly * sinR;
   const localY = -lx * sinR + ly * cosR;
@@ -1020,6 +1096,11 @@ document.getElementById('setKfBtn').addEventListener('click', () => {
 
   rebuildSegments();
   afterKfChange();
+});
+
+document.getElementById('mirrorToggle').addEventListener('change', () => {
+  _mirrorSword = document.getElementById('mirrorToggle').checked;
+  draw();
 });
 
 kfList.addEventListener('click', (e) => {

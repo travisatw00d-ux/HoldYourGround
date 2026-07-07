@@ -180,6 +180,19 @@ export function drawHUD(ctx) {
       const bottom = 576 - (el.y + actSss.y * el.scale) - actSss.h * el.scale;
       const dx = state.viewW - right * scl - dw;
       const dy = state.viewH - bottom * scl - dh;
+      // Green ready-glow when attack is available
+      const me = state.players[state.myId];
+      if (me && !state.localAnim && !state.idleTransition && !me.attacking && state._comboStep === 0) {
+        const cx = dx + dw / 2, cy = dy + dh / 2;
+        const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, 50 * scl);
+        grad.addColorStop(0, 'rgba(0, 255, 100, 0.55)');
+        grad.addColorStop(0.5, 'rgba(0, 255, 100, 0.2)');
+        grad.addColorStop(1, 'rgba(0, 255, 100, 0)');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(cx, cy, 50 * scl, 0, Math.PI * 2);
+        ctx.fill();
+      }
       ctx.drawImage(state.hudSheet, actFrame.x, actFrame.y, actFrame.w, actFrame.h, dx, dy, dw, dh);
       continue;
     }

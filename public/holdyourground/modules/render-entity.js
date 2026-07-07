@@ -276,7 +276,12 @@ function getVis(p) {
 }
 
 function getDrawAngle(p) {
-  if (p.id !== state.myId && p.attacking && p.attackLockedAngle != null) return p.attackLockedAngle;
+  if (p.id === state.myId && state.localAnim?._spinning) {
+    const elapsed = performance.now() - state.localAnim.spinStartTime;
+    const progress = Math.min(1, elapsed / 500);
+    return state.localAnim.spinStartAngle + Math.PI * 2 * progress;
+  }
+  if (p.attacking && p.attackLockedAngle != null) return p.attackLockedAngle;
   return p._smoothAngle ?? (p.facingAngle || 0);
 }
 
@@ -287,8 +292,9 @@ export function getBladeSegment(p, sx, sy, isKnight) {
     vis = getKnightIdleVis('knight_sword');
     if (p.id === state.myId && state.localAnim?.type === 'knight') { const animVis = getKnightInterpolatedVis('knight_sword'); if (animVis) vis = animVis; }
     if (p.id !== state.myId && p.attacking) { const animVis = getKnightRemoteVis('knight_sword', p); if (animVis) vis = animVis; }
-    btX = window.KNIGHT_BLADE_TIP_X; btY = window.KNIGHT_BLADE_TIP_Y;
-    bhX = window.KNIGHT_BLADE_HILT_X; bhY = window.KNIGHT_BLADE_HILT_Y;
+    const mS = p.id === state.myId && state._mirrorSword ? -1 : 1;
+    btX = window.KNIGHT_BLADE_TIP_X * mS; btY = window.KNIGHT_BLADE_TIP_Y;
+    bhX = window.KNIGHT_BLADE_HILT_X * mS; bhY = window.KNIGHT_BLADE_HILT_Y;
   } else {
     vis = getVis(p);
     btX = window.BLADE_TIP_X; btY = window.BLADE_TIP_Y;
@@ -301,29 +307,65 @@ export function getBladeSegment(p, sx, sy, isKnight) {
   const ry = vis.offsetX * sin + vis.offsetY * cos;
   const ox = sx + rx, oy = sy + ry;
   const scale = vis.scale;
-  const rot = angle + (vis.rotation || 0);
+  const rot = (angle + (vis.rotation || 0));
   const cosR = Math.cos(rot), sinR = Math.sin(rot);
   return { hiltX: ox + (bhX * cosR - bhY * sinR) * scale, hiltY: oy + (bhX * sinR + bhY * cosR) * scale, tipX: ox + (btX * cosR - btY * sinR) * scale, tipY: oy + (btX * sinR + btY * cosR) * scale };
 }
 
-export function startAttackAnim(lockedAngle) {
-  if (state.localAnim) return;
+export function startAttackAnim(lockedAngle, comboStep) {
   const me = state.players[state.myId];
   if (!me) return;
+  state._mirrorSword = (state.attackStyle === 'swing') && (comboStep || 1) >= 2;
   const style = state.attackStyle || 'jab';
+  const comboKey = style + '_combo' + (comboStep || 1);
   const knightFrame = state.knightFrames?.['T1KnightHead.png']?.frame;
+  const isSwing = state.attackStyle === 'swing';
   if (knightFrame) {
-    const anim = window.KNIGHT_ANIMATIONS?.[style];
+    const anim = window.KNIGHT_ANIMATIONS?.[comboKey] || window.KNIGHT_ANIMATIONS?.[style + '_combo1'];
     if (!anim || !anim.knight_sword || anim.knight_sword.keyframes.length < 2) return;
+    const totalFrames = anim.segments.reduce((a, b) => a + b, 0);
+    const segs = anim.segments;
+    const midKf = Math.floor(anim.knight_sword.keyframes.length / 2);
+    let halfFrames = 0;
+    for (let i = 0; i < midKf && i < segs.length; i++) halfFrames += segs[i];
     const locked = (typeof lockedAngle === 'number') ? lockedAngle : (me.facingAngle || 0);
-    state.localAnim = { type: 'knight', knight_sword: { keyframes: anim.knight_sword.keyframes }, knight_hand: { keyframes: anim.knight_hand.keyframes }, segments: anim.segments, frame: 0, totalFrames: anim.segments.reduce((a, b) => a + b, 0), lockedAngle: locked, startTime: performance.now() };
+    const doHold = isSwing && comboStep < 5;
+    const holdFrame = doHold ? (comboStep === 3 ? totalFrames : halfFrames) : 0;
+    state.localAnim = { type: 'knight', knight_sword: { keyframes: anim.knight_sword.keyframes }, knight_hand: { keyframes: anim.knight_hand.keyframes }, segments: anim.segments, frame: 0, totalFrames, lockedAngle: locked, startTime: performance.now(), _holdFrame: holdFrame, _holding: doHold, _spinning: comboStep === 4, spinStartAngle: locked, spinStartTime: performance.now() };
   } else {
-    const anim = window.ANIMATIONS && window.ANIMATIONS[me.currentItem] && window.ANIMATIONS[me.currentItem][style];
+    const anim = window.ANIMATIONS && window.ANIMATIONS[me.currentItem] && (window.ANIMATIONS[me.currentItem][comboKey] || window.ANIMATIONS[me.currentItem][style + '_combo1']);
     if (anim) {
+      const totalFrames = anim.segments.reduce((a, b) => a + b, 0);
+      const segs = anim.segments;
+      const midKf = Math.floor(anim.keyframes.length / 2);
+      let halfFrames = 0;
+      for (let i = 0; i < midKf && i < segs.length; i++) halfFrames += segs[i];
       const locked = (typeof lockedAngle === 'number') ? lockedAngle : (me.facingAngle || 0);
-      state.localAnim = { type: 'sword', keyframes: anim.keyframes, segments: anim.segments, frame: 0, totalFrames: anim.segments.reduce((a, b) => a + b, 0), lockedAngle: locked, startTime: performance.now() };
+      const doHold = isSwing && comboStep < 5;
+      const holdFrame = doHold ? (comboStep === 3 ? totalFrames : halfFrames) : 0;
+      state.localAnim = { type: 'sword', keyframes: anim.keyframes, segments: anim.segments, frame: 0, totalFrames, lockedAngle: locked, startTime: performance.now(), _holdFrame: holdFrame, _holding: doHold, _spinning: comboStep === 4, spinStartAngle: locked, spinStartTime: performance.now() };
     }
   }
+}
+
+export function playReturnAnim() {
+  if (!state.localAnim) return;
+  state._mirrorSword = false;
+  const curSword = getKnightInterpolatedVis('knight_sword');
+  const curHand = getKnightInterpolatedVis('knight_hand');
+  const style = state.attackStyle || 'jab';
+  const visuals = window.KNIGHT_VISUALS?.[style];
+  if (curSword && curHand && visuals) {
+    state.idleTransition = {
+      fromSword: { offsetX: curSword.offsetX, offsetY: curSword.offsetY, scale: curSword.scale, rotation: curSword.rotation },
+      fromHand: { offsetX: curHand.offsetX, offsetY: curHand.offsetY, scale: curHand.scale, rotation: curHand.rotation },
+      toSword: { ...visuals.knight_sword },
+      toHand: { ...visuals.knight_hand },
+      startTime: performance.now(),
+      durationMs: 350
+    };
+  }
+  state.localAnim = null;
 }
 
 function drawSword(ctx, p, sx, sy) {
@@ -356,9 +398,15 @@ function drawKnightSword(ctx, p, sx, sy) {
   const frame = entry?.frame;
   if (!frame) return;
   const sw = frame.w * vis.scale, sh = frame.h * vis.scale;
+  const mirS = p.id === state.myId && state._mirrorSword;
   ctx.save();
   ctx.translate(sx + rx, sy + ry);
-  ctx.rotate(angle + (vis.rotation || 0));
+  if (mirS) {
+    ctx.scale(-1, 1);
+    ctx.rotate(-(angle + (vis.rotation || 0)));
+  } else {
+    ctx.rotate(angle + (vis.rotation || 0));
+  }
   ctx.drawImage(getSpriteFromSheet(state.knightSheet, sw, sh, frame), -sw / 2, -sh / 2, sw, sh);
   ctx.restore();
 }
@@ -488,7 +536,7 @@ export function drawPlayer(ctx, p, sx, sy, alpha, topKills) {
     const sz = (56 / Math.max(knightFrame.w, knightFrame.h)) * breath;
     ctx.save();
     ctx.translate(sx + bob.x, sy + bob.y);
-    ctx.rotate((p._smoothAngle ?? p.facingAngle) - Math.PI / 2 + _leanRot);
+    ctx.rotate(getDrawAngle(p) - Math.PI / 2 + _leanRot);
     ctx.drawImage(getSpriteFromSheet(state.knightSheet, knightFrame.w * sz, knightFrame.h * sz, knightFrame), -(knightFrame.w * sz) / 2, -(knightFrame.h * sz) / 2, knightFrame.w * sz, knightFrame.h * sz);
     ctx.restore();
   } else {

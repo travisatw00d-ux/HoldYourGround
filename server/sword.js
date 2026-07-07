@@ -50,15 +50,18 @@ function checkSwordHit(p, zombies, players, grid) {
   let halfFrames = 0;
   for (let i = 0; i < midKf; i++) halfFrames += segs[i];
 
+  const isSwing = p.attackStyle === 'swing';
+  p.comboChainWindow = currentCf < halfFrames + (isSwing ? 4 : 1);
   const cfs = [];
   if (p.prevCf >= 0 && p.prevCf !== currentCf) {
     const span = currentCf - p.prevCf;
-    const steps = Math.min(8, Math.ceil(span));
+    const steps = Math.min(isSwing ? 16 : 8, Math.ceil(span));
+    const margin = isSwing ? 4 : 1;
     for (let s = 1; s <= steps; s++) {
       const cf = p.prevCf + span * (s / steps);
-      if (cf <= halfFrames + 1) cfs.push(cf);
+      if (cf <= halfFrames + margin) cfs.push(cf);
     }
-  } else if (currentCf <= halfFrames + 1) {
+  } else if (currentCf <= halfFrames + (isSwing ? 4 : 1)) {
     cfs.push(currentCf);
   }
   p.prevCf = currentCf;
@@ -71,16 +74,17 @@ function checkSwordHit(p, zombies, players, grid) {
     const vis = interpHitbox(p.attackAnim, cf);
     if (!vis) continue;
     const isKnight = p.playerClass === 'knight';
-    const btX = isKnight ? KNIGHT_BLADE_TIP_X : BLADE_TIP_X;
+    const mirS = (isKnight && p.attackStyle === 'swing' && (p.comboStep || 0) >= 2) ? -1 : 1;
+    const btX = (isKnight ? KNIGHT_BLADE_TIP_X : BLADE_TIP_X) * mirS;
     const btY = isKnight ? KNIGHT_BLADE_TIP_Y : BLADE_TIP_Y;
-    const bhX = isKnight ? KNIGHT_BLADE_HILT_X : BLADE_HILT_X;
+    const bhX = (isKnight ? KNIGHT_BLADE_HILT_X : BLADE_HILT_X) * mirS;
     const bhY = isKnight ? KNIGHT_BLADE_HILT_Y : BLADE_HILT_Y;
     const cos = Math.cos(angle), sin = Math.sin(angle);
     const rx = vis.offsetX * cos - vis.offsetY * sin;
     const ry = vis.offsetX * sin + vis.offsetY * cos;
     const sx = p.x + rx, sy = p.y + ry;
     const scale = vis.scale;
-    const rot = angle + (vis.rotation || 0);
+    const rot = (angle + (vis.rotation || 0));
     const cosR = Math.cos(rot), sinR = Math.sin(rot);
     const tipX = sx + (btX * cosR - btY * sinR) * scale;
     const tipY = sy + (btX * sinR + btY * cosR) * scale;
@@ -102,7 +106,7 @@ function checkSwordHit(p, zombies, players, grid) {
         if (z.health <= 0) {
           z.alive = false;
           p.kills++;
-          events.push({ type: 'zombieKilled', playerId: p.id, zombieLvl: z.lvl });
+          events.push({ type: 'zombieKilled', playerId: p.id, zombieLvl: z.lvl, mobType: z.mobType, x: z.x, y: z.y });
         }
         events.push({ type: 'hitConfirm', to: p.id, targetId: z.id, dmg: Math.round(p.attackDmg * dmgMult), x: z.x, y: z.y });
       }

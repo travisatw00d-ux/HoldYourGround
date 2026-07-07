@@ -88,24 +88,23 @@ function render() {
     const mey = me.py + (me.y - me.py) * alpha;
     const target = Math.atan2((state.mouseY / zoom + cam.y) - mey, (state.mouseX / zoom + cam.x) - mex);
     me.realAngle = target;
-    me.visualAngle = me.visualAngle ?? me.facingAngle;
-    if (state.localAnim) {
-      const diff = target - state.localAnim.lockedAngle;
-      const norm = Math.atan2(Math.sin(diff), Math.cos(diff));
-      me.visualAngle = state.localAnim.lockedAngle + Math.max(-5 * Math.PI / 180, Math.min(5 * Math.PI / 180, norm));
-    } else {
-      const diff = target - me.visualAngle;
-      const norm = Math.atan2(Math.sin(diff), Math.cos(diff));
-      me.visualAngle += norm * 0.12;
+    // Interpolate server-facingAngle for smooth visual rotation at 60fps
+    if (me.pfacingAngle != null) {
+      me._smoothAngle = me.pfacingAngle + shortAngleDist(me.pfacingAngle, me.facingAngle) * alpha;
     }
-    me._smoothAngle = me.visualAngle;
   }
 
   if (state.localAnim) {
     const elapsed = performance.now() - state.localAnim.startTime;
-    const duration = (state.localAnim.totalFrames / 60) * 1000 / 4;
+    const duration = (state.localAnim.totalFrames / 60) * 1000 / 2;
     state.localAnim.frame = Math.floor((elapsed / duration) * state.localAnim.totalFrames);
-    if (state.localAnim.frame >= state.localAnim.totalFrames) state.localAnim = null;
+    if (state.localAnim._holding && state.localAnim._holdFrame > 0) {
+      if (state.localAnim.frame >= state.localAnim._holdFrame) {
+        state.localAnim.frame = state.localAnim._holdFrame - 1;
+      }
+    } else if (state.localAnim.frame >= state.localAnim.totalFrames) {
+      state.localAnim.frame = state.localAnim.totalFrames - 1;
+    }
   }
 
   const zombieAnim = window.ZOMBIE_ANIMATIONS?.attack;

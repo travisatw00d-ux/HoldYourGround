@@ -4,6 +4,7 @@ import { onRoomList, onAuthSuccess, onGuestJoined, onLobbyCount } from './module
 import { setupInput } from './modules/input.js';
 import { startRender, stopRender, resizeViewport } from './modules/render.js';
 import { resetWavePopup, toggleNWPopup } from './modules/net-events.js';
+import { audioInit, setMasterVolume, getMasterVolume } from './modules/audio.js';
 
 const canvas = document.getElementById('canvas');
 const menu = document.getElementById('menu');
@@ -394,6 +395,23 @@ fullscreenToggle.addEventListener('change', () => {
     if (document.fullscreenElement) document.exitFullscreen();
   }
 });
+
+const volumeSlider = document.getElementById('volumeSlider');
+volumeSlider.addEventListener('input', () => {
+  setMasterVolume(parseInt(volumeSlider.value) / 100);
+});
+
+// Resume AudioContext on first user interaction
+(function resumeAudio() {
+  const handler = () => {
+    audioInit();
+    volumeSlider.value = Math.round(getMasterVolume() * 100);
+    document.removeEventListener('mousedown', handler);
+    document.removeEventListener('keydown', handler);
+  };
+  document.addEventListener('mousedown', handler);
+  document.addEventListener('keydown', handler);
+})();
 
 settingsBtn.addEventListener('click', () => {
   settingsPanel.classList.remove('hidden');

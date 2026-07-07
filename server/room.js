@@ -4,7 +4,7 @@ const {
   WORLD_W, WORLD_H, VIEW_W, VIEW_H, VIEW_MARGIN,
   MAX_PLAYERS, ROOM_EMPTY_TIMEOUT_MS,
   TICK_MS, BROADCAST_MS, ATTACK_SPEED_MULT, ANIMATIONS, KNIGHT_ANIMATIONS,
-  DAYTIME_MS, NIGHTTIME_MS, INTERMISSION_MS, END_GAME_MS
+  DAYTIME_MS, NIGHTTIME_MS, INTERMISSION_MS, END_GAME_MS, CHAIN_DELAY_TICKS
 } = require('./config');
 const SpatialGrid = require('./spatial-grid');
 const playerMod = require('./player');
@@ -55,6 +55,7 @@ class Room {
     this._joinQueue = [];
     this._postGameWaiting = false;
     this.spectatorFollows = new Map();
+    this.tickNum = 0;
   }
 
   setIo(io) { this.io = io; }
@@ -168,7 +169,24 @@ class Room {
     const p = this.players[id];
     if (!p || p.isSpectator) return;
     p.input = { dx: data.dx, dy: data.dy };
-    if (typeof data.angle === 'number') p.facingAngle = data.angle;
+    if (typeof data.angle === 'number' && !p.attacking) {
+      if (p._lastTurnTime != null) {
+        const dt = (Date.now() - p._lastTurnTime) / 1000;
+        const maxDelta = (p.turnSpeed || 18) * Math.min(dt, 0.1);
+        let diff = data.angle - p._lastSendAngle;
+        while (diff > Math.PI) diff -= Math.PI * 2;
+        while (diff < -Math.PI) diff += Math.PI * 2;
+        if (Math.abs(diff) > maxDelta) {
+          p.facingAngle = p._lastSendAngle + (diff > 0 ? maxDelta : -maxDelta);
+        } else {
+          p.facingAngle = data.angle;
+        }
+      } else {
+        p.facingAngle = data.angle;
+      }
+      p._lastSendAngle = p.facingAngle;
+      p._lastTurnTime = Date.now();
+    }
     if (typeof data.sprint === 'boolean') {
       if (data.sprint && !p.sprint) p._sprintDepleted = false;
       if (p.sprint && !data.sprint && !p._sprintDepleted) p.sprintEndCooldown = Date.now();
@@ -178,18 +196,70 @@ class Room {
 
   handleAttack(id, facingAngle) {
     const p = this.players[id];
-    if (!p || !p.alive || p.isSpectator || p.attackCooldown > 0 || p.attacking) return;
+    if (!p || !p.alive || p.isSpectator) return;
+    // Chain queued-but-blocked clicks — will process when comboChainWindow opens
+    if (p._started && !p.comboChainWindow) {
+      if (p.attacking) {
+        if (!p._queuedChain) p._queuedChain = { angle: typeof facingAngle === 'number' ? facingAngle : null };
+        return;
+      }
+    }
+    // Chain into next combo step if in chain window and not at cap
+    if (p.comboChainWindow && (p.comboStep || 0) < 4) {
+      p._chainPendingAngle = typeof facingAngle === 'number' ? facingAngle : null;
+      if (p._chainTickTarget <= 0) {
+        p._chainTickTarget = this.tickNum + p._chainDelayTicks + (p.comboStep === 3 ? 2 : 0);
+      }
+      return;
+    } else if (p.comboChainWindow) {
+      return; // step 4 can't chain
+    } else {
+      if (p.attackCooldown > 0) return;
+      p._started = false;
+      p.comboChainWindow = false;
+      p.comboStep = 1;
+      p._chainTickTarget = 0;
+      p._chainPendingAngle = null;
+      p._queuedChain = null;
+      p._spinRemaining = 0;
+    }
+    p._lastAttackTime = Date.now();
+    this._executeAttack(id, p.comboStep, typeof facingAngle === 'number' ? facingAngle : null);
+  }
+
+  _executeAttack(id, step, pendingAngle) {
+    const p = this.players[id];
+    if (!p) return;
     const style = p.attackStyle || 'jab';
+    const comboKey = style + '_combo' + (step || 1);
     const anim = p.playerClass === 'knight'
-      ? KNIGHT_ANIMATIONS?.[style]
-      : ANIMATIONS[p.currentItem]?.[style];
-    if (!anim) return;
+      ? (KNIGHT_ANIMATIONS?.[comboKey] || KNIGHT_ANIMATIONS?.[style + '_combo1'])
+      : (ANIMATIONS[p.currentItem]?.[comboKey] || ANIMATIONS[p.currentItem]?.[style + '_combo1']);
+    if (!anim) {
+      p._started = false;
+      p.attackCooldown = 0;
+      p.comboStep = 0;
+      p._chainTickTarget = 0;
+      p._queuedChain = null;
+      p._chainPendingAngle = null;
+      return;
+    }
     const kfData = p.playerClass === 'knight' ? anim.knight_sword : anim;
-    if (!kfData || kfData.keyframes.length < 2) return;
+    if (!kfData || kfData.keyframes.length < 2) {
+      p._started = false;
+      p.attackCooldown = 0;
+      p.comboStep = 0;
+      p._chainTickTarget = 0;
+      p._queuedChain = null;
+      p._chainPendingAngle = null;
+      return;
+    }
     const kfAnim = p.playerClass === 'knight'
       ? { keyframes: kfData.keyframes, segments: anim.segments }
       : anim;
-    if (typeof facingAngle === 'number') p.facingAngle = facingAngle;
+    if (typeof pendingAngle === 'number') p.facingAngle = pendingAngle;
+    p.comboChainWindow = false;
+    p.attackCooldown = 6;
     p.attacking = true;
     p.attackFrame = 0;
     p.attackAnim = kfAnim;
@@ -197,7 +267,9 @@ class Room {
     p.attackLockedAngle = p.facingAngle;
     p.attackStartTime = Date.now();
     p.prevCf = -1;
-    this.io.to(id).emit('attackStart', { lockedAngle: p.attackLockedAngle });
+    p._started = true;
+    p._spinRemaining = step >= 4 ? 15 : 0;
+    this.io.to(id).emit('attackStart', { lockedAngle: p.attackLockedAngle, comboStep: step });
   }
 
   handleEquip(id, slot) {
@@ -437,8 +509,8 @@ class Room {
         case 'hitConfirm': this.io.to(e.to).emit('hitConfirm', { targetId: e.targetId, dmg: e.dmg, x: e.x, y: e.y }); break;
         case 'gotHit': this.io.to(e.to).emit('gotHit', { attackerId: e.attackerId, dmg: e.dmg, health: e.health }); break;
         case 'eliminated': this.io.to(e.to).emit('eliminated', { kills: e.kills }); break;
-        case 'zombieKilled': this._awardExp(e.playerId, e.zombieLvl); break;
-        case 'zombieAttackStart': this.io.to(e.to).emit('zombieAttackStart', { zombieId: e.zombieId }); break;
+        case 'zombieKilled': this._awardExp(e.playerId, e.zombieLvl); this.io.to(e.playerId).emit('mobKilled', { mobType: e.mobType, x: e.x, y: e.y }); break;
+        case 'zombieAttackStart': this.io.to(e.to).emit('zombieAttackStart', { zombieId: e.zombieId, mobType: e.mobType }); break;
       }
     }
   }
@@ -645,6 +717,7 @@ class Room {
   }
 
   gameTick() {
+    this.tickNum++;
     const tickStart = Date.now();
 
     if (this.matchPhase !== 'waiting' && this.phaseTimer > 0) {
@@ -709,16 +782,95 @@ class Room {
       if (!p.alive || p.isSpectator || !p.attacking) continue;
       const events = sword.checkSwordHit(p, this.zombies, this.players, this.grid);
       this.emitEvents(events);
+      // Process queued chain clicks — chain delay processor handles comboStep increment
+      if (p._queuedChain && p.comboChainWindow) {
+        p._chainTickTarget = this.tickNum + p._chainDelayTicks + (p.comboStep === 3 ? 2 : 0);
+        p._chainPendingAngle = p._queuedChain.angle;
+        p._queuedChain = null;
+      }
       p.attackFrame++;
       const totalFrames = sword.animTotal(p.attackAnim);
       const totalTicks = Math.ceil(totalFrames / (2 * ATTACK_SPEED_MULT));
       if (p.attackFrame >= totalTicks) {
-        p.attacking = false;
-        p.attackAnim = null;
-        p.attackHitIds = [];
-        p.prevCf = -1;
-        p.attackCooldown = Math.round(p.attackSpeed / TICK_MS);
+        if (!(p._spinRemaining > 0 && p.comboStep === 4)) {
+          p.attackLockedAngle = p.facingAngle;
+          p.attacking = false;
+          p.attackAnim = null;
+          p.attackHitIds = [];
+          p.prevCf = -1;
+          if (p.comboStep >= 4) {
+            p.comboChainWindow = false;
+            p.attackCooldown = 0;
+            p.comboStep = 0;
+            p._started = false;
+            p._spinRemaining = 0;
+            this.io.to(id).emit('comboWindowEnd');
+          this.io.to(id).emit('comboReady');
+          } else {
+            p.comboChainWindow = true;
+            p.attackCooldown = Math.max(1, Math.round(p.attackSpeed / TICK_MS / 2));
+            if (p.comboStep === 3) p.attackCooldown += 8;
+            if (p._queuedChain) {
+              p._chainTickTarget = this.tickNum + p._chainDelayTicks + (p.comboStep === 3 ? 2 : 0);
+              p._chainPendingAngle = p._queuedChain.angle;
+              p._queuedChain = null;
+            }
+          }
+        }
       }
+      // Spin phase — runs every tick independently
+      if (p._spinRemaining > 0 && p.comboStep === 4) {
+        p.attackLockedAngle += (Math.PI * 2) / 15;
+        p._spinRemaining--;
+        p.attackFrame = 4; // keep hitbox in hit zone (currentCf=30 < halfFrames+4)
+        if (p._spinRemaining === 0) {
+          p.attackLockedAngle = p.facingAngle;
+          p.attacking = false;
+          p.attackAnim = null;
+          p.attackHitIds = [];
+          p.prevCf = -1;
+          p.comboChainWindow = false;
+          p.attackCooldown = 20 + (p.comboStep - 1) * 8;
+          p.comboStep = 0;
+          p._started = false;
+          this.io.to(id).emit('comboWindowEnd');
+        }
+      }
+    }
+    // Tick cooldowns: chain window → recovery → ready
+    for (const id of ids) {
+      const p = this.players[id];
+      if (!p || p.attacking || p.attackCooldown <= 0) continue;
+      p.attackCooldown--;
+      if (p.attackCooldown > 0) continue;
+      if (p.comboChainWindow) {
+        p.comboChainWindow = false;
+        p.attackCooldown = Math.round(1000 / TICK_MS);
+        if (p._chainTickTarget <= 0) this.io.to(id).emit('comboWindowEnd');
+      } else {
+        p.comboStep = 0;
+        p._started = false;
+        p.attackCooldown = 0;
+        p._queuedChain = null;
+        p._chainPendingAngle = null;
+        p._chainTickTarget = 0;
+        p._spinRemaining = 0;
+        this.io.to(id).emit('comboWindowEnd');
+        this.io.to(id).emit('comboReady');
+      }
+    }
+    // Process chain delays — execute queued chain attacks
+    for (const id of ids) {
+      const p = this.players[id];
+      if (!p || p._chainTickTarget <= 0) continue;
+      if (this.tickNum < p._chainTickTarget) continue;
+      const step = (p.comboStep || 0) + 1;
+      p.comboStep = step;
+      p._chainTickTarget = 0;
+      p.attackCooldown = 0;
+      p._chainPendingAngle = null;
+      p._lastAttackTime = Date.now();
+      this._executeAttack(id, step, null);
     }
 
     if (this.matchPhase === 'nighttime' && this.zombies.length > 0 && this.zombies.every(z => !z.alive)) this._advancePhase();

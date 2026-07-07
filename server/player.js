@@ -1,6 +1,7 @@
 const {
   WORLD_W, WORLD_H, PLAYER_RADIUS, BASE_SPEED, BASE_ATTACK_DMG,
-  BASE_ATTACK_SPEED_MS, BASE_HEALTH, COLORS, SPAWN_MIN_DIST, ITEMS
+  BASE_ATTACK_SPEED_MS, BASE_HEALTH, COLORS, SPAWN_MIN_DIST, ITEMS,
+  BASE_TURN_SPEED
 } = require('./config');
 
 function randomSpawn(zombies, minDist) {
@@ -27,6 +28,7 @@ function recalcStats(p) {
   p.speed = BASE_SPEED + (item ? (item.stats.speed || 0) : 0);
   p.attackDmg = BASE_ATTACK_DMG + (item ? (item.stats.attackDmg || 0) : 0);
   p.attackSpeed = BASE_ATTACK_SPEED_MS + (item ? (item.stats.attackSpeed || 0) : 0);
+  p.turnSpeed = BASE_TURN_SPEED + (item ? (item.stats.turnSpeed || 0) : 0);
 }
 
 let colorIndex = 0;
@@ -73,8 +75,17 @@ function addPlayer(id, name, players, zombies, accountType, accountId) {
     fullscreen: false,
     godMode: false,
     attackStyle: 'jab',
+    comboStep: 0,
+    _lastAttackTime: 0,
+    _chainTickTarget: 0,
+    _chainPendingAngle: null,
+    _chainDelayTicks: 5,
+    _started: false,
+    _queuedChain: null,
+    comboChainWindow: false,
     sprint: false,
     sprintEndCooldown: 0,
+    _spinRemaining: 0,
     isSpectator: false
   };
   recalcStats(players[id]);
@@ -108,11 +119,20 @@ function respawnPlayer(id, players, zombies) {
   p.attackAnim = null;
   p.attackHitIds = [];
   p.prevCf = -1;
+  p.comboStep = 0;
+  p._lastAttackTime = 0;
+  p._chainTickTarget = 0;
+  p._chainPendingAngle = null;
+  p._chainDelayTicks = 5;
+  p._started = false;
+  p._queuedChain = null;
+  p.comboChainWindow = false;
   p.godMode = false;
   p.isSpectator = false;
   p.sprint = false;
   p.energy = p.maxEnergy || 100;
   p.sprintEndCooldown = 0;
+  p._spinRemaining = 0;
 }
 
 function playerInfoObj(p) {
@@ -120,6 +140,7 @@ function playerInfoObj(p) {
     id: p.id, name: p.name, color: p.color,
     currentItem: p.currentItem, inventory: p.inventory,
     maxHealth: p.maxHealth, speed: p.speed, attackDmg: p.attackDmg, attackSpeed: p.attackSpeed,
+    turnSpeed: p.turnSpeed,
     lvl: p.lvl || 1,
     playerClass: p.playerClass || 'knight',
     isSpectator: p.isSpectator

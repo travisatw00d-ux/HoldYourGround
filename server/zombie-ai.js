@@ -173,7 +173,7 @@ function processZombieAttacks(zombies, players, grid, roomId) {
         if (dist < z.radius + p.radius + ZOMBIE_ATTACK_RANGE) {
           z.attacking = true;
           z.attackTimer = 0;
-          events.push({ type: 'zombieAttackStart', to: 'room:' + roomId, zombieId: z.id });
+          events.push({ type: 'zombieAttackStart', to: 'room:' + roomId, zombieId: z.id, mobType: z.mobType });
         }
       }
     }

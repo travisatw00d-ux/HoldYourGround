@@ -4,6 +4,8 @@ import { startRender, stopRender, generateBackground } from './render.js';
 import { updateLeaderboard } from './render-ui.js';
 import { startAttackAnim } from './render-entity.js';
 import { callbacks } from './callback-registry.js';
+import { playSound, playMobSound, loadSounds } from './audio.js';
+import { playReturnAnim } from './render-entity.js';
 
 const textDecoder = new TextDecoder();
 const MOB_NAMES = (window.MOB_TYPES || []).map(m => m.name);
@@ -452,6 +454,7 @@ export function registerEvents(socket) {
       p.speed = info.speed != null ? info.speed : 13;
       p.attackDmg = info.attackDmg != null ? info.attackDmg : 5;
       p.attackSpeed = info.attackSpeed != null ? info.attackSpeed : 800;
+      p.turnSpeed = info.turnSpeed != null ? info.turnSpeed : 18;
       state.lbSig = '';
       updateLeaderboard();
     }
@@ -460,6 +463,7 @@ export function registerEvents(socket) {
 
   socket.on('eliminated', ({ kills }) => {
     if (state.screen === 'menu') return;
+    playSound('player_death');
     const active = state.matchPhase === 'daytime' || state.matchPhase === 'nighttime' || state.matchPhase === 'intermission' || state.matchPhase === 'waveOver';
     if (active) {
       state.isDeadSpectating = true;
@@ -487,8 +491,18 @@ export function registerEvents(socket) {
     startRender(socket);
   });
 
-  socket.on('gotHit', () => { state.hitFlash = 8; });
-  socket.on('hitConfirm', ({ dmg, x, y }) => { state.dmgNumbers.push({ x, y, dmg, timer: 1.2, duration: 1.2 }); });
+  socket.on('gotHit', () => { state.hitFlash = 8; playSound('player_hurt'); });
+  socket.on('hitConfirm', ({ dmg, x, y }) => {
+    state.dmgNumbers.push({ x, y, dmg, timer: 1.2, duration: 1.2 });
+    // Find nearest zombie to play hit sound
+    let nearest = null, nearDist = Infinity;
+    for (const z of state.zombies) {
+      if (!z.alive) continue;
+      const dz = Math.hypot(z.x - x, z.y - y);
+      if (dz < nearDist) { nearDist = dz; nearest = z; }
+    }
+    if (nearest && nearDist < 60) playMobSound(nearest.mobType, 'hit', { x: x, y: y });
+  });
 
   socket.on('accountUpdate', ({ exp, level, expToNext, gold }) => {
     state.exp = exp; state.level = level; state.expToNext = expToNext; state.gold = gold;
@@ -544,15 +558,40 @@ export function registerEvents(socket) {
     socket.emit('clientDiag', { event: 'queueUpdate', isSpectator: state.isSpectator, screen: state.screen, matchPhase: state.matchPhase, queued: (queued || []).length, myPos: myQ?.pos });
   });
 
-  socket.on('attackStart', ({ lockedAngle }) => { startAttackAnim(lockedAngle); });
+  socket.on('attackStart', ({ lockedAngle, comboStep }) => {
+    state._comboStep = comboStep;
+    startAttackAnim(lockedAngle, comboStep);
+    if (state.attackStyle === 'swing') {
+      const idx = Math.floor(Math.random() * 3) + 1;
+      playSound('SwordSwing' + idx);
+    } else {
+      playSound('player_jab');
+    }
+  });
 
-  socket.on('zombieAttackStart', ({ zombieId }) => {
+  socket.on('comboWindowEnd', () => {
+    playReturnAnim();
+  });
+
+  socket.on('comboReady', () => {
+    state._comboStep = 0;
+  });
+
+  socket.on('zombieAttackStart', ({ zombieId, mobType }) => {
     const anim = window.ZOMBIE_ANIMATIONS?.attack;
     if (anim) state.zombieAnims[zombieId] = { startTime: performance.now() };
+    // Look up zombie position for positional audio
+    const z = state.zombies.find(zz => zz.id === zombieId);
+    if (z && z.alive) playMobSound(mobType, 'attack', { x: z.x, y: z.y });
+  });
+
+  socket.on('mobKilled', ({ mobType, x, y }) => {
+    playMobSound(mobType, 'kill', { x, y });
   });
 
   socket.on('matchPhase', async ({ phase, timer, wave, readyPlayers, activePlayers }) => {
     state.matchPhase = phase;
+    if (phase === 'daytime' || phase === 'nighttime') playSound('wave_' + phase);
     state.phaseTimer = timer;
     state.phaseTimerStart = timer;
     state.phaseStartedAt = performance.now();
@@ -813,7 +852,7 @@ let assetsPromise = null;
 function ensureAssets() {
   if (assetsLoaded) return Promise.resolve();
   if (!assetsPromise) {
-    assetsPromise = loadGameAssets().then(() => { assetsLoaded = true; }).catch(e => {
+    assetsPromise = loadGameAssets().then(() => { assetsLoaded = true; loadSounds(); }).catch(e => {
       assetsPromise = null;
       console.error('[HYG] asset load failed:', e);
       throw e;
