@@ -14,11 +14,12 @@
   { "name": "XPBarBG.png", "x": 110, "y": 495, "scale": 0.5, "zIndex": 98 },
   { "name": "PlayerLevel", "x": 49, "y": 503, "scale": 1, "zIndex": 100, "textX": 85, "textY": 64, "textSize": 20 },
   { "name": "ExperienceBar.png", "x": 110, "y": 495, "scale": 0.5, "zIndex": 101, "fillX": 88, "fillY": 116, "fillW": 681, "fillH": 39 },
+  { "name": "JabAttack.png", "x": 907, "y": 300, "scale": 0.7, "zIndex": 102 },
+  { "name": "SwingAttack.png", "x": 906, "y": 438, "scale": 0.7, "zIndex": 103 },
+  { "name": "JabHighlight", "x": 997, "y": 314, "scale": 0.1, "zIndex": 104 },
+  { "name": "SwingHighlight", "x": 997, "y": 452, "scale": 0.1, "zIndex": 104 },
+  { "name": "Space.png", "x": 889, "y": 392, "scale": 0.8, "zIndex": 105 },
   { "name": "PhaseName", "x": 350, "y": 20, "scale": 1, "zIndex": 199, "textX": -120, "textY": 25, "textSize": 28 },
   { "name": "PhaseTimer", "x": 491, "y": 20, "scale": 1, "zIndex": 199, "textX": -110, "textY": 26, "textSize": 28 },
-  { "name": "JabHighlight", "x": 997, "y": 314, "scale": 0.1, "zIndex": 104 },
-  { "name": "SwingHighlight", "x": 997, "y": 436, "scale": 0.1, "zIndex": 104 },
-  { "name": "StatsHotkey", "x": -7, "y": 525, "scale": 1, "zIndex": 200, "textX": 25, "textY": 22, "textSize": 23 },
-  { "name": "JabAttack.png", "x": 907, "y": 300, "scale": 0.7, "zIndex": 102 },
-  { "name": "SwingAttack.png", "x": 906, "y": 422, "scale": 0.7, "zIndex": 103 }
+  { "name": "StatsHotkey", "x": -7, "y": 525, "scale": 1, "zIndex": 200, "textX": 25, "textY": 22, "textSize": 23 }
 ]

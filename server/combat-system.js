@@ -139,6 +139,8 @@ function processCombatTick(room) {
           p.attackCooldown = (p.attackStyle === 'swing' ? 16 : 20) + (p.comboStep - 1) * 8;
           p.comboStep = 0;
           p._started = false;
+          p._chainTickTarget = 0;
+          p._queuedChain = null;
           p._spinRemaining = 0;
           p._lungeRemaining = 0;
           p._combo3MidHit = false;
@@ -170,6 +172,8 @@ function processCombatTick(room) {
         p.attackCooldown = (p.attackStyle === 'swing' ? 16 : 20) + (p.comboStep - 1) * 8;
         p.comboStep = 0;
         p._started = false;
+        p._chainTickTarget = 0;
+        p._queuedChain = null;
         room.io.to(id).emit('comboWindowEnd');
       }
     }

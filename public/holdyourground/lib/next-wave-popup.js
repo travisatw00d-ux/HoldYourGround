@@ -77,6 +77,7 @@ function reopenNWFromTab() {
 
 export function resetWavePopup() {
   clearTimeout(nwpTimer);
+  if (state._nwpHideTimer) { clearTimeout(state._nwpHideTimer); state._nwpHideTimer = null; }
   const popup = document.getElementById('nextWavePopup');
   const tab = document.getElementById('nextWaveTab');
   const overlay = document.getElementById('nwpOverlay');

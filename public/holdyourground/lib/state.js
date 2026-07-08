@@ -56,6 +56,7 @@ export const state = {
   waveComposition: null,
   attackStyle: 'jab',
   _mirrorSword: false,
+  _nwpHideTimer: null,
   idleTransition: null,
   isSpectator: false,
   isDeadSpectating: false,

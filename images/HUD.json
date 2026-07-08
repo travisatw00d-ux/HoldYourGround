@@ -1,140 +1,355 @@
-{"frames": {
-
-"Activated.png":
 {
-	"frame": {"x":733,"y":162,"w":178,"h":180},
-	"rotated": false,
-	"trimmed": false,
-	"spriteSourceSize": {"x":0,"y":0,"w":178,"h":180},
-	"sourceSize": {"w":178,"h":180}
-},
-"CharacterWindow.png":
-{
-	"frame": {"x":783,"y":1,"w":150,"h":159},
-	"rotated": false,
-	"trimmed": true,
-	"spriteSourceSize": {"x":25,"y":17,"w":150,"h":159},
-	"sourceSize": {"w":200,"h":200}
-},
-"EnergyBar.png":
-{
-	"frame": {"x":523,"y":344,"w":392,"h":49},
-	"rotated": false,
-	"trimmed": true,
-	"spriteSourceSize": {"x":3,"y":48,"w":392,"h":49},
-	"sourceSize": {"w":400,"h":148}
-},
-"EnergyBarBG.png":
-{
-	"frame": {"x":398,"y":132,"w":333,"h":35},
-	"rotated": false,
-	"trimmed": true,
-	"spriteSourceSize": {"x":34,"y":84,"w":333,"h":35},
-	"sourceSize": {"w":400,"h":200}
-},
-"ExperienceBar.png":
-{
-	"frame": {"x":1,"y":1,"w":780,"h":82},
-	"rotated": false,
-	"trimmed": true,
-	"spriteSourceSize": {"x":8,"y":96,"w":780,"h":82},
-	"sourceSize": {"w":800,"h":267}
-},
-"HealthBar.png":
-{
-	"frame": {"x":523,"y":395,"w":386,"h":45},
-	"rotated": false,
-	"trimmed": true,
-	"spriteSourceSize": {"x":9,"y":73,"w":386,"h":45},
-	"sourceSize": {"w":400,"h":200}
-},
-"HealthBarBG.png":
-{
-	"frame": {"x":398,"y":132,"w":333,"h":35},
-	"rotated": false,
-	"trimmed": true,
-	"spriteSourceSize": {"x":34,"y":84,"w":333,"h":35},
-	"sourceSize": {"w":400,"h":200}
-},
-"Hotkey.png":
-{
-	"frame": {"x":582,"y":169,"w":131,"h":136},
-	"rotated": false,
-	"trimmed": true,
-	"spriteSourceSize": {"x":35,"y":31,"w":131,"h":136},
-	"sourceSize": {"w":200,"h":200}
-},
-"JabAttack.png":
-{
-	"frame": {"x":293,"y":169,"w":142,"h":168},
-	"rotated": false,
-	"trimmed": true,
-	"spriteSourceSize": {"x":20,"y":14,"w":142,"h":168},
-	"sourceSize": {"w":182,"h":200}
-},
-"KnightCharacter.png":
-{
-	"frame": {"x":398,"y":344,"w":123,"h":160},
-	"rotated": false,
-	"trimmed": true,
-	"spriteSourceSize": {"x":42,"y":18,"w":123,"h":160},
-	"sourceSize": {"w":200,"h":200}
-},
-"NameBar.png":
-{
-	"frame": {"x":1,"y":452,"w":395,"h":51},
-	"rotated": false,
-	"trimmed": true,
-	"spriteSourceSize": {"x":4,"y":47,"w":395,"h":51},
-	"sourceSize": {"w":400,"h":133}
-},
-"ServerLevel.png":
-{
-	"frame": {"x":1,"y":162,"w":290,"h":288},
-	"rotated": false,
-	"trimmed": true,
-	"spriteSourceSize": {"x":0,"y":0,"w":290,"h":288},
-	"sourceSize": {"w":290,"h":290}
-},
-"settingsgear.png":
-{
-	"frame": {"x":293,"y":339,"w":64,"h":64},
-	"rotated": false,
-	"trimmed": false,
-	"spriteSourceSize": {"x":0,"y":0,"w":64,"h":64},
-	"sourceSize": {"w":64,"h":64}
-},
-"SwingAttack.png":
-{
-	"frame": {"x":437,"y":169,"w":143,"h":167},
-	"rotated": false,
-	"trimmed": true,
-	"spriteSourceSize": {"x":20,"y":15,"w":143,"h":167},
-	"sourceSize": {"w":182,"h":200}
-},
-"TimeBar.png":
-{
-	"frame": {"x":523,"y":442,"w":384,"h":58},
-	"rotated": false,
-	"trimmed": true,
-	"spriteSourceSize": {"x":8,"y":47,"w":384,"h":58},
-	"sourceSize": {"w":400,"h":154}
-},
-"XPBarBG.png":
-{
-	"frame": {"x":1,"y":85,"w":745,"h":45},
-	"rotated": false,
-	"trimmed": true,
-	"spriteSourceSize": {"x":28,"y":111,"w":745,"h":45},
-	"sourceSize": {"w":800,"h":267}
-}},
-"meta": {
-	"app": "https://www.codeandweb.com/texturepacker",
-	"version": "1.0",
-	"image": "HUD.png",
-	"format": "RGBA8888",
-	"size": {"w":934,"h":505},
-	"scale": "1",
-	"smartupdate": "$TexturePacker:SmartUpdate:a18b6809c3fbd42b28efc46a12f57369:3d7e5173380ee83c84768a31e57babf0:ab8edaf43021c39a73bb7d040bcb4897$"
-}
+  "frames": {
+    "Activated.png": {
+      "frame": {
+        "x": 290,
+        "y": 281,
+        "w": 177,
+        "h": 180
+      },
+      "rotated": false,
+      "trimmed": true,
+      "spriteSourceSize": {
+        "x": 1,
+        "y": 0,
+        "w": 177,
+        "h": 180
+      },
+      "sourceSize": {
+        "w": 178,
+        "h": 180
+      }
+    },
+    "CharacterWindow.png": {
+      "frame": {
+        "x": 290,
+        "y": 463,
+        "w": 148,
+        "h": 157
+      },
+      "rotated": false,
+      "trimmed": true,
+      "spriteSourceSize": {
+        "x": 26,
+        "y": 18,
+        "w": 148,
+        "h": 157
+      },
+      "sourceSize": {
+        "w": 200,
+        "h": 200
+      }
+    },
+    "EnergyBar.png": {
+      "frame": {
+        "x": 0,
+        "y": 178,
+        "w": 390,
+        "h": 47
+      },
+      "rotated": false,
+      "trimmed": true,
+      "spriteSourceSize": {
+        "x": 4,
+        "y": 49,
+        "w": 390,
+        "h": 47
+      },
+      "sourceSize": {
+        "w": 400,
+        "h": 148
+      }
+    },
+    "EnergyBarBG.png": {
+      "frame": {
+        "x": 395,
+        "y": 127,
+        "w": 331,
+        "h": 33
+      },
+      "rotated": false,
+      "trimmed": true,
+      "spriteSourceSize": {
+        "x": 35,
+        "y": 85,
+        "w": 331,
+        "h": 33
+      },
+      "sourceSize": {
+        "w": 400,
+        "h": 200
+      }
+    },
+    "ExperienceBar.png": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 778,
+        "h": 80
+      },
+      "rotated": false,
+      "trimmed": true,
+      "spriteSourceSize": {
+        "x": 9,
+        "y": 97,
+        "w": 778,
+        "h": 80
+      },
+      "sourceSize": {
+        "w": 800,
+        "h": 267
+      }
+    },
+    "HealthBar.png": {
+      "frame": {
+        "x": 392,
+        "y": 178,
+        "w": 384,
+        "h": 43
+      },
+      "rotated": false,
+      "trimmed": true,
+      "spriteSourceSize": {
+        "x": 10,
+        "y": 74,
+        "w": 384,
+        "h": 43
+      },
+      "sourceSize": {
+        "w": 400,
+        "h": 200
+      }
+    },
+    "HealthBarBG.png": {
+      "frame": {
+        "x": 0,
+        "y": 227,
+        "w": 331,
+        "h": 33
+      },
+      "rotated": false,
+      "trimmed": true,
+      "spriteSourceSize": {
+        "x": 35,
+        "y": 85,
+        "w": 331,
+        "h": 33
+      },
+      "sourceSize": {
+        "w": 400,
+        "h": 200
+      }
+    },
+    "Hotkey.png": {
+      "frame": {
+        "x": 469,
+        "y": 449,
+        "w": 129,
+        "h": 134
+      },
+      "rotated": false,
+      "trimmed": true,
+      "spriteSourceSize": {
+        "x": 36,
+        "y": 32,
+        "w": 129,
+        "h": 134
+      },
+      "sourceSize": {
+        "w": 200,
+        "h": 200
+      }
+    },
+    "JabAttack.png": {
+      "frame": {
+        "x": 469,
+        "y": 281,
+        "w": 140,
+        "h": 166
+      },
+      "rotated": false,
+      "trimmed": true,
+      "spriteSourceSize": {
+        "x": 21,
+        "y": 15,
+        "w": 140,
+        "h": 166
+      },
+      "sourceSize": {
+        "w": 182,
+        "h": 200
+      }
+    },
+    "KnightCharacter.png": {
+      "frame": {
+        "x": 611,
+        "y": 448,
+        "w": 121,
+        "h": 158
+      },
+      "rotated": false,
+      "trimmed": true,
+      "spriteSourceSize": {
+        "x": 43,
+        "y": 19,
+        "w": 121,
+        "h": 158
+      },
+      "sourceSize": {
+        "w": 200,
+        "h": 200
+      }
+    },
+    "NameBar.png": {
+      "frame": {
+        "x": 0,
+        "y": 127,
+        "w": 393,
+        "h": 49
+      },
+      "rotated": false,
+      "trimmed": true,
+      "spriteSourceSize": {
+        "x": 5,
+        "y": 48,
+        "w": 393,
+        "h": 49
+      },
+      "sourceSize": {
+        "w": 400,
+        "h": 133
+      }
+    },
+    "ServerLevel.png": {
+      "frame": {
+        "x": 0,
+        "y": 262,
+        "w": 288,
+        "h": 286
+      },
+      "rotated": false,
+      "trimmed": true,
+      "spriteSourceSize": {
+        "x": 1,
+        "y": 1,
+        "w": 288,
+        "h": 286
+      },
+      "sourceSize": {
+        "w": 290,
+        "h": 290
+      }
+    },
+    "settingsgear.png": {
+      "frame": {
+        "x": 105,
+        "y": 550,
+        "w": 64,
+        "h": 64
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 64,
+        "h": 64
+      },
+      "sourceSize": {
+        "w": 64,
+        "h": 64
+      }
+    },
+    "Space.png": {
+      "frame": {
+        "x": 0,
+        "y": 550,
+        "w": 103,
+        "h": 38
+      },
+      "rotated": false,
+      "trimmed": true,
+      "spriteSourceSize": {
+        "x": 52,
+        "y": 34,
+        "w": 103,
+        "h": 38
+      },
+      "sourceSize": {
+        "w": 200,
+        "h": 113
+      }
+    },
+    "SwingAttack.png": {
+      "frame": {
+        "x": 611,
+        "y": 281,
+        "w": 141,
+        "h": 165
+      },
+      "rotated": false,
+      "trimmed": true,
+      "spriteSourceSize": {
+        "x": 21,
+        "y": 16,
+        "w": 141,
+        "h": 165
+      },
+      "sourceSize": {
+        "w": 182,
+        "h": 200
+      }
+    },
+    "TimeBar.png": {
+      "frame": {
+        "x": 392,
+        "y": 223,
+        "w": 382,
+        "h": 56
+      },
+      "rotated": false,
+      "trimmed": true,
+      "spriteSourceSize": {
+        "x": 9,
+        "y": 48,
+        "w": 382,
+        "h": 56
+      },
+      "sourceSize": {
+        "w": 400,
+        "h": 154
+      }
+    },
+    "XPBarBG.png": {
+      "frame": {
+        "x": 0,
+        "y": 82,
+        "w": 743,
+        "h": 43
+      },
+      "rotated": false,
+      "trimmed": true,
+      "spriteSourceSize": {
+        "x": 29,
+        "y": 112,
+        "w": 743,
+        "h": 43
+      },
+      "sourceSize": {
+        "w": 800,
+        "h": 267
+      }
+    }
+  },
+  "meta": {
+    "app": "SpriteSheet Maker",
+    "version": "1.0",
+    "image": "HUD.png",
+    "format": "RGBA8888",
+    "size": {
+      "w": 778,
+      "h": 620
+    },
+    "scale": "1"
+  }
 }

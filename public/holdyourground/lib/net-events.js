@@ -388,6 +388,11 @@ export function registerEvents(socket) {
     document.getElementById('dWave').textContent = data.wave;
     populateNWRows(data.enemies);
     document.getElementById('nextWaveTab')?.classList.remove('hidden');
+    if (state._nwpHideTimer) clearTimeout(state._nwpHideTimer);
+    state._nwpHideTimer = setTimeout(() => {
+      hideNWPopup();
+      state._nwpHideTimer = null;
+    }, 10000);
   });
 
   socket.on('matchEnd', ({ wave, timer, serverLevel, playerStats, lobbyPlayers }) => {

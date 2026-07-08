@@ -217,7 +217,7 @@ export function drawHUD(ctx) {
       const dw = sss.w * el.scale * scl;
       const dh = sss.h * el.scale * scl;
       let dx, dy;
-      if (el.name === 'JabAttack.png' || el.name === 'SwingAttack.png') {
+      if (el.name === 'JabAttack.png' || el.name === 'SwingAttack.png' || el.name === 'Space.png') {
         const right = 1024 - (el.x + sss.x * el.scale) - sss.w * el.scale;
         const bottom = 576 - (el.y + sss.y * el.scale) - sss.h * el.scale;
         dx = state.viewW - right * scl - dw;
