@@ -14,11 +14,13 @@
 ## Sync Checklist (after frontend changes)
 
 ```
-HoldYourGround\public\holdyourground\  →  IOWebsite\public\holdyourground\
+HoldYourGround\public\holdyourground\  →  IOWebsite\public\holdyourground\  (replace entirely)
 HoldYourGround\public\shared\data.js   →  IOWebsite\public\shared\data.js  (⚠️ server needs this!)
 HoldYourGround\public\style.css        →  IOWebsite\public\style.css
 HoldYourGround\images\*.png            →  IOWebsite\public\images\
 ```
+
+Then bump `?v=N` to `?v=N+1` in `IOWebsite\public\holdyourground\index.html` to force browser cache refresh.
 
 Server crashes without `shared/data.js` — it's `require()`'d by `server/config.js` and `server/mob-config.js`. Browser now uses `lib/game-data.js` (ES module import).
 
