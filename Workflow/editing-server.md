@@ -6,15 +6,16 @@ All server files live in `server/`. Entry: `server.js` → `network.js`.
 
 | Goal | File(s) | See |
 |---|---|---|
-| Join/queue logic | `room.js` (handleDirectJoin, handleQueueJoin, _promoteFromQueue) | server-architecture.md, join-queue.md |
-| Match phases / timers | `room.js` (_advancePhase), `config.js` (PHASE_MS) | match-lifecycle.md |
-| Play Again / end game | `room.js` (_endMatch), `socket-handlers.js` (playAgain) | results-rejoin.md |
+| Join/queue logic | `join-manager.js`, `room.js` (addPlayer/removePlayer) | server-architecture.md, join-queue.md |
+| Match phases / timers | `phase-manager.js`, `config.js` (PHASE_MS) | match-lifecycle.md |
+| Play Again / end game | `phase-manager.js` (_endMatch), `socket-handlers.js` (playAgain) | results-rejoin.md |
+| Combat system | `combat-system.js`, `sword.js`, `config.js`, `player.js` | combat-system.md |
 | Zombie AI | `zombie-ai.js`, `zombie.js` | wave-system.md |
-| Sword/damage | `sword.js`, `config.js` (DAMAGE), `player.js` | combat-system.md |
-| Wave composition | `mob-config.js` (getWaveComposition) | wave-system.md |
+| Wave composition | `mob-config.js`, `phase-manager.js` (getWaveComposition) | wave-system.md |
 | Binary protocol | `binary-protocol.js` | protocol.md |
-| Lobby | `room-manager.js`, `socket-handlers.js` | match-lifecycle.md |
-| Test mode | `socket-handlers.js:__test`, `room.js:_testAdvancePhase` | scenarios/README.md |
+| State broadcast | `room.js` (gameTick broadcast phases) | server-architecture.md |
+| Spectator follows | `spectator-manager.js` | match-lifecycle.md |
+| Test mode | `socket-handlers.js:__test`, `phase-manager.js:_testAdvancePhase` | scenarios/README.md |
 | Auth/db | `auth.js`, `db.js` | — |
 | Tuning | `config.js` | — |
 
