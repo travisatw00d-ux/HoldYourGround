@@ -52,7 +52,9 @@ function checkSwordHit(p, zombies, players, grid) {
 
   const isSwing = p.attackStyle === 'swing';
   const isJabFinal = p.comboStep === 3 && p.attackStyle === 'jab';
+  const isSwingThird = p.comboStep === 3 && isSwing;
   if (isJabFinal) halfFrames = totalFrames; // process all frames for triple jab
+  const dmgLimit = isSwingThird ? totalFrames : halfFrames + (isSwing ? 4 : 1);
   p.comboChainWindow = currentCf < halfFrames + (isSwing ? 4 : 1);
   if (isJabFinal && currentCf % 20 >= 10) p.comboChainWindow = false;
   const cfs = [];
@@ -62,9 +64,9 @@ function checkSwordHit(p, zombies, players, grid) {
     const margin = isSwing ? 4 : 1;
     for (let s = 1; s <= steps; s++) {
       const cf = p.prevCf + span * (s / steps);
-      if (cf <= halfFrames + margin) cfs.push(cf);
+      if (cf <= dmgLimit) cfs.push(cf);
     }
-  } else if (currentCf <= halfFrames + (isSwing ? 4 : 1)) {
+  } else if (currentCf <= dmgLimit) {
     cfs.push(currentCf);
   }
   // Triple jab: only forward segments deal damage
