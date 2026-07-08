@@ -91,15 +91,10 @@ function checkSwordHit(p, zombies, players, grid) {
     p.attackHitIds = [];
     p._combo3MidHit = true;
   }
-  // Jab final triple-hit: clear hit IDs at each return transition
-  if (isJabFinal && p._jabHitCleared < 2) {
-    const trans = [10, 30];
-    if (currentCf >= trans[p._jabHitCleared]) {
-      p.attackHitIds = [];
-      p._jabHitCleared++;
-    }
-  }
   if (cfs.length === 0) return events;
+
+  // Clear hit IDs at forward segment boundaries for jab triple combo
+  if (isJabFinal) p._jabHitCleared = 0;
 
   const nearbyZombies = grid.getNearbyZombies(p.x, p.y);
 
@@ -124,6 +119,14 @@ function checkSwordHit(p, zombies, players, grid) {
     const tipY = sy + (btX * sinR + btY * cosR) * scale;
     const hiltX = sx + (bhX * cosR - bhY * sinR) * scale;
     const hiltY = sy + (bhX * sinR + bhY * cosR) * scale;
+
+    // Clear hit IDs at forward segment boundaries for jab triple combo
+    if (isJabFinal && p._jabHitCleared < 2) {
+      if (cf >= (p._jabHitCleared === 0 ? 20 : 40)) {
+        p.attackHitIds = [];
+        p._jabHitCleared++;
+      }
+    }
 
     for (const z of nearbyZombies) {
       if (!z.alive) continue;
