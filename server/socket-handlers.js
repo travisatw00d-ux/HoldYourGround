@@ -150,6 +150,10 @@ module.exports = function registerSocket(socket, { io, broadcastRoomList, broadc
     if (!p) return;
     p.attackStyle = p.attackStyle === 'jab' ? 'swing' : 'jab';
     socket.emit('attackStyleChanged', { attackStyle: p.attackStyle });
+    const info = playerMod.playerInfoObj(p);
+    for (const oid in room.players) {
+      room.io.to(oid).emit('playerInfo', info);
+    }
   });
 
   socket.on('toggleGodMode', () => {

@@ -66,7 +66,11 @@ function moveAll(zombies, players) {
   for (const z of zombies) {
     if (!z.alive || z.attacking || z.headingAngle === undefined) continue;
     let spd = z.speed;
-    if (z.targetPlayerId && players) {
+    // Edge-spawned zombies have boosted speed for first 10 seconds
+    if (z._edgeSpawnTimer > 0) {
+      spd *= 3.0;
+      z._edgeSpawnTimer--;
+    } else if (z.targetPlayerId && players) {
       const tp = players[z.targetPlayerId];
       if (tp && tp.alive) {
         const dx = tp.x - z.x, dy = tp.y - z.y;
@@ -82,16 +86,18 @@ function moveAll(zombies, players) {
   }
 }
 
-function ensureCount(zombies, spawnPool, serverLevel, players, maxAlive) {
+function ensureCount(zombies, spawnPool, serverLevel, players, maxAlive, edgeSpawn) {
   if (zombies.length >= spawnPool.length) return;
   let alive = 0;
   for (const z of zombies) { if (z.alive) alive++; }
   const room = Math.min(maxAlive - alive, spawnPool.length - zombies.length);
   if (room <= 0) return;
   for (let i = 0; i < room; i++) {
+    if (zombies.length >= spawnPool.length) break;
     const mt = spawnPool[zombies.length];
+    if (!mt) break;
     const level = getRandomSpawnLevel(serverLevel, mt.unlockLevel) || 1;
-    zombies.push(createEnemy(mt, level, players));
+    zombies.push(createEnemy(mt, level, players, null, null, edgeSpawn));
   }
 }
 
@@ -230,9 +236,50 @@ function processWallCohesion(zombies, grid) {
     }
   }
 }
+function spawnKiterResponse(zombies, spawnPool, serverLevel, players, maxAlive) {
+  let remaining = Math.min(maxAlive, spawnPool.length) - zombies.length;
+  if (remaining <= 0 || zombies.length >= spawnPool.length) return;
+
+  for (const id in players) {
+    if (remaining <= 0) break;
+    const p = players[id];
+    if (!p.alive || p.isSpectator) continue;
+    if (p.input.dx === 0 && p.input.dy === 0) continue;
+
+    const moveAngle = Math.atan2(p.input.dy, p.input.dx);
+    // Only respond if some zombies are behind the player
+    let zombiesBehind = false;
+    for (const z of zombies) {
+      if (!z.alive) continue;
+      const dzx = z.x - p.x, dzy = z.y - p.y;
+      if (dzx * dzx + dzy * dzy > 500 * 500) continue;
+      const a = Math.atan2(dzy, dzx) - moveAngle;
+      if (Math.abs(a) > Math.PI / 2) { zombiesBehind = true; break; }
+    }
+    if (!zombiesBehind) continue;
+
+    // Spawn from a world edge in the movement direction
+    const side = moveAngle > -Math.PI / 4 && moveAngle <= Math.PI / 4 ? 1 :
+      moveAngle > Math.PI / 4 && moveAngle <= 3 * Math.PI / 4 ? 2 :
+      moveAngle > 3 * Math.PI / 4 || moveAngle < -3 * Math.PI / 4 ? 3 : 0;
+    let sx, sy;
+    switch (side) {
+      case 0: sx = p.x + (Math.random() - 0.5) * WORLD_W * 0.5; sy = -80; break;
+      case 1: sx = WORLD_W + 80; sy = p.y + (Math.random() - 0.5) * WORLD_H * 0.5; break;
+      case 2: sx = p.x + (Math.random() - 0.5) * WORLD_W * 0.5; sy = WORLD_H + 80; break;
+      case 3: sx = -80; sy = p.y + (Math.random() - 0.5) * WORLD_H * 0.5; break;
+    }
+
+    if (zombies.length >= spawnPool.length) break;
+    const mt = spawnPool[zombies.length];
+    const level = getRandomSpawnLevel(serverLevel, mt.unlockLevel) || 1;
+    zombies.push(createEnemy(mt, level, players, sx, sy, true));
+    remaining--;
+  }
+}
 
 module.exports = {
   recalcZombieTarget, recalcAllZombieTargets,
   tickTargeting, moveAll, processZombieSeparation, processZombieAttacks,
-  ensureCount, reviveDead, processWallCohesion
+  ensureCount, reviveDead, processWallCohesion, spawnKiterResponse
 };

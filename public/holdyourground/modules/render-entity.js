@@ -2,17 +2,22 @@ import { state } from './state.js';
 
 const _spriteCache = new Map();
 
-let _leanRot = 0;
+const _leanRotMap = new Map();
+
+const _remoteAnimState = new Map();
 
 function updateLean(p) {
-  if (!p) return;
+  if (!p) return 0;
   const vx = p.x - p.px;
   const vy = p.y - p.py;
   const aim = p._smoothAngle ?? p.facingAngle ?? 0;
   const localRight = -vx * Math.sin(aim) + vy * Math.cos(aim);
   const targetLean = localRight * 0.04;
-  _leanRot += (targetLean - _leanRot) * 0.12;
-  if (Math.abs(_leanRot) < 0.0001) _leanRot = 0;
+  let lean = _leanRotMap.get(p.id) || 0;
+  lean += (targetLean - lean) * 0.12;
+  if (Math.abs(lean) < 0.0001) lean = 0;
+  _leanRotMap.set(p.id, lean);
+  return lean;
 }
 
 function smoothstep(t) {
@@ -32,29 +37,84 @@ function fromPolar(r, theta) {
   return { x: r * Math.cos(theta), y: r * Math.sin(theta) };
 }
 
+// Shortest signed distance from angle a to angle b, wrapped to [-PI, PI].
+// Used everywhere we blend between two rotation values so the sweep always
+// takes the visually shorter path instead of spinning the long way around.
+function shortAngleDelta(a, b) {
+  let d = b - a;
+  while (d > Math.PI) d -= Math.PI * 2;
+  while (d < -Math.PI) d += Math.PI * 2;
+  return d;
+}
+
+// Single canonical pose blend used for every idle-transition/return-to-idle
+// tween in the game (local style switches, local return-from-attack, and
+// remote return-from-attack). Offsets are blended in polar space so the
+// weapon arcs naturally instead of cutting a straight line through the body,
+// and rotation is blended via the shortest angular path so it never spins
+// the long way around when the from/to poses are far apart (which happens
+// often on swing attacks, whose keyframes range well past +/-PI).
 function lerpPosePolar(from, to, t) {
   const s = smoothstep(t);
   const pFrom = toPolar(from.offsetX, from.offsetY);
   const pTo = toPolar(to.offsetX, to.offsetY);
-  let dTheta = pTo.theta - pFrom.theta;
-  while (dTheta > Math.PI) dTheta -= Math.PI * 2;
-  while (dTheta < -Math.PI) dTheta += Math.PI * 2;
+  const dTheta = shortAngleDelta(pFrom.theta, pTo.theta);
   const r = pFrom.r + (pTo.r - pFrom.r) * s;
   const theta = pFrom.theta + dTheta * s;
   const xy = fromPolar(r, theta);
+  const dRot = shortAngleDelta(from.rotation, to.rotation);
   return {
     offsetX: Math.round(xy.x),
     offsetY: Math.round(xy.y),
     scale: +(from.scale + (to.scale - from.scale) * s).toFixed(3),
-    rotation: +(from.rotation + (to.rotation - from.rotation) * s).toFixed(2)
+    rotation: +(from.rotation + dRot * s).toFixed(2)
   };
 }
+
+// Single canonical keyframe sampler used by every animated pose in the game
+// (local prediction AND remote playback both call this). Given a segment
+// list and a continuous frame position, walks to the right segment and
+// eases between its two keyframes. Because both local and remote now funnel
+// through this one function, they can never visually diverge — the only
+// thing that differs between them is which frame number they feed in.
+function interpKeyframes(data, segments, f) {
+  const total = segments.reduce((a, b) => a + b, 0);
+  if (total === 0) return data.keyframes[0] || null;
+  const clamped = Math.max(0, Math.min(f, total - 0.001));
+  let accum = 0;
+  for (let i = 0; i < segments.length; i++) {
+    const segLen = segments[i];
+    if (clamped < accum + segLen) {
+      let t = (clamped - accum) / segLen;
+      t = t * t * (3 - 2 * t);
+      const a = data.keyframes[i], b = data.keyframes[i + 1];
+      return {
+        offsetX: +(a.offsetX + (b.offsetX - a.offsetX) * t).toFixed(1),
+        offsetY: +(a.offsetY + (b.offsetY - a.offsetY) * t).toFixed(1),
+        scale: +(a.scale + (b.scale - a.scale) * t).toFixed(3),
+        rotation: +(a.rotation + (b.rotation - a.rotation) * t).toFixed(3)
+      };
+    }
+    accum += segLen;
+  }
+  return data.keyframes[data.keyframes.length - 1];
+}
+
+const _smoothBobSpeed = new Map();
 
 function getMovementBob(p) {
   if (!p) return { x: 0, y: 0 };
   const dx = p.x - p.px;
   const dy = p.y - p.py;
-  const speed = Math.sqrt(dx * dx + dy * dy);
+  const rawSpeed = Math.sqrt(dx * dx + dy * dy);
+  let speed;
+  if (p.id !== state.myId) {
+    const prev = _smoothBobSpeed.get(p.id) ?? rawSpeed;
+    speed = prev + (rawSpeed - prev) * 0.12;
+    _smoothBobSpeed.set(p.id, speed);
+  } else {
+    speed = rawSpeed;
+  }
   const t = performance.now() / 1000;
   const freq = 1.2 + speed * 0.08;
   const amp = Math.min(1.5, speed * 0.08);
@@ -76,8 +136,8 @@ function getIdleSway(handKey) {
   };
 }
 
-function getKnightIdleVis(handKey) {
-  if (state.idleTransition) {
+function getKnightIdleVis(handKey, styleOverride) {
+  if (state.idleTransition && !styleOverride) {
     const elapsed = performance.now() - state.idleTransition.startTime;
     const dur = state.idleTransition.durationMs;
     const t = Math.min(1, elapsed / dur);
@@ -93,7 +153,7 @@ function getKnightIdleVis(handKey) {
       rotation: +(vis.rotation + sway.rotOffset).toFixed(2)
     };
   }
-  const style = state.attackStyle || 'jab';
+  const style = styleOverride || state.attackStyle || 'jab';
   const base = window.KNIGHT_VISUALS?.[style]?.[handKey];
   if (!base) return null;
   const sway = getIdleSway(handKey);
@@ -161,89 +221,216 @@ export function drawHealthBar(ctx, x, y, w, h, hp, maxHp) {
 function getInterpolatedVis() {
   if (!state.localAnim || state.localAnim.type === 'knight') return null;
   if (state.localAnim.keyframes.length < 2) return null;
-  const total = state.localAnim.totalFrames;
-  if (total === 0) return null;
-  const f = Math.min(state.localAnim.frame, total - 1);
-  let accum = 0;
-  for (let i = 0; i < state.localAnim.segments.length; i++) {
-    const segLen = state.localAnim.segments[i];
-    if (f < accum + segLen) {
-      let t = (f - accum) / segLen;
-      t = t * t * (3 - 2 * t);
-      const a = state.localAnim.keyframes[i];
-      const b = state.localAnim.keyframes[i + 1];
-      return { offsetX: +(a.offsetX + (b.offsetX - a.offsetX) * t).toFixed(1), offsetY: +(a.offsetY + (b.offsetY - a.offsetY) * t).toFixed(1), scale: +(a.scale + (b.scale - a.scale) * t).toFixed(3), rotation: +(a.rotation + (b.rotation - a.rotation) * t).toFixed(3) };
-    }
-    accum += segLen;
-  }
-  return state.localAnim.keyframes[state.localAnim.keyframes.length - 1];
+  if (state.localAnim.totalFrames === 0) return null;
+  return interpKeyframes(state.localAnim, state.localAnim.segments, state.localAnim.frame);
 }
 
 function getKnightInterpolatedVis(handKey) {
   if (!state.localAnim || state.localAnim.type !== 'knight') return null;
   const data = state.localAnim[handKey];
   if (!data || data.keyframes.length < 2) return null;
-  const total = state.localAnim.totalFrames;
-  if (total === 0) return null;
-  const f = Math.min(state.localAnim.frame, total - 1);
-  let accum = 0;
-  for (let i = 0; i < state.localAnim.segments.length; i++) {
-    const segLen = state.localAnim.segments[i];
-    if (f < accum + segLen) {
-      let t = (f - accum) / segLen;
-      t = t * t * (3 - 2 * t);
-      const a = data.keyframes[i], b = data.keyframes[i + 1];
-      return { offsetX: +(a.offsetX + (b.offsetX - a.offsetX) * t).toFixed(1), offsetY: +(a.offsetY + (b.offsetY - a.offsetY) * t).toFixed(1), scale: +(a.scale + (b.scale - a.scale) * t).toFixed(3), rotation: +(a.rotation + (b.rotation - a.rotation) * t).toFixed(3) };
-    }
-    accum += segLen;
-  }
-  return data.keyframes[data.keyframes.length - 1];
+  if (state.localAnim.totalFrames === 0) return null;
+  return interpKeyframes(data, state.localAnim.segments, state.localAnim.frame);
 }
 
 function getKnightRemoteVis(handKey, p) {
-  if (!p.attacking) return null;
-  const anim = window.KNIGHT_ANIMATIONS?.jab;
+  const style = state.playerMeta[p.id]?.attackStyle || 'jab';
+  const st = _remoteAnimState.get(p.id);
+  // Still mid-swing, OR done swinging but the server is still holding the
+  // combo-chain window open waiting to see if another click comes in. Both
+  // map to "keep holding the pose" — this is the same real-world condition
+  // that keeps the attacker's own weapon frozen in place.
+  const stillRelevant = p.attacking || (p.comboChainWindow && (p.comboStep || 0) > 0);
+
+  if (st && st.key === p.attackStartTime && stillRelevant) {
+    // Same attack — keep playing/holding using cached anim data.
+  } else if (p.attacking) {
+    // New attack started — cache the animation data so later comboStep resets
+    // don't affect the animation already in flight
+    const step = p.comboStep || 1;
+    const comboKey = style + '_combo' + step;
+    const anim = window.KNIGHT_ANIMATIONS?.[comboKey] || window.KNIGHT_ANIMATIONS?.[style + '_combo1'];
+    if (!anim || !anim.knight_sword || anim.knight_sword.keyframes.length < 2) return null;
+    const isSpin = step >= 4 && style === 'swing';
+    const totalFrames = anim.segments.reduce((a, b) => a + b, 0);
+    const segs = anim.segments;
+    // Mirror startAttackAnim's hold-point logic exactly, so remote viewers see
+    // the same held pose the attacker sees (full extension on the 3rd combo
+    // step, half-way through for the others) instead of a fixed midpoint.
+    const doHold = style === 'swing' && step < 5;
+    const midKf = Math.floor(anim.knight_sword.keyframes.length / 2);
+    let halfFrames = 0;
+    for (let i = 0; i < midKf && i < segs.length; i++) halfFrames += segs[i];
+    const holdFrame = doHold ? (step === 3 ? totalFrames : halfFrames) : 0;
+    _remoteAnimState.set(p.id, {
+      startTime: performance.now(), key: p.attackStartTime, comboStep: step,
+      spinning: isSpin, spinStartAngle: isSpin ? p.facingAngle : 0,
+      phase: 'active', returnFrom: {}, cachedAnim: anim,
+      doHold, holdFrame, totalFrames
+    });
+  } else {
+    // Not attacking and the combo-chain window is closed — the server has
+    // decided this swing is done and isn't waiting on a follow-up click.
+    // This is the exact same condition that fires comboWindowEnd for the
+    // attacker's own client. Rather than jumping straight to a generic
+    // blend (which, from a held mid-swing pose, is nearly a 180-degree
+    // rotation and looks like the sword spinning), release the hold and
+    // let the clip keep playing its own choreographed back-half — same
+    // idea as local's playReturnAnim.
+    const entry = _remoteAnimState.get(p.id);
+    if (entry && entry.phase === 'active') {
+      entry.spinning = false;
+      if (entry.doHold && entry.holdFrame > 0 && entry.holdFrame < entry.totalFrames) {
+        const relDuration = (entry.totalFrames / 60) * 1000 / 2;
+        entry.startTime = performance.now() - entry.holdFrame * (relDuration / entry.totalFrames);
+        entry.phase = 'releasing';
+      } else {
+        entry.phase = 'returning';
+        entry.returnStart = performance.now();
+      }
+    } else if (!entry) {
+      return null;
+    }
+  }
+
+  let entry = _remoteAnimState.get(p.id);
+  if (!entry) return null;
+
+  // While releasing, watch for the clip reaching its own natural end. Most
+  // combo steps already land on idle there (the clips are authored as
+  // symmetric loops); combo step 2 for swing is the one exception — its
+  // back-half retraces to combo step 1's hold pose, not true idle — so we
+  // hand off to combo1's own back-half for one more leg, mirroring
+  // handleAnimNaturalEnd() on the local side exactly.
+  if (entry.phase === 'releasing') {
+    const relTotal = entry.totalFrames;
+    const relDuration = (relTotal / 60) * 1000 / 2;
+    if (performance.now() - entry.startTime >= relDuration) {
+      if (entry.comboStep === 2 && style === 'swing') {
+        const base = window.KNIGHT_ANIMATIONS?.swing_combo1;
+        const baseKf = base?.knight_sword?.keyframes;
+        if (base && baseKf && baseKf.length >= 2) {
+          const bTotal = base.segments.reduce((a, b) => a + b, 0);
+          const midKf = Math.floor(baseKf.length / 2);
+          let halfFrames = 0;
+          for (let i = 0; i < midKf && i < base.segments.length; i++) halfFrames += base.segments[i];
+          const bDuration = (bTotal / 60) * 1000 / 2;
+          entry.cachedAnim = base;
+          entry.totalFrames = bTotal;
+          entry.comboStep = 1;
+          entry.startTime = performance.now() - halfFrames * (bDuration / bTotal);
+        } else {
+          entry.phase = 'returning';
+          entry.returnStart = performance.now();
+        }
+      } else {
+        // Nowhere further to go — the clip's own end already is idle (by
+        // animation design), so drop the entry and let the base idle pose render.
+        _remoteAnimState.delete(p.id);
+        return null;
+      }
+    }
+  }
+
+  entry = _remoteAnimState.get(p.id);
+  if (!entry) return null;
+  const anim = entry.cachedAnim;
   if (!anim) return null;
   const data = anim[handKey];
   if (!data || data.keyframes.length < 2) return null;
-  const total = anim.segments.reduce((a, b) => a + b, 0);
+  const total = entry.totalFrames || anim.segments.reduce((a, b) => a + b, 0);
   if (total === 0) return null;
-  const elapsed = Math.max(0, Date.now() - (p.attackStartTime || 0));
-  const f = Math.min(Math.floor((elapsed / 300) * total), total - 1);
-  let accum = 0;
-  for (let i = 0; i < anim.segments.length; i++) {
-    const segLen = anim.segments[i];
-    if (f < accum + segLen) {
-      let t = (f - accum) / segLen;
-      t = t * t * (3 - 2 * t);
-      const a = data.keyframes[i], b = data.keyframes[i + 1];
-      return { offsetX: a.offsetX + (b.offsetX - a.offsetX) * t, offsetY: a.offsetY + (b.offsetY - a.offsetY) * t, scale: a.scale + (b.scale - a.scale) * t, rotation: a.rotation + (b.rotation - a.rotation) * t };
-    }
-    accum += segLen;
+  const duration = (total / 60) * 1000 / 2;
+  // Return-to-idle phase: same polar/wrap-safe blend local uses for its own
+  // return-from-attack and style-switch tweens (getKnightIdleVis's
+  // idleTransition path), so the sword arcs back to rest identically instead
+  // of cutting a straight line or spinning the long way around.
+  if (entry.phase === 'returning') {
+    const from = entry.returnFrom[handKey];
+    const baseIdle = window.KNIGHT_VISUALS?.[style]?.[handKey];
+    if (!from || !baseIdle) { _remoteAnimState.delete(p.id); return null; }
+    const rElapsed = performance.now() - entry.returnStart;
+    if (rElapsed >= 350) { _remoteAnimState.delete(p.id); return null; }
+    const sway = getIdleSway(handKey);
+    const to = { offsetX: baseIdle.offsetX + sway.xOffset, offsetY: baseIdle.offsetY + sway.yOffset, scale: baseIdle.scale, rotation: baseIdle.rotation + sway.rotOffset };
+    return lerpPosePolar(from, to, rElapsed / 350);
   }
-  return data.keyframes[data.keyframes.length - 1];
+  // 'active' (holding) or 'releasing' (playing out the back-half) — both
+  // just sample the current clip at the current frame; only 'active' clamps
+  // at the hold point.
+  const elapsed = performance.now() - entry.startTime;
+  let fCont = Math.min((elapsed / duration) * total, total - 0.001);
+  if (entry.phase === 'active' && entry.doHold && entry.holdFrame > 0 && fCont >= entry.holdFrame) {
+    fCont = entry.holdFrame - 0.001;
+  }
+  const vis = interpKeyframes(data, anim.segments, fCont);
+  if (vis) entry.returnFrom[handKey] = vis;
+  return vis;
 }
 
 function getRemoteVis(p) {
-  if (!p.attacking) return null;
-  const anim = window.ANIMATIONS && window.ANIMATIONS[p.currentItem] && (window.ANIMATIONS[p.currentItem].jab);
-  if (!anim || anim.keyframes.length < 2) return null;
-  const total = anim.segments.reduce((a, b) => a + b, 0);
-  if (total === 0) return null;
-  const elapsed = Math.max(0, Date.now() - (p.attackStartTime || 0));
-  const f = Math.min(Math.floor((elapsed / 300) * total), total - 1);
-  let accum = 0;
-  for (let i = 0; i < anim.segments.length; i++) {
-    const segLen = anim.segments[i];
-    if (f < accum + segLen) {
-      let t = (f - accum) / segLen;
-      t = t * t * (3 - 2 * t);
-      const a = anim.keyframes[i], b = anim.keyframes[i + 1];
-      return { offsetX: a.offsetX + (b.offsetX - a.offsetX) * t, offsetY: a.offsetY + (b.offsetY - a.offsetY) * t, scale: a.scale + (b.scale - a.scale) * t, rotation: a.rotation + (b.rotation - a.rotation) * t };
+  const style = state.playerMeta[p.id]?.attackStyle || 'jab';
+  const st = _remoteAnimState.get(p.id);
+  const stillRelevant = p.attacking || (p.comboChainWindow && (p.comboStep || 0) > 0);
+
+  if (st && st.key === p.attackStartTime && stillRelevant) {
+    // Same attack — keep playing/holding using cached anim data.
+  } else if (p.attacking) {
+    // New attack started — cache anim data so later comboStep resets don't affect it
+    const step = p.comboStep || 1;
+    const comboKey = style + '_combo' + step;
+    const anim = window.ANIMATIONS && window.ANIMATIONS[p.currentItem] && (window.ANIMATIONS[p.currentItem][comboKey] || window.ANIMATIONS[p.currentItem][style + '_combo1']);
+    if (!anim || anim.keyframes.length < 2) return null;
+    const totalFrames = anim.segments.reduce((a, b) => a + b, 0);
+    const segs = anim.segments;
+    // Mirror startAttackAnim's hold-point logic so remote viewers freeze at
+    // the same pose the attacker holds while waiting on the combo window.
+    const doHold = style === 'swing' && step < 5;
+    const midKf = Math.floor(anim.keyframes.length / 2);
+    let halfFrames = 0;
+    for (let i = 0; i < midKf && i < segs.length; i++) halfFrames += segs[i];
+    const holdFrame = doHold ? (step === 3 ? totalFrames : halfFrames) : 0;
+    _remoteAnimState.set(p.id, {
+      startTime: performance.now(), key: p.attackStartTime, comboStep: step,
+      phase: 'active', returnFrom: {}, cachedAnim: anim,
+      doHold, holdFrame, totalFrames
+    });
+  } else {
+    // Not attacking and the combo-chain window is closed — matches the same
+    // real-world moment local's comboWindowEnd/playReturnAnim fires.
+    const entry = _remoteAnimState.get(p.id);
+    if (entry && entry.phase !== 'returning') {
+      entry.phase = 'returning';
+      entry.returnStart = performance.now();
+    } else if (!entry) {
+      return null;
     }
-    accum += segLen;
   }
-  return anim.keyframes[anim.keyframes.length - 1];
+  const entry = _remoteAnimState.get(p.id);
+  if (!entry) return null;
+  const anim = entry.cachedAnim;
+  if (!anim || anim.keyframes.length < 2) return null;
+  const total = entry.totalFrames || anim.segments.reduce((a, b) => a + b, 0);
+  if (total === 0) return null;
+  const duration = (total / 60) * 1000 / 2;
+  // Return-to-idle phase — same polar/wrap-safe blend as everywhere else
+  if (entry.phase === 'returning') {
+    const from = entry.returnFrom._vis;
+    const idleVis = window.ITEM_VISUALS && window.ITEM_VISUALS[p.currentItem];
+    if (!from || !idleVis) { _remoteAnimState.delete(p.id); return null; }
+    const rElapsed = performance.now() - entry.returnStart;
+    if (rElapsed >= 350) { _remoteAnimState.delete(p.id); return null; }
+    return lerpPosePolar(from, idleVis, rElapsed / 350);
+  }
+  // Active phase — play toward the hold point (if any) and freeze there
+  const elapsed = performance.now() - entry.startTime;
+  let fCont = Math.min((elapsed / duration) * total, total - 0.001);
+  if (entry.doHold && entry.holdFrame > 0 && fCont >= entry.holdFrame) {
+    fCont = entry.holdFrame - 0.001;
+  }
+  const vis = interpKeyframes(anim, anim.segments, fCont);
+  if (vis) entry.returnFrom._vis = vis;
+  return vis;
 }
 
 function getZombieAnimVis(handKey, animState) {
@@ -271,7 +458,7 @@ function getZombieAnimVis(handKey, animState) {
 
 function getVis(p) {
   if (p.id === state.myId && state.localAnim) return getInterpolatedVis();
-  if (p.id !== state.myId && p.attacking) { const v = getRemoteVis(p); if (v) return v; }
+  if (p.id !== state.myId) { const v = getRemoteVis(p); if (v) return v; }
   return window.ITEM_VISUALS && window.ITEM_VISUALS[p.currentItem];
 }
 
@@ -280,6 +467,15 @@ function getDrawAngle(p) {
     const elapsed = performance.now() - state.localAnim.spinStartTime;
     const progress = Math.min(1, elapsed / 500);
     return state.localAnim.spinStartAngle + Math.PI * 2 * progress;
+  }
+  // Remote spin: smooth client-side rotation matching local player's spin
+  if (p.id !== state.myId) {
+    const st = _remoteAnimState.get(p.id);
+    if (st && st.spinning && st.phase === 'active') {
+      const elapsed = performance.now() - st.startTime;
+      const progress = Math.min(1, elapsed / 500);
+      return st.spinStartAngle + Math.PI * 2 * progress;
+    }
   }
   if (p.attacking && p.attackLockedAngle != null) return p.attackLockedAngle;
   return p._smoothAngle ?? (p.facingAngle || 0);
@@ -291,7 +487,7 @@ export function getBladeSegment(p, sx, sy, isKnight) {
   if (isKnight) {
     vis = getKnightIdleVis('knight_sword');
     if (p.id === state.myId && state.localAnim?.type === 'knight') { const animVis = getKnightInterpolatedVis('knight_sword'); if (animVis) vis = animVis; }
-    if (p.id !== state.myId && p.attacking) { const animVis = getKnightRemoteVis('knight_sword', p); if (animVis) vis = animVis; }
+  if (p.id !== state.myId) { const animVis = getKnightRemoteVis('knight_sword', p); if (animVis) vis = animVis; }
     const mS = p.id === state.myId && state._mirrorSword ? -1 : 1;
     btX = window.KNIGHT_BLADE_TIP_X * mS; btY = window.KNIGHT_BLADE_TIP_Y;
     bhX = window.KNIGHT_BLADE_HILT_X * mS; bhY = window.KNIGHT_BLADE_HILT_Y;
@@ -331,7 +527,7 @@ export function startAttackAnim(lockedAngle, comboStep) {
     const locked = (typeof lockedAngle === 'number') ? lockedAngle : (me.facingAngle || 0);
     const doHold = isSwing && comboStep < 5;
     const holdFrame = doHold ? (comboStep === 3 ? totalFrames : halfFrames) : 0;
-    state.localAnim = { type: 'knight', knight_sword: { keyframes: anim.knight_sword.keyframes }, knight_hand: { keyframes: anim.knight_hand.keyframes }, segments: anim.segments, frame: 0, totalFrames, lockedAngle: locked, startTime: performance.now(), _holdFrame: holdFrame, _holding: doHold, _spinning: comboStep === 4 && isSwing, spinStartAngle: locked, spinStartTime: performance.now() };
+    state.localAnim = { type: 'knight', knight_sword: { keyframes: anim.knight_sword.keyframes }, knight_hand: { keyframes: anim.knight_hand.keyframes }, segments: anim.segments, frame: 0, totalFrames, lockedAngle: locked, startTime: performance.now(), _holdFrame: holdFrame, _holding: doHold, _spinning: comboStep === 4 && isSwing, spinStartAngle: locked, spinStartTime: performance.now(), _comboStep: comboStep, _style: style };
   } else {
     const anim = window.ANIMATIONS && window.ANIMATIONS[me.currentItem] && (window.ANIMATIONS[me.currentItem][comboKey] || window.ANIMATIONS[me.currentItem][style + '_combo1']);
     if (anim) {
@@ -350,6 +546,27 @@ export function startAttackAnim(lockedAngle, comboStep) {
 
 export function playReturnAnim() {
   if (!state.localAnim) return;
+  const anim = state.localAnim;
+  if (anim.type === 'knight' && anim._holding && anim._holdFrame > 0 && anim._holdFrame < anim.totalFrames) {
+    // The swing was frozen mid-clip waiting on a possible combo
+    // continuation that never came. Instead of jumping straight from that
+    // held pose to idle (a generic blend across two nearly-opposite
+    // rotation values looks like the sword doing a 180), let the clip keep
+    // playing its own choreographed back-half — these animations are
+    // authored as symmetric loops, so continuing retraces the exact path
+    // the sword swung out on and lands back on a meaningful pose with no
+    // big rotation. handleAnimNaturalEnd() takes over once it reaches the
+    // end of the clip.
+    const duration = (anim.totalFrames / 60) * 1000 / 2;
+    anim.startTime = performance.now() - anim._holdFrame * (duration / anim.totalFrames);
+    anim.frame = anim._holdFrame;
+    anim._holding = false;
+    anim._spinning = false;
+    return;
+  }
+  // Already at the end of its clip (e.g. combo3's full-length hold, which
+  // lands close to idle already) or a non-swing attack — no more
+  // choreographed motion left to retrace, so do a short residual blend.
   state._mirrorSword = false;
   const curSword = getKnightInterpolatedVis('knight_sword');
   const curHand = getKnightInterpolatedVis('knight_hand');
@@ -365,6 +582,39 @@ export function playReturnAnim() {
       durationMs: 350
     };
   }
+  state.localAnim = null;
+}
+
+// Called every frame (from render.js) once a released, no-longer-holding
+// localAnim reaches the natural end of its clip. Most combo steps already
+// land on idle by that point (the animations are authored as symmetric
+// loops). The one exception is combo step 2 for swing: its back-half
+// retraces to combo step 1's hold pose, not true idle, so we hand off to
+// combo1's own back-half for one more leg before finally settling on idle.
+export function handleAnimNaturalEnd() {
+  const anim = state.localAnim;
+  if (!anim || anim.type !== 'knight' || anim._holding) return;
+  if (anim._comboStep === 2 && anim._style === 'swing') {
+    const base = window.KNIGHT_ANIMATIONS?.swing_combo1;
+    const baseKf = base?.knight_sword?.keyframes;
+    if (base && baseKf && baseKf.length >= 2) {
+      const bTotal = base.segments.reduce((a, b) => a + b, 0);
+      const midKf = Math.floor(baseKf.length / 2);
+      let halfFrames = 0;
+      for (let i = 0; i < midKf && i < base.segments.length; i++) halfFrames += base.segments[i];
+      const bDuration = (bTotal / 60) * 1000 / 2;
+      state.localAnim = {
+        type: 'knight', knight_sword: { keyframes: base.knight_sword.keyframes }, knight_hand: { keyframes: base.knight_hand.keyframes },
+        segments: base.segments, frame: halfFrames, totalFrames: bTotal,
+        startTime: performance.now() - halfFrames * (bDuration / bTotal),
+        _holdFrame: 0, _holding: false, _spinning: false,
+        _comboStep: 1, _style: 'swing'
+      };
+      return;
+    }
+  }
+  // Nowhere further to go — the clip's own end already is idle (by
+  // animation design), so let the base idle pose (with sway) take over.
   state.localAnim = null;
 }
 
@@ -387,8 +637,9 @@ function drawSword(ctx, p, sx, sy) {
 
 function drawKnightSword(ctx, p, sx, sy) {
   let vis = getKnightIdleVis('knight_sword');
+  if (p.id !== state.myId) { const s = state.playerMeta[p.id]?.attackStyle; if (s) vis = getKnightIdleVis('knight_sword', s); }
   if (p.id === state.myId && state.localAnim?.type === 'knight') { const animVis = getKnightInterpolatedVis('knight_sword'); if (animVis) vis = animVis; }
-  if (p.id !== state.myId && p.attacking) { const animVis = getKnightRemoteVis('knight_sword', p); if (animVis) vis = animVis; }
+  if (p.id !== state.myId) { const animVis = getKnightRemoteVis('knight_sword', p); if (animVis) vis = animVis; }
   if (!vis) return;
   const angle = getDrawAngle(p);
   const cos = Math.cos(angle), sin = Math.sin(angle);
@@ -398,7 +649,9 @@ function drawKnightSword(ctx, p, sx, sy) {
   const frame = entry?.frame;
   if (!frame) return;
   const sw = frame.w * vis.scale, sh = frame.h * vis.scale;
-  const mirS = p.id === state.myId && state._mirrorSword;
+  const remoteEntry = p.id !== state.myId ? _remoteAnimState.get(p.id) : null;
+  const remoteMir = p.id !== state.myId && (state.playerMeta[p.id]?.attackStyle || 'jab') === 'swing' && (remoteEntry?.comboStep || p.comboStep || 1) >= 2;
+  const mirS = (p.id === state.myId && state._mirrorSword) || remoteMir;
   ctx.save();
   ctx.translate(sx + rx, sy + ry);
   if (mirS) {
@@ -413,8 +666,9 @@ function drawKnightSword(ctx, p, sx, sy) {
 
 function drawKnightHand(ctx, p, sx, sy) {
   let vis = getKnightIdleVis('knight_hand');
+  if (p.id !== state.myId) { const s = state.playerMeta[p.id]?.attackStyle; if (s) vis = getKnightIdleVis('knight_hand', s); }
   if (p.id === state.myId && state.localAnim?.type === 'knight') { const animVis = getKnightInterpolatedVis('knight_hand'); if (animVis) vis = animVis; }
-  if (p.id !== state.myId && p.attacking) { const animVis = getKnightRemoteVis('knight_hand', p); if (animVis) vis = animVis; }
+  if (p.id !== state.myId) { const animVis = getKnightRemoteVis('knight_hand', p); if (animVis) vis = animVis; }
   if (!vis) return;
   const angle = getDrawAngle(p);
   const cos = Math.cos(angle), sin = Math.sin(angle);
@@ -519,7 +773,7 @@ export function drawPlayer(ctx, p, sx, sy, alpha, topKills) {
   const knightFrame = state.knightFrames?.['T1KnightHead.png']?.frame;
   const isKnight = !!knightFrame;
   const bob = getMovementBob(p);
-  updateLean(p);
+  const lean = updateLean(p);
 
   if (knightFrame) {
     drawKnightSword(ctx, p, sx + bob.x, sy + bob.y);
@@ -536,7 +790,7 @@ export function drawPlayer(ctx, p, sx, sy, alpha, topKills) {
     const sz = (56 / Math.max(knightFrame.w, knightFrame.h)) * breath;
     ctx.save();
     ctx.translate(sx + bob.x, sy + bob.y);
-    ctx.rotate(getDrawAngle(p) - Math.PI / 2 + _leanRot);
+    ctx.rotate(getDrawAngle(p) - Math.PI / 2 + lean);
     ctx.drawImage(getSpriteFromSheet(state.knightSheet, knightFrame.w * sz, knightFrame.h * sz, knightFrame), -(knightFrame.w * sz) / 2, -(knightFrame.h * sz) / 2, knightFrame.w * sz, knightFrame.h * sz);
     ctx.restore();
   } else {

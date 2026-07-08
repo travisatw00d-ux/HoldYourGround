@@ -56,6 +56,7 @@ class Room {
     this._postGameWaiting = false;
     this.spectatorFollows = new Map();
     this.tickNum = 0;
+    this._nightMaxPop = 0;
   }
 
   setIo(io) { this.io = io; }
@@ -395,7 +396,9 @@ class Room {
         this.matchPhase = 'nighttime';
         this.phaseTimer = 0;
         this.zombies.length = 0;
-        zombieAi.ensureCount(this.zombies, this.mobSpawnPool, this.waveServerLevel, this.players, 100 + (this.waveServerLevel - 1));
+        const maxAlive = 100 + (this.waveServerLevel - 1);
+        this._nightMaxPop = Math.round(maxAlive * 0.3);
+        zombieAi.ensureCount(this.zombies, this.mobSpawnPool, this.waveServerLevel, this.players, this._nightMaxPop);
         this.io.to('room:' + this.id).emit('matchPhase', { phase: 'nighttime', timer: 0, wave: this.currentWave, activePlayers: this.getActivePlayerIds() });
         this.io.to('room:' + this.id).emit('waveComposition', {
           wave: this.currentWave, serverLevel: this.waveServerLevel,
@@ -786,7 +789,18 @@ class Room {
       this.emitEvents(attackEvents);
       physics.processPlayerCollision(this.players);
       if (!Object.values(this.players).some(p => p.alive)) { this._endMatch(); return; }
-      zombieAi.ensureCount(this.zombies, this.mobSpawnPool, this.waveServerLevel, this.players, 100 + (this.waveServerLevel - 1));
+      if (this.matchPhase === 'nighttime') {
+        const fullPop = this.mobSpawnPool.length;
+        // Gradually grow max population cap every ~1 second
+        if (this.tickNum % 30 === 0 && this._nightMaxPop < fullPop) {
+          this._nightMaxPop += 1 + Math.floor(Math.random() * 2);
+        }
+        zombieAi.ensureCount(this.zombies, this.mobSpawnPool, this.waveServerLevel, this.players, Math.min(this._nightMaxPop, fullPop), true);
+        // Kiter detection spawns every 20 ticks (targets runners)
+        if (this.tickNum % 20 === 0) {
+          zombieAi.spawnKiterResponse(this.zombies, this.mobSpawnPool, this.waveServerLevel, this.players, fullPop);
+        }
+      }
     }
 
     for (const id of ids) {

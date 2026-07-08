@@ -153,6 +153,7 @@ function playerInfoObj(p) {
     turnSpeed: p.turnSpeed,
     lvl: p.lvl || 1,
     playerClass: p.playerClass || 'knight',
+    attackStyle: p.attackStyle || 'jab',
     isSpectator: p.isSpectator
   };
 }

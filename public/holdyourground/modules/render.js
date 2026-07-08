@@ -1,7 +1,7 @@
 import { state } from './state.js';
 import { getCamera } from './camera.js';
 import { getInput, resetKeys } from './input.js';
-import { drawPlayer, drawZombie, drawDebugSwordHitbox, getBladeSegment } from './render-entity.js';
+import { drawPlayer, drawZombie, drawDebugSwordHitbox, getBladeSegment, handleAnimNaturalEnd } from './render-entity.js';
 import { drawStatHUD, drawServerLevel, drawSpectatingUI, drawDeadSpectatingUI, drawDmgNumbers, drawBuildWatermark, drawHitFlash, drawHUD } from './render-ui.js';
 import { drawDiag } from './diag.js';
 
@@ -104,6 +104,7 @@ function render() {
       }
     } else if (state.localAnim.frame >= state.localAnim.totalFrames) {
       state.localAnim.frame = state.localAnim.totalFrames - 1;
+      handleAnimNaturalEnd();
     }
   }
 

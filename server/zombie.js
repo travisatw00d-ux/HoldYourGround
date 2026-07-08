@@ -21,11 +21,22 @@ function randomZombieSpawn(players) {
   return { x: ZOMBIE_MARGIN + Math.random() * (WORLD_W - ZOMBIE_MARGIN * 2), y: ZOMBIE_MARGIN + Math.random() * (WORLD_H - ZOMBIE_MARGIN * 2) };
 }
 
+function randomEdgeSpawn() {
+  const side = Math.floor(Math.random() * 4);
+  switch (side) {
+    case 0: return { x: Math.random() * WORLD_W, y: -80 };
+    case 1: return { x: WORLD_W + 80, y: Math.random() * WORLD_H };
+    case 2: return { x: Math.random() * WORLD_W, y: WORLD_H + 80 };
+    case 3: return { x: -80, y: Math.random() * WORLD_H };
+  }
+  return { x: Math.random() * WORLD_W, y: -80 };
+}
+
 let zombieIdCounter = 100000;
 function nextZombieId() { return zombieIdCounter++; }
 
-function createEnemy(mobType, level, players, x, y, overrides) {
-  const sp = (x != null && y != null) ? { x, y } : randomZombieSpawn(players);
+function createEnemy(mobType, level, players, x, y, edgeSpawn, overrides) {
+  const sp = (x != null && y != null) ? { x, y } : edgeSpawn ? randomEdgeSpawn() : randomZombieSpawn(players);
   const stats = getMobStats(mobType, level);
   const z = {
     id: nextZombieId(),
@@ -47,6 +58,7 @@ function createEnemy(mobType, level, players, x, y, overrides) {
     attackCooldown: 0
   };
   z.speed = +(z.speed * (0.8 + Math.random() * 0.4)).toFixed(2);
+  if (edgeSpawn) z._edgeSpawnTimer = 150;
   if (overrides) Object.assign(z, overrides);
   return z;
 }
@@ -104,4 +116,4 @@ function initEnemies(spawnPool, serverLevel, players) {
   return zombies;
 }
 
-module.exports = { randomZombieSpawn, createEnemy, buildSpawnPool, initEnemies };
+module.exports = { randomZombieSpawn, randomEdgeSpawn, createEnemy, buildSpawnPool, initEnemies };

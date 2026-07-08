@@ -367,8 +367,10 @@ export function registerEvents(socket) {
         const attackStartTime = dv.getFloat64(o, true); o += 8;
         const kills = dv.getInt16(o, true); o += 2;
         const lvl = dv.getUint8(o); o += 1;
+        const comboStep = dv.getUint8(o); o += 1;
         const energy = dv.getInt16(o, true); o += 2;
         const maxEnergy = dv.getInt16(o, true); o += 2;
+        const comboChainWindow = dv.getUint8(o) === 1; o += 1;
         const nameLen = dv.getUint8(o); o += 1;
         const name = textDecoder.decode(u8.subarray(o, o + nameLen)); o += nameLen;
         const isSpectator = dv.getUint8(o) === 1; o += 1;
@@ -376,7 +378,7 @@ export function registerEvents(socket) {
         const old = oldP[id];
         const meta = state.playerMeta[id] || {};
         const p = {
-          id, x, y, health, alive, attacking, facingAngle, attackLockedAngle, attackStartTime, kills, lvl, name, isSpectator,
+          id, x, y, health, alive, attacking, facingAngle, attackLockedAngle, attackStartTime, kills, lvl, comboStep, comboChainWindow, name, isSpectator,
           energy, maxEnergy,
           color: meta.color || '#888888', currentItem: meta.currentItem || 'wooden_sword',
           inventory: meta.inventory || ['wooden_sword'], maxHealth: meta.maxHealth || 100,

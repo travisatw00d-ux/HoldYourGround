@@ -2,7 +2,7 @@ const { WORLD_W, WORLD_H } = require('./config');
 
 function buildPlayerBlock(list) {
   let size = 0;
-  for (let i = 0; i < list.length; i++) size += 1 + list[i]._idBytes.length + 35 + 1 + Buffer.byteLength(list[i].name || '', 'utf8') + 1;
+  for (let i = 0; i < list.length; i++) size += 1 + list[i]._idBytes.length + 37 + 1 + Buffer.byteLength(list[i].name || '', 'utf8') + 1;
   const buf = Buffer.allocUnsafe(size);
   let o = 0;
   for (let i = 0; i < list.length; i++) {
@@ -20,8 +20,15 @@ function buildPlayerBlock(list) {
     buf.writeDoubleLE(p.attackStartTime || 0, o); o += 8;
     buf.writeInt16LE(p.kills || 0, o); o += 2;
     buf[o++] = p.lvl || 1;
+    buf[o++] = p.comboStep || 0;
     buf.writeInt16LE(Math.round(p.energy), o); o += 2;
     buf.writeInt16LE(p.maxEnergy || 100, o); o += 2;
+    // Whether the server still considers this player "waiting on a possible
+    // combo continuation" (holds its weapon pose) vs. "done, relax to idle".
+    // Broadcasting this lets remote clients start the return-to-idle blend
+    // on the exact same tick the attacker's own client does (via
+    // comboWindowEnd), instead of waiting ~1s longer for comboStep to reset.
+    buf[o++] = p.comboChainWindow ? 1 : 0;
     const nameBytes = Buffer.from(p.name || '', 'utf8');
     buf[o++] = nameBytes.length;
     nameBytes.copy(buf, o); o += nameBytes.length;
