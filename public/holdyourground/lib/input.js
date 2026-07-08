@@ -54,7 +54,9 @@ export function setupInput(socket, canvas) {
     if (typeof e.getModifierState === 'function' && !e.getModifierState('Shift') && keys['Shift']) keys['Shift'] = false;
     keys[e.key] = true;
     syncKeyCase(e.key, true);
-    setKeyTimer(e.key);
+    if (!['w','W','a','A','s','S','d','D','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) {
+      setKeyTimer(e.key);
+    }
     if (e.key >= '1' && e.key <= '9') {
       const slot = parseInt(e.key) - 1;
       socket.emit('equip', { slot });
