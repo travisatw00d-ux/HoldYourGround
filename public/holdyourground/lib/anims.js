@@ -196,7 +196,7 @@ function getKnightRemoteVis(handKey, p) {
     const midKf = Math.floor(anim.knight_sword.keyframes.length / 2);
     let halfFrames = 0;
     for (let i = 0; i < midKf && i < segs.length; i++) halfFrames += segs[i];
-    const holdFrame = doHold ? (step === 3 ? totalFrames : halfFrames) : 0;
+    const holdFrame = doHold ? (step === 1 || step === 4 ? halfFrames : totalFrames) : 0;
     _remoteAnimState.set(p.id, {
       startTime: performance.now(), key: p.attackStartTime, comboStep: step,
       spinning: isSpin, spinStartAngle: isSpin ? p.facingAngle : 0,
@@ -212,8 +212,12 @@ function getKnightRemoteVis(handKey, p) {
         entry.startTime = performance.now() - entry.holdFrame * (relDuration / entry.totalFrames);
         entry.phase = 'releasing';
       } else {
-        entry.phase = 'returning';
-        entry.returnStart = performance.now();
+        const animDuration = (entry.totalFrames / 60) * 1000 / 2;
+        const elapsed = performance.now() - entry.startTime;
+        if (elapsed >= animDuration) {
+          entry.phase = 'returning';
+          entry.returnStart = performance.now();
+        }
       }
     } else if (!entry) {
       return null;
@@ -228,22 +232,8 @@ function getKnightRemoteVis(handKey, p) {
     const relDuration = (relTotal / 60) * 1000 / 2;
     if (performance.now() - entry.startTime >= relDuration) {
       if (entry.comboStep === 2 && style === 'swing') {
-        const base = KNIGHT_ANIMATIONS?.swing_combo1;
-        const baseKf = base?.knight_sword?.keyframes;
-        if (base && baseKf && baseKf.length >= 2) {
-          const bTotal = base.segments.reduce((a, b) => a + b, 0);
-          const midKf = Math.floor(baseKf.length / 2);
-          let halfFrames = 0;
-          for (let i = 0; i < midKf && i < base.segments.length; i++) halfFrames += base.segments[i];
-          const bDuration = (bTotal / 60) * 1000 / 2;
-          entry.cachedAnim = base;
-          entry.totalFrames = bTotal;
-          entry.comboStep = 1;
-          entry.startTime = performance.now() - halfFrames * (bDuration / bTotal);
-        } else {
-          entry.phase = 'returning';
-          entry.returnStart = performance.now();
-        }
+        entry.phase = 'returning';
+        entry.returnStart = performance.now();
       } else {
         _remoteAnimState.delete(p.id);
         return null;
@@ -271,7 +261,7 @@ function getKnightRemoteVis(handKey, p) {
     return lerpPosePolar(from, to, rElapsed / 350);
   }
   const elapsed = performance.now() - entry.startTime;
-  let fCont = Math.min((elapsed / duration) * total, total - 0.001);
+  let fCont = (elapsed / duration) * total;
   if (entry.phase === 'active' && entry.doHold && entry.holdFrame > 0 && fCont >= entry.holdFrame) {
     fCont = entry.holdFrame - 0.001;
   }
@@ -297,7 +287,7 @@ function getRemoteVis(p) {
     const midKf = Math.floor(anim.keyframes.length / 2);
     let halfFrames = 0;
     for (let i = 0; i < midKf && i < segs.length; i++) halfFrames += segs[i];
-    const holdFrame = doHold ? (step === 3 ? totalFrames : halfFrames) : 0;
+    const holdFrame = doHold ? (step === 1 || step === 4 ? halfFrames : totalFrames) : 0;
     _remoteAnimState.set(p.id, {
       startTime: performance.now(), key: p.attackStartTime, comboStep: step,
       phase: 'active', returnFrom: {}, cachedAnim: anim,
@@ -306,8 +296,12 @@ function getRemoteVis(p) {
   } else {
     const entry = _remoteAnimState.get(p.id);
     if (entry && entry.phase !== 'returning') {
-      entry.phase = 'returning';
-      entry.returnStart = performance.now();
+      const animDuration = (entry.totalFrames / 60) * 1000 / 2;
+      const elapsed = performance.now() - entry.startTime;
+      if (elapsed >= animDuration) {
+        entry.phase = 'returning';
+        entry.returnStart = performance.now();
+      }
     } else if (!entry) {
       return null;
     }
@@ -329,7 +323,7 @@ function getRemoteVis(p) {
     return lerpPosePolar(from, idleVis, rElapsed / 350);
   }
   const elapsed = performance.now() - entry.startTime;
-  let fCont = Math.min((elapsed / duration) * total, total - 0.001);
+  let fCont = (elapsed / duration) * total;
   if (entry.doHold && entry.holdFrame > 0 && fCont >= entry.holdFrame) {
     fCont = entry.holdFrame - 0.001;
   }
