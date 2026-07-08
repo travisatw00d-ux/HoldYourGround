@@ -26,10 +26,11 @@ See [join-queue.md](./join-queue.md) — covers all join flows, queue rules, but
 
 ## Zombie Mechanics
 
-- Up to 100 zombies on map
-- Merging: two overlapping zombies merge into one higher-level zombie (max Lv5)
-- Revive: dead zombies resurrect after `ZOMBIE_REVIVE_MS` delay
-- Targeting: nearest non-dead player with line-of-sight favorability
+See [wave-system.md](./wave-system.md) for mob types, level scaling, wave composition, merge, revive, and spawn logic.
+
+## Combat System
+
+See [combat-system.md](./combat-system.md) for attack styles, combo chain, blade hitbox, damage, energy, recovery.
 
 ## Spectator System
 

@@ -2,15 +2,17 @@
 
 | Symptom | Fix |
 |---|---|
-| **Sword/hands invisible** | `shared/data.js` missing from `IOWebsite\public\shared\`. Copy from [source](../public/shared/data.js). |
-| **Sprites wrong size** | Images in `IOWebsite\public\images\` wrong dimensions. Copy from [source](../images/). |
-| **Cloudflare serving old content** | Push frontend git to trigger auto-deploy, or run `deploy.bat`. See [deploy.md](./deploy.md). |
-| **"No targets deployed" in wrangler** | `npx wrangler versions deploy --version-id <id>` to activate latest version. |
-| **Game won't load / connection errors** | Deploy backend: `npm run deploy` in `HoldYourGround\`. |
-| **Changes not showing in browser** | Hard refresh (`Ctrl+Shift+R`) or incognito window. |
-| **Sword hits not registering** | Check `sword.js` blade tip/hilt coordinates in `shared/data.js`. Verify `BLADE_TIP_X/Y` and `BLADE_HILT_X/Y` match sprite sheet. |
-| **All commands not found** | Ensure running from correct project root. Commands expect `C:\Dev\IOGames\HoldYourGround\` or `C:\Dev\IOWebsite\`. |
+| **Sword/hands invisible** | Blade constants in `game-data.js` wrong or sprite sheet missing frames. Check `BLADE_TIP_X/Y`, `BLADE_HILT_X/Y` match sprite. |
+| **Knight sprites wrong size** | `KnightSheet.png` dimensions don't match `KnightSheet.json`. Regenerate with animation creator tool. |
+| **HUD elements offscreen** | `hud-layout.json` coords or `hudScale` range wrong. Toggle J key for debug boundaries. |
+| **Network errors / won't connect** | Backend not deployed. Run `npm run deploy` in `HoldYourGround\`. |
+| **Sword hits not registering** | Server `sword.js` blade constants don't match `game-data.js`. Keep both in sync. |
+| **Animation plays wrong arc** | The attack needs `lerpPosePolar` instead of a straight lerp. Check `anims.js` blend function. |
+| **Remote player sword spins 360°** | `shortAngleDelta` not used in the return-to-idle blend path. |
+| **Changes not showing** | Hard refresh (`Ctrl+Shift+R`) or incognito. Build version mismatch — client polls `/version`. |
+| **Cloudflare serving old content** | Push frontend git to trigger auto-deploy. See [deploy.md](./deploy.md). |
+| **Game won't load / "No targets deployed"** | `npx wrangler versions deploy --version-id <id>` to activate. |
 
 ## Still Stuck?
 
-Check [deploy.md](./deploy.md) for the full deploy procedure, [server-architecture.md](./server-architecture.md) for server-side debugging, or [client-architecture.md](./client-architecture.md) for rendering/asset issues.
+Check [editing-client.md](./editing-client.md) or [editing-server.md](./editing-server.md) for the right file to edit. See [deploy.md](./deploy.md) for deploy procedure.

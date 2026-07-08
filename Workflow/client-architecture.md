@@ -4,31 +4,46 @@
 
 ```
 index.html → game.js
-  → net.js (Socket.IO)
-  → net-events.js (event handlers, button logic, asset loading)
-  → state.js (shared state singleton)
-  → input.js (keyboard/mouse buffering + interpolation)
-  → render.js (rAF loop, background, night/day swap)
-  → render-entity.js (drawPlayer, drawZombie, blade sprites)
-  → render-ui.js (HUD, hotbar, leaderboard, phase timer)
-  → camera.js (viewport transform, follow player)
-  → diag.js (FPS, ping, packet stats overlay)
+  → lib/net.js (Socket.IO connection, build version polling)
+  → lib/net-events.js (socket event registration, binary state parse)
+  → lib/state.js (shared state singleton)
+  → lib/input.js (keyboard/mouse buffering)
+  → lib/render.js (rAF loop, background swap, camera apply)
+  → lib/render-entity.js (drawPlayer, drawZombie, sprite cache)
+  → lib/anims.js (keyframe interpolation, remote anim sync, pose blending)
+  → lib/render-ui.js (leaderboard, hotbar, server level, dmg numbers)
+  → lib/hud.js (health/energy/XP bars, phase timer, attack highlights)
+  → lib/camera.js (viewport transform, follow player)
+  → lib/diag.js (FPS, ping, packet stats overlay)
+  → lib/assets.js (asset loading, enterGame lifecycle)
+  → lib/next-wave-popup.js (NW popup show/hide/counts)
+  → lib/ui.js (DOM refs, screen management, auth forms, room list)
+  → lib/audio.js (Web Audio API, spatial sound, mob sounds)
+  → lib/callback-registry.js (auth/roomList/lobbyCount callbacks)
+  → lib/game-data.js (constants, items, animations, mob types)
 ```
 
-## Render Loop (`render.js` via requestAnimationFrame)
+## Module Roles
 
-1. Clear and apply camera transform
-2. Draw background (light `#e8e4d8` / dark `#2a2a35` per phase)
-3. Draw zombies via `drawZombie()` then players via `drawPlayer()`
-4. Draw UI via `renderUI()` — health, XP, hotbar, leaderboard, phase timer
+| Module | Lines | Role |
+|---|---|---|
+| `game.js` | 233 | Orchestrator, event bindings, intervals |
+| `state.js` | 73 | All shared state |
+| `net.js` | 18 | Socket connect + build checker |
+| `net-events.js` | 431 | Socket event handlers + binary parser |
+| `render.js` | 229 | Main render loop (rAF) |
+| `render-entity.js`| 241 | Entity drawing |
+| `anims.js` | 483 | Animation engine |
+| `render-ui.js` | 229 | UI draws + leaderboard |
+| `hud.js` | 421 | HUD bar rendering |
+| `camera.js` | 26 | Camera calc |
+| `input.js` | 125 | Keyboard/mouse |
+| `audio.js` | 117 | Sound system |
+| `assets.js` | 121 | Load images + enterGame |
+| `next-wave-popup.js` | 189 | Wave popup |
+| `ui.js` | 224 | DOM + screens + auth |
+| `diag.js` | 26 | Diagnostics overlay |
+| `game-data.js` | 326 | Constants & data |
+| `callback-registry.js` | 11 | Callback registration |
 
-Inputs: `input.js` → `net.js` emit → server tick loop.
-Socket events: `net-events.js` → update `state.js` → render picks up changes.
-
-## Join Button / Queue / Results
-
-See [join-queue.md](./join-queue.md) (`updateJoinButton`, join flows, queue rules) and [results-rejoin.md](./results-rejoin.md) (`_joinedEnded` flag, Play Again routing).
-
-## URL Param Auto-Sign-In
-
-`game.js:129` — `?guest=Name` auto-emits `playAsGuest` 100ms after load, bypassing the auth form. Used by `launch_12_guests.bat` and scenario tests.
+See [rendering-system.md](./rendering-system.md), [animation-system.md](./animation-system.md), [combat-system.md](./combat-system.md), [protocol.md](./protocol.md).

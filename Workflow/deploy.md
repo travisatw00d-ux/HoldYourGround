@@ -15,12 +15,12 @@
 
 ```
 HoldYourGround\public\holdyourground\  →  IOWebsite\public\holdyourground\
-HoldYourGround\public\shared\data.js   →  IOWebsite\public\shared\data.js  (⚠️ critical!)
+HoldYourGround\public\shared\data.js   →  IOWebsite\public\shared\data.js  (⚠️ server needs this!)
 HoldYourGround\public\style.css        →  IOWebsite\public\style.css
 HoldYourGround\images\*.png            →  IOWebsite\public\images\
 ```
 
-Missing `shared/data.js` causes invisible swords, hands, and items.
+Server crashes without `shared/data.js` — it's `require()`'d by `server/config.js` and `server/mob-config.js`. Browser now uses `lib/game-data.js` (ES module import).
 
 ## Deploy Commands
 
