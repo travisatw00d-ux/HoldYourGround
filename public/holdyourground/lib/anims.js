@@ -430,7 +430,7 @@ function startAttackAnim(lockedAngle, comboStep) {
     for (let i = 0; i < midKf && i < segs.length; i++) halfFrames += segs[i];
     const locked = (typeof lockedAngle === 'number') ? lockedAngle : (me.facingAngle || 0);
     const doHold = isSwing && comboStep < 5;
-    const holdFrame = doHold ? (comboStep === 3 ? totalFrames : halfFrames) : 0;
+    const holdFrame = doHold ? (comboStep === 1 ? halfFrames : totalFrames) : 0;
     state.localAnim = { type: 'knight', knight_sword: { keyframes: anim.knight_sword.keyframes }, knight_hand: { keyframes: anim.knight_hand.keyframes }, segments: anim.segments, frame: 0, totalFrames, lockedAngle: locked, startTime: performance.now(), _holdFrame: holdFrame, _holding: doHold, _spinning: comboStep === 4 && isSwing, spinStartAngle: locked, spinStartTime: performance.now(), _comboStep: comboStep, _style: style };
   } else {
     const anim = ANIMATIONS && ANIMATIONS[me.currentItem] && (ANIMATIONS[me.currentItem][comboKey] || ANIMATIONS[me.currentItem][style + '_combo1']);
@@ -442,7 +442,7 @@ function startAttackAnim(lockedAngle, comboStep) {
       for (let i = 0; i < midKf && i < segs.length; i++) halfFrames += segs[i];
       const locked = (typeof lockedAngle === 'number') ? lockedAngle : (me.facingAngle || 0);
       const doHold = isSwing && comboStep < 5;
-      const holdFrame = doHold ? (comboStep === 3 ? totalFrames : halfFrames) : 0;
+      const holdFrame = doHold ? (comboStep === 1 ? halfFrames : totalFrames) : 0;
       state.localAnim = { type: 'sword', keyframes: anim.keyframes, segments: anim.segments, frame: 0, totalFrames, lockedAngle: locked, startTime: performance.now(), _holdFrame: holdFrame, _holding: doHold, _spinning: comboStep === 4 && isSwing, spinStartAngle: locked, spinStartTime: performance.now() };
     }
   }
@@ -451,6 +451,10 @@ function startAttackAnim(lockedAngle, comboStep) {
 function playReturnAnim() {
   if (!state.localAnim) return;
   const anim = state.localAnim;
+  // Swing combo2 plays fully through — stay frozen at end, don't release to back-half
+  if (anim._comboStep === 2 && anim._style === 'swing') {
+    return;
+  }
   if (anim.type === 'knight' && anim._holding && anim._holdFrame > 0 && anim._holdFrame < anim.totalFrames) {
     const duration = (anim.totalFrames / 60) * 1000 / 2;
     anim.startTime = performance.now() - anim._holdFrame * (duration / anim.totalFrames);
@@ -480,24 +484,9 @@ function playReturnAnim() {
 function handleAnimNaturalEnd() {
   const anim = state.localAnim;
   if (!anim || anim.type !== 'knight' || anim._holding) return;
+  // Swing combo2 already played fully — no cascade needed, stay frozen
   if (anim._comboStep === 2 && anim._style === 'swing') {
-    const base = KNIGHT_ANIMATIONS?.swing_combo1;
-    const baseKf = base?.knight_sword?.keyframes;
-    if (base && baseKf && baseKf.length >= 2) {
-      const bTotal = base.segments.reduce((a, b) => a + b, 0);
-      const midKf = Math.floor(baseKf.length / 2);
-      let halfFrames = 0;
-      for (let i = 0; i < midKf && i < base.segments.length; i++) halfFrames += base.segments[i];
-      const bDuration = (bTotal / 60) * 1000 / 2;
-      state.localAnim = {
-        type: 'knight', knight_sword: { keyframes: base.knight_sword.keyframes }, knight_hand: { keyframes: base.knight_hand.keyframes },
-        segments: base.segments, frame: halfFrames, totalFrames: bTotal,
-        startTime: performance.now() - halfFrames * (bDuration / bTotal),
-        _holdFrame: 0, _holding: false, _spinning: false,
-        _comboStep: 1, _style: 'swing'
-      };
-      return;
-    }
+    return;
   }
   state.localAnim = null;
 }
