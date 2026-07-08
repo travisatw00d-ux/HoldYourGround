@@ -127,7 +127,7 @@ function checkSwordHit(p, zombies, players, grid) {
 
     for (const z of nearbyZombies) {
       if (!z.alive) continue;
-      if (p.attackHitIds.includes(z.id)) continue;
+      if (!(p.comboStep === 3 && isSwing && cf >= halfFrames) && p.attackHitIds.includes(z.id)) continue;
       const d2 = distToSegSq(z.x, z.y, hiltX, hiltY, tipX, tipY);
       if (d2 < (bladeW + z.radius) * (bladeW + z.radius)) {
         const dmgMult = p.attackStyle === 'swing' ? 0.7 : 1.0;
