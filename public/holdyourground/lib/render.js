@@ -1,9 +1,12 @@
 import { state } from './state.js';
 import { getCamera } from './camera.js';
 import { getInput, resetKeys } from './input.js';
-import { drawPlayer, drawZombie, drawDebugSwordHitbox, getBladeSegment, handleAnimNaturalEnd } from './render-entity.js';
-import { drawStatHUD, drawServerLevel, drawSpectatingUI, drawDeadSpectatingUI, drawDmgNumbers, drawBuildWatermark, drawHitFlash, drawHUD } from './render-ui.js';
+import { drawPlayer, drawZombie, drawDebugSwordHitbox } from './render-entity.js';
+import { getBladeSegment, handleAnimNaturalEnd } from './anims.js';
+import { drawStatHUD, drawServerLevel, drawSpectatingUI, drawDeadSpectatingUI, drawDmgNumbers, drawBuildWatermark, drawHitFlash } from './render-ui.js';
+import { drawHUD } from './hud.js';
 import { drawDiag } from './diag.js';
+import { ZOMBIE_ANIMATIONS, KNIGHT_VISUALS, BLADE_W } from './game-data.js';
 
 function shortAngleDist(a, b) {
   let diff = b - a;
@@ -88,7 +91,6 @@ function render() {
     const mey = me.py + (me.y - me.py) * alpha;
     const target = Math.atan2((state.mouseY / zoom + cam.y) - mey, (state.mouseX / zoom + cam.x) - mex);
     me.realAngle = target;
-    // Interpolate server-facingAngle for smooth visual rotation at 60fps
     if (me.pfacingAngle != null) {
       me._smoothAngle = me.pfacingAngle + shortAngleDist(me.pfacingAngle, me.facingAngle) * alpha;
     }
@@ -108,7 +110,7 @@ function render() {
     }
   }
 
-  const zombieAnim = window.ZOMBIE_ANIMATIONS?.attack;
+  const zombieAnim = ZOMBIE_ANIMATIONS?.attack;
   if (zombieAnim) {
     const zDuration = (zombieAnim.segments.reduce((a, b) => a + b, 0) / 60) * 1000 / 4;
     for (const zid in state.zombieAnims) {

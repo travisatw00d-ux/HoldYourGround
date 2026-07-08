@@ -1,4 +1,5 @@
 import { state } from './state.js';
+import { MOB_TYPES } from './game-data.js';
 
 let ctx = null;
 let masterGain = null;
@@ -100,7 +101,7 @@ export function playSound(name, options = {}) {
 }
 
 export function playMobSound(mobType, action, options = {}) {
-  const mobTypes = window.MOB_TYPES || [];
+  const mobTypes = MOB_TYPES;
   const mt = mobTypes[mobType];
   if (!mt) return;
   const name = 'mob_' + mt.id + '_' + action;

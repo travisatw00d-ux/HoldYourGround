@@ -1,5 +1,5 @@
 import { state } from './state.js';
-import { startIdleTransition } from './render-entity.js';
+import { startIdleTransition } from './anims.js';
 
 const keys = {};
 const keyTimers = {};
