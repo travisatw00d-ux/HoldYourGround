@@ -415,6 +415,7 @@ function getBladeSegment(p, sx, sy, isKnight) {
 function startAttackAnim(lockedAngle, comboStep) {
   const me = state.players[state.myId];
   if (!me) return;
+  state.idleTransition = null;
   state._mirrorSword = (state.attackStyle === 'swing') && (comboStep || 1) >= 2;
   const style = state.attackStyle || 'jab';
   const comboKey = style + '_combo' + (comboStep || 1);
@@ -430,7 +431,7 @@ function startAttackAnim(lockedAngle, comboStep) {
     for (let i = 0; i < midKf && i < segs.length; i++) halfFrames += segs[i];
     const locked = (typeof lockedAngle === 'number') ? lockedAngle : (me.facingAngle || 0);
     const doHold = isSwing && comboStep < 5;
-    const holdFrame = doHold ? (comboStep === 1 ? halfFrames : totalFrames) : 0;
+    const holdFrame = doHold ? (comboStep === 1 || comboStep === 4 ? halfFrames : totalFrames) : 0;
     state.localAnim = { type: 'knight', knight_sword: { keyframes: anim.knight_sword.keyframes }, knight_hand: { keyframes: anim.knight_hand.keyframes }, segments: anim.segments, frame: 0, totalFrames, lockedAngle: locked, startTime: performance.now(), _holdFrame: holdFrame, _holding: doHold, _spinning: comboStep === 4 && isSwing, spinStartAngle: locked, spinStartTime: performance.now(), _comboStep: comboStep, _style: style };
   } else {
     const anim = ANIMATIONS && ANIMATIONS[me.currentItem] && (ANIMATIONS[me.currentItem][comboKey] || ANIMATIONS[me.currentItem][style + '_combo1']);
@@ -442,7 +443,7 @@ function startAttackAnim(lockedAngle, comboStep) {
       for (let i = 0; i < midKf && i < segs.length; i++) halfFrames += segs[i];
       const locked = (typeof lockedAngle === 'number') ? lockedAngle : (me.facingAngle || 0);
       const doHold = isSwing && comboStep < 5;
-      const holdFrame = doHold ? (comboStep === 1 ? halfFrames : totalFrames) : 0;
+      const holdFrame = doHold ? (comboStep === 1 || comboStep === 4 ? halfFrames : totalFrames) : 0;
       state.localAnim = { type: 'sword', keyframes: anim.keyframes, segments: anim.segments, frame: 0, totalFrames, lockedAngle: locked, startTime: performance.now(), _holdFrame: holdFrame, _holding: doHold, _spinning: comboStep === 4 && isSwing, spinStartAngle: locked, spinStartTime: performance.now() };
     }
   }
@@ -451,18 +452,17 @@ function startAttackAnim(lockedAngle, comboStep) {
 function playReturnAnim() {
   if (!state.localAnim) return;
   const anim = state.localAnim;
-  // Swing combo2 plays fully through — stay frozen at end, don't release to back-half
-  if (anim._comboStep === 2 && anim._style === 'swing') {
-    return;
-  }
+  // Release the back-half hold for combos with keyframes remaining
   if (anim.type === 'knight' && anim._holding && anim._holdFrame > 0 && anim._holdFrame < anim.totalFrames) {
     const duration = (anim.totalFrames / 60) * 1000 / 2;
     anim.startTime = performance.now() - anim._holdFrame * (duration / anim.totalFrames);
     anim.frame = anim._holdFrame;
     anim._holding = false;
     anim._spinning = false;
+    state._mirrorSword = false;
     return;
   }
+  // Smooth idle transition for combos that played all the way through
   state._mirrorSword = false;
   const curSword = getKnightInterpolatedVis('knight_sword');
   const curHand = getKnightInterpolatedVis('knight_hand');
@@ -484,7 +484,6 @@ function playReturnAnim() {
 function handleAnimNaturalEnd() {
   const anim = state.localAnim;
   if (!anim || anim.type !== 'knight' || anim._holding) return;
-  // Swing combo2 already played fully — no cascade needed, stay frozen
   if (anim._comboStep === 2 && anim._style === 'swing') {
     return;
   }

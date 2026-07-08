@@ -40,7 +40,6 @@ function handleAttack(room, id, facingAngle) {
 function _executeAttack(room, id, step, pendingAngle) {
   const p = room.players[id];
   if (!p) return;
-  console.log(`[ATK-DIAG] room=${room.id} player=${id.slice(0,8)} step=${step} style=${p.attackStyle} prevComboStep=${p.comboStep} queued=${!!p._queuedChain} chainTick=${p._chainTickTarget} attacking=${p.attacking} chainWindow=${p.comboChainWindow} cd=${p.attackCooldown} started=${p._started} tick=${room.tickNum}`);
   const style = p.attackStyle || 'jab';
   const comboKey = style + '_combo' + (step || 1);
   const anim = p.playerClass === 'knight'

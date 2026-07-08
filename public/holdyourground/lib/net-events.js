@@ -302,7 +302,7 @@ export function registerEvents(socket) {
 
   socket.on('comboReady', () => {
     state._comboStep = 0;
-    state.localAnim = null;
+    state._mirrorSword = false;
   });
 
   socket.on('zombieAttackStart', ({ zombieId, mobType }) => {
