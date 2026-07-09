@@ -5,7 +5,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "deploy": "fly deploy --no-cache"
+    "deploy": "fly deploy"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

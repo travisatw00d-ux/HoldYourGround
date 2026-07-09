@@ -197,7 +197,7 @@ socket.on('admin:stats', (data) => {
 socket.on('admin:serverStats', (data) => {
   const el = document.getElementById('statsServer');
   if (!el) return;
-  el.innerHTML = '<div>Memory: ' + data.memoryMB + ' MB <span style="opacity:0.5">(heap ' + data.heapMB + ' MB)</span></div>'
+  el.innerHTML = '<div>Memory: ' + data.memoryMB + ' MB <span style="opacity:0.5">(process RSS &#8212; VM ~200 MB)</span></div>'
     + '<div>CPU cores: ' + data.cpuCores + '</div>'
     + '<div>CPU lifetime: ' + data.cpuLoad + '</div>'
     + '<div>CPU (10s): ' + data.cpuRealtime + '</div>';
