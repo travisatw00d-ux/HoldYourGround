@@ -153,7 +153,15 @@ socket.on('admin:stats', (data) => {
   html += '<div>Lobby: ' + data.lobbyCount + '</div>';
   html += '<div>Version: ' + (data.build || '\u2014') + '</div>';
   html += '<div>Games (24h): ' + (data.gamesPlayed24h ?? '\u2014') + '</div>';
-  html += '<div>Players (24h): ' + (data.playersPlayed24h ?? '\u2014') + '</div>';
+  html += '<div>Players (24h): ' + (data.playersPlayed24h ?? '\u2014');
+  const names = data.playersPlayed24hList;
+  if (names && names.length > 0) {
+    html += ' <span id="players24hToggle" style="cursor:pointer;opacity:0.5;font-size:0.65rem">[show]</span>';
+    html += '<div id="players24hList" class="hidden" style="margin-top:2px;padding-left:8px;opacity:0.6">';
+    for (const n of names) html += '<div>' + n + '</div>';
+    html += '</div>';
+  }
+  html += '</div>';
   html += '<div id="onlinePlayersBtn" style="cursor:pointer;color:var(--accent);margin-top:6px;text-decoration:underline">Online Players: \u2014</div>';
 
   const roomCount = (data.rooms || []).length;
@@ -190,6 +198,14 @@ socket.on('admin:stats', (data) => {
   });
   document.getElementById('onlinePlayersBtn')?.addEventListener('click', () => {
     socket.emit('admin:getPlayers');
+  });
+  document.getElementById('players24hToggle')?.addEventListener('click', () => {
+    const el = document.getElementById('players24hList');
+    const toggle = document.getElementById('players24hToggle');
+    if (el && toggle) {
+      el.classList.toggle('hidden');
+      toggle.textContent = el.classList.contains('hidden') ? '[show]' : '[hide]';
+    }
   });
   $.statsPanel.classList.remove('hidden');
 });

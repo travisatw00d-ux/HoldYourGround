@@ -24,7 +24,8 @@ function getStats24h() {
       }
     }
   } catch (e) {}
-  return { gamesPlayed24h: games, playersPlayed24h: players.size };
+  const sorted = Array.from(players).sort((a, b) => a.localeCompare(b));
+  return { gamesPlayed24h: games, playersPlayed24h: players.size, playersPlayed24hList: sorted };
 }
 
 module.exports = { recordGameStart, getStats24h };

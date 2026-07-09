@@ -16,6 +16,8 @@ All server files live in `server/`. Entry: `server.js` → `network.js`.
 | State broadcast | `room.js` (gameTick broadcast phases) | server-architecture.md |
 | Spectator follows | `spectator-manager.js` | match-lifecycle.md |
 | Test mode | `socket-handlers.js:__test`, `phase-manager.js:_testAdvancePhase` | scenarios/README.md |
+| Admin stats | `socket-handlers.js` (admin:getStats/serverStats/getPlayers), `stats-tracker.js` | server-architecture.md |
+| Game-start logging | `stats-tracker.js` (recordGameStart called from `phase-manager.js`) | — |
 | Auth/db | `auth.js`, `db.js` | — |
 | Tuning | `config.js` | — |
 
@@ -27,6 +29,8 @@ All server files live in `server/`. Entry: `server.js` → `network.js`.
 | Late Play Again drops in | Routes through `handleDirectJoin` (not instant respawn) |
 | Test commands ignored | Server needs `$env:TEST_MODE=1` to process `__test` |
 | Binary packet wrong size | Offsets in `binary-protocol.js` don't match client parse in `net-events.js` |
+| Admin commands without login | Every admin socket handler must check `if (!socket.account?.isAdmin) return;` — client can't enforce this |
+| Game stats file locked | `game-stats.jsonl` is append-only. Don't read/write simultaneously from multiple handlers. |
 
 ## Verify
 
