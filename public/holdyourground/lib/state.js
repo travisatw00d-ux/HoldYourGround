@@ -57,6 +57,7 @@ export const state = {
   attackStyle: 'jab',
   _mirrorSword: false,
   _nwpHideTimer: null,
+  _playersRefreshTimer: null,
   idleTransition: null,
   isSpectator: false,
   isDeadSpectating: false,

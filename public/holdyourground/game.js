@@ -9,6 +9,7 @@ import {
   $, showScreen, joinGame, renderRoomList,
   showLoginForm, showRegisterForm, onAuth,
   leaveToMenu, hideEscapeMenu, showEscapeMenu,
+  hideStatsPanel,
   getSelectedRoomId, getCurrentRooms
 } from './lib/ui.js';
 
@@ -137,6 +138,85 @@ $.levelPlusBtn.addEventListener('click', () => {
 socket.on('accountUpdate', ({ level }) => {
   if ($.adminLevelDisplay) $.adminLevelDisplay.textContent = level;
 });
+
+$.statsBtn.addEventListener('click', () => {
+  socket.emit('admin:getStats');
+});
+
+$.statsClose.addEventListener('click', hideStatsPanel);
+
+socket.on('admin:stats', (data) => {
+  let html = '';
+  html += '<div>Uptime: ' + formatUptime(data.uptime) + '</div>';
+  html += '<div>Active Rooms: ' + data.activeRooms + '</div>';
+  html += '<div>Total Players: ' + data.totalPlayers + '</div>';
+  html += '<div>Lobby: ' + data.lobbyCount + '</div>';
+  html += '<div>Memory: ' + data.memoryMB + ' MB</div>';
+  html += '<div>Version: ' + (data.build || '—') + '</div>';
+  html += '<div id="onlinePlayersBtn" style="cursor:pointer;color:var(--accent);margin-top:6px;text-decoration:underline">Online Players: —</div>';
+
+  const roomCount = (data.rooms || []).length;
+  if (roomCount > 0) {
+    html += '<div class="stats-rooms-toggle" id="statsRoomsToggle">' + roomCount + ' room' + (roomCount > 1 ? 's' : '') + ' — show details</div>';
+    html += '<div id="statsRoomDetails" class="hidden">';
+    for (const r of (data.rooms || [])) {
+      html += '<div style="margin-top:4px;padding-top:4px;border-top:1px solid rgba(255,255,255,0.05)">';
+      html += '<b>' + r.id + '</b>';
+      html += '<div>Phase: ' + r.phase + ' | Wave: ' + r.wave + '</div>';
+      html += '<div>Level: ' + r.level + ' | Players: ' + r.players + '</div>';
+      html += '<div>Alive Zombies: ' + r.zombies + ' | Ticks: ' + r.tickNum + '</div>';
+      html += '</div>';
+    }
+    html += '</div>';
+  }
+
+  $.statsContent.innerHTML = html;
+  document.getElementById('statsRoomsToggle')?.addEventListener('click', () => {
+    const el = document.getElementById('statsRoomDetails');
+    if (el) el.classList.toggle('hidden');
+  });
+  document.getElementById('onlinePlayersBtn')?.addEventListener('click', () => {
+    socket.emit('admin:getPlayers');
+  });
+  $.statsPanel.classList.remove('hidden');
+});
+
+socket.on('admin:playerList', ({ players, count }) => {
+  const btn = document.getElementById('onlinePlayersBtn');
+  if (btn) {
+    btn.innerHTML = 'Online Players: ' + count + ' <span style="opacity:0.4;font-size:0.65rem;margin-left:4px">[refresh]</span>';
+  }
+  let html = '';
+  for (const p of players) {
+    html += '<div>' + p.name + ' <span style="opacity:0.5">(' + p.accountType + ' — ' + p.room + ')</span></div>';
+  }
+  let listEl = document.getElementById('onlinePlayersList');
+  if (!listEl) {
+    listEl = document.createElement('div');
+    listEl.id = 'onlinePlayersList';
+    listEl.style.cssText = 'margin-top:4px;padding-top:4px;border-top:1px solid rgba(255,255,255,0.06);max-height:160px;overflow-y:auto';
+    btn.parentNode.insertBefore(listEl, btn.nextSibling);
+  }
+  listEl.innerHTML = html || '<div style="opacity:0.5">none</div>';
+
+  if (state._playersRefreshTimer) clearTimeout(state._playersRefreshTimer);
+  state._playersRefreshTimer = setTimeout(() => {
+    socket.emit('admin:getPlayers');
+  }, 30000);
+});
+
+function formatUptime(sec) {
+  const d = Math.floor(sec / 86400);
+  const h = Math.floor((sec % 86400) / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = sec % 60;
+  let out = '';
+  if (d) out += d + 'd ';
+  if (h) out += h + 'h ';
+  if (m) out += m + 'm ';
+  out += s + 's';
+  return out;
+}
 
 $.escapeReturnBtn.addEventListener('click', () => leaveToMenu(socket));
 $.escapeConfirmBtn.addEventListener('click', () => leaveToMenu(socket));

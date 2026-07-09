@@ -49,8 +49,9 @@ function startMatch(room, fromEnded) {
       p.isSpectator = false;
       if (room._persistedExp.has(id)) {
         const totalExp = room._persistedExp.get(id);
-        p.lvl = Math.max(1, expMod.fromCumulativeExp(totalExp));
-        p.exp = totalExp - expMod.cumulativeExp(p.lvl - 1);
+        const result = expMod.fromCumulativeExp(totalExp);
+        p.lvl = Math.max(1, result.level);
+        p.exp = totalExp - expMod.cumulativeExp(Math.max(1, p.lvl - 1), 0);
         p.gold = 0;
       } else {
         p.lvl = 1; p.exp = 0; p.gold = 0;

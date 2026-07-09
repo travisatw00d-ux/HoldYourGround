@@ -65,6 +65,14 @@ function tickTargeting(zombies, players) {
 function moveAll(zombies, players) {
   for (const z of zombies) {
     if (!z.alive || z.attacking || z.headingAngle === undefined) continue;
+    // Stop at attack range — don't walk into the player
+    if (z.targetPlayerId && players[z.targetPlayerId]) {
+      const tp = players[z.targetPlayerId];
+      if (tp && tp.alive) {
+        const dx = tp.x - z.x, dy = tp.y - z.y;
+        if (dx * dx + dy * dy < (z.radius + tp.radius + ZOMBIE_ATTACK_RANGE) ** 2) continue;
+      }
+    }
     let spd = z.speed;
     // Edge-spawned zombies have boosted speed for first 10 seconds
     if (z._edgeSpawnTimer > 0) {

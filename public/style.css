@@ -59,6 +59,7 @@ body {
 #welcomePanel.hidden,
 .settings-panel.hidden,
 #settingsBtn.hidden,
+#statsBtn.hidden,
 .overlay.hidden,
 #xpBar.hidden,
 #resultsOverlay.hidden {
@@ -310,6 +311,99 @@ button:active {
 .settings-close:hover {
   background: rgba(255, 255, 255, 0.08);
   color: #fff;
+}
+
+.stats-panel {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 340px;
+  max-height: 70vh;
+  background: rgba(10, 10, 15, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  z-index: 25;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.stats-panel.hidden {
+  display: none;
+}
+
+#statsBtn {
+  display: block;
+  width: 100%;
+  padding: 6px 12px;
+  margin-bottom: 6px;
+  background: var(--btn-bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  text-align: center;
+}
+
+#statsBtn:hover {
+  background: var(--accent);
+  color: #000;
+}
+
+.stats-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+#statsClose {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 1.3rem;
+  cursor: pointer;
+  padding: 0;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+}
+
+#statsClose:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
+#statsContent {
+  padding: 12px 16px;
+  font-family: monospace;
+  font-size: 0.75rem;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.8);
+  overflow-y: auto;
+}
+
+.stats-rooms-toggle {
+  cursor: pointer;
+  color: var(--accent);
+  text-decoration: underline;
+  margin-top: 4px;
+  display: inline-block;
+}
+
+#statsRoomDetails {
+  margin-top: 6px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+  padding-top: 6px;
 }
 
 .settings-body {

@@ -157,6 +157,7 @@ module.exports = function registerSocket(socket, { io, broadcastRoomList, broadc
   });
 
   socket.on('toggleGodMode', () => {
+    if (!socket.account?.isAdmin) return;
     const room = roomManager.getPlayerRoom(socket.id);
     if (room) {
       const enabled = room.toggleGodMode(socket.id);
@@ -165,16 +166,19 @@ module.exports = function registerSocket(socket, { io, broadcastRoomList, broadc
   });
 
   socket.on('killAllMobs', () => {
+    if (!socket.account?.isAdmin) return;
     const room = roomManager.getPlayerRoom(socket.id);
     if (room) room.killAllMobs();
   });
 
   socket.on('adminAdvancePhase', () => {
+    if (!socket.account?.isAdmin) return;
     const room = roomManager.getPlayerRoom(socket.id);
     if (room) room._advancePhase();
   });
 
   socket.on('adminSetLevel', ({ delta }) => {
+    if (!socket.account?.isAdmin) return;
     const room = roomManager.getPlayerRoom(socket.id);
     if (!room) return;
     const p = room.players[socket.id];
@@ -288,6 +292,44 @@ module.exports = function registerSocket(socket, { io, broadcastRoomList, broadc
     data.socketId = socket.id.slice(0, 8);
     data.t = Date.now();
     try { fs.appendFileSync(logPath, JSON.stringify(data) + '\n'); } catch {}
+  });
+
+  socket.on('admin:getStats', () => {
+    if (!socket.account?.isAdmin) return;
+    let totalPlayers = 0;
+    const rooms = [];
+    for (const [id, r] of roomManager.rooms) {
+      const pc = r.getPlayerCount();
+      totalPlayers += pc;
+      rooms.push({
+        id, phase: r.matchPhase, wave: r.currentWave,
+        level: r.currentServerLevel, players: pc,
+        zombies: r.zombies ? r.zombies.filter(z => z.alive).length : 0,
+        tickNum: r.tickNum
+      });
+    }
+    socket.emit('admin:stats', {
+      uptime: Math.floor(process.uptime()),
+      activeRooms: roomManager.rooms.size,
+      totalPlayers,
+      lobbyCount: io.engine?.clientsCount || 0,
+      memoryMB: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
+      build: process.env.BUILD || '',
+      rooms
+    });
+  });
+
+  socket.on('admin:getPlayers', () => {
+    if (!socket.account?.isAdmin) return;
+    const players = [];
+    for (const [id, s] of io.sockets.sockets) {
+      const name = s.account?.displayName || s._guestName || 'Unknown';
+      const accountType = s.account?.accountType || (s._guestName ? 'guest' : 'anonymous');
+      const room = roomManager.getPlayerRoom(id);
+      players.push({ name, accountType, room: room ? room.id : 'lobby' });
+    }
+    players.sort((a, b) => a.name.localeCompare(b.name));
+    socket.emit('admin:playerList', { players, count: players.length });
   });
 
   socket.on('disconnect', () => {

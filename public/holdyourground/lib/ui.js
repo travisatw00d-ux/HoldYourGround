@@ -58,6 +58,10 @@ export const $ = {
   resultsPlayAgainBtn: document.getElementById('resultsPlayAgainBtn'),
   resultsLobbyBtn: document.getElementById('resultsLobbyBtn'),
   joinGameBtn: document.getElementById('joinGameBtn'),
+  statsBtn: document.getElementById('statsBtn'),
+  statsPanel: document.getElementById('statsPanel'),
+  statsClose: document.getElementById('statsClose'),
+  statsContent: document.getElementById('statsContent'),
 };
 
 let selectedRoomId = null;
@@ -170,11 +174,13 @@ export function onAuth(data) {
     $.wrapper.classList.add('admin-mode');
     $.adminBadge.classList.remove('hidden');
     $.adminSettings.classList.remove('hidden');
+    $.statsBtn.classList.remove('hidden');
     $.godModeToggle.checked = false;
   } else {
     $.wrapper.classList.remove('admin-mode');
     $.adminBadge.classList.add('hidden');
     $.adminSettings.classList.add('hidden');
+    $.statsBtn.classList.add('hidden');
   }
 
   $.authForm.classList.add('hidden');
@@ -233,6 +239,15 @@ export function showEscapeMenu() {
   $.escapeStep2.classList.add('hidden');
   $.escapeStep1.classList.remove('hidden');
   $.escapeMenu.classList.remove('hidden');
+}
+
+export function showStatsPanel() {
+  $.statsPanel.classList.remove('hidden');
+}
+
+export function hideStatsPanel() {
+  $.statsPanel.classList.add('hidden');
+  if (state._playersRefreshTimer) { clearTimeout(state._playersRefreshTimer); state._playersRefreshTimer = null; }
 }
 
 function compute16x9(containerW, containerH) {
