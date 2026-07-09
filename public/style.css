@@ -352,6 +352,31 @@ button:active {
   color: #000;
 }
 
+.stats-tabs {
+  display: flex;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.stats-tab {
+  flex: 1;
+  padding: 8px;
+  text-align: center;
+  font-size: 0.8rem;
+  cursor: pointer;
+  color: rgba(255, 255, 255, 0.4);
+  transition: color 0.15s, background 0.15s;
+}
+
+.stats-tab:hover {
+  color: rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.stats-tab.active {
+  color: var(--accent);
+  border-bottom: 2px solid var(--accent);
+}
+
 .stats-header {
   display: flex;
   align-items: center;

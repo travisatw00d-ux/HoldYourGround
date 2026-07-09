@@ -3,6 +3,8 @@ const auth = require('./auth');
 const playerMod = require('./player');
 const roomManager = require('./game-loop');
 const expMod = require('./exp');
+const { getStats24h } = require('./stats-tracker');
+const os = require('os');
 const fs = require('fs');
 const path = require('path');
 
@@ -308,14 +310,48 @@ module.exports = function registerSocket(socket, { io, broadcastRoomList, broadc
         tickNum: r.tickNum
       });
     }
+    const mem = process.memoryUsage();
+    const cpu = process.cpuUsage();
+    const cpuSec = (cpu.user + cpu.system) / 1000000;
+    const cpuCores = os.cpus().length;
     socket.emit('admin:stats', {
       uptime: Math.floor(process.uptime()),
       activeRooms: roomManager.rooms.size,
       totalPlayers,
       lobbyCount: io.engine?.clientsCount || 0,
-      memoryMB: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
       build: process.env.BUILD || '',
-      rooms
+      rooms,
+      ...getStats24h()
+    });
+  });
+
+  let _prevCpu = null;
+  let _prevCpuTime = 0;
+
+  socket.on('admin:getServerStats', () => {
+    if (!socket.account?.isAdmin) return;
+    const mem = process.memoryUsage();
+    const cpu = process.cpuUsage();
+    const now = Date.now();
+    const uptime = process.uptime();
+    const cores = os.cpus().length;
+    const lifetimeCpu = ((cpu.user + cpu.system) / 1000000 / Math.max(1, uptime) / cores * 100).toFixed(1);
+    let realtimeCpu = null;
+    if (_prevCpu && _prevCpuTime) {
+      const dt = (now - _prevCpuTime) / 1000;
+      if (dt > 0) {
+        const du = (cpu.user - _prevCpu.user + cpu.system - _prevCpu.system) / 1000000;
+        realtimeCpu = (du / dt / cores * 100).toFixed(1);
+      }
+    }
+    _prevCpu = cpu;
+    _prevCpuTime = now;
+    socket.emit('admin:serverStats', {
+      memoryMB: Math.round(mem.rss / 1024 / 1024),
+      heapMB: Math.round(mem.heapUsed / 1024 / 1024),
+      cpuCores: cores,
+      cpuLoad: lifetimeCpu + '%',
+      cpuRealtime: realtimeCpu !== null ? realtimeCpu + '%' : '\u2014'
     });
   });
 

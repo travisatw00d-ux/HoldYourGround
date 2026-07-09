@@ -248,6 +248,7 @@ export function showStatsPanel() {
 export function hideStatsPanel() {
   $.statsPanel.classList.add('hidden');
   if (state._playersRefreshTimer) { clearTimeout(state._playersRefreshTimer); state._playersRefreshTimer = null; }
+  if (state._serverStatsTimer) { clearTimeout(state._serverStatsTimer); state._serverStatsTimer = null; }
 }
 
 function compute16x9(containerW, containerH) {

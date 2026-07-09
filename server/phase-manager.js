@@ -7,6 +7,7 @@ const zombieAi = require('./zombie-ai');
 const playerMod = require('./player');
 const expMod = require('./exp');
 const { _promoteFromQueue, getActivePlayerCount, getActivePlayerIds } = require('./join-manager');
+const { recordGameStart } = require('./stats-tracker');
 
 function getWaveComposition(pool) {
   const counts = new Map();
@@ -24,6 +25,8 @@ function _computeServerLevel(room) {
 }
 
 function startMatch(room, fromEnded) {
+  const playerNames = Object.values(room.players).filter(p => !p.isSpectator).map(p => p.name);
+  recordGameStart(room.id, playerNames);
   room.matchStarted = true;
   const isRestart = room._postGameWaiting;
   room._postGameWaiting = false;

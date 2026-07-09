@@ -58,6 +58,7 @@ export const state = {
   _mirrorSword: false,
   _nwpHideTimer: null,
   _playersRefreshTimer: null,
+  _serverStatsTimer: null,
   idleTransition: null,
   isSpectator: false,
   isDeadSpectating: false,

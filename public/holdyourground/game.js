@@ -151,13 +151,14 @@ socket.on('admin:stats', (data) => {
   html += '<div>Active Rooms: ' + data.activeRooms + '</div>';
   html += '<div>Total Players: ' + data.totalPlayers + '</div>';
   html += '<div>Lobby: ' + data.lobbyCount + '</div>';
-  html += '<div>Memory: ' + data.memoryMB + ' MB</div>';
-  html += '<div>Version: ' + (data.build || '—') + '</div>';
-  html += '<div id="onlinePlayersBtn" style="cursor:pointer;color:var(--accent);margin-top:6px;text-decoration:underline">Online Players: —</div>';
+  html += '<div>Version: ' + (data.build || '\u2014') + '</div>';
+  html += '<div>Games (24h): ' + (data.gamesPlayed24h ?? '\u2014') + '</div>';
+  html += '<div>Players (24h): ' + (data.playersPlayed24h ?? '\u2014') + '</div>';
+  html += '<div id="onlinePlayersBtn" style="cursor:pointer;color:var(--accent);margin-top:6px;text-decoration:underline">Online Players: \u2014</div>';
 
   const roomCount = (data.rooms || []).length;
   if (roomCount > 0) {
-    html += '<div class="stats-rooms-toggle" id="statsRoomsToggle">' + roomCount + ' room' + (roomCount > 1 ? 's' : '') + ' — show details</div>';
+    html += '<div class="stats-rooms-toggle" id="statsRoomsToggle">' + roomCount + ' room' + (roomCount > 1 ? 's' : '') + ' \u2014 show details</div>';
     html += '<div id="statsRoomDetails" class="hidden">';
     for (const r of (data.rooms || [])) {
       html += '<div style="margin-top:4px;padding-top:4px;border-top:1px solid rgba(255,255,255,0.05)">';
@@ -170,7 +171,19 @@ socket.on('admin:stats', (data) => {
     html += '</div>';
   }
 
-  $.statsContent.innerHTML = html;
+  $.statsContent.innerHTML = '<div class="stats-tabs"><span class="stats-tab active" data-tab="general">General</span><span class="stats-tab" data-tab="server">Server</span></div><div id="statsGeneral">' + html + '</div><div id="statsServer" class="hidden"></div>';
+
+  document.querySelectorAll('.stats-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.stats-tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      document.getElementById('statsGeneral').classList.toggle('hidden', tab.dataset.tab !== 'general');
+      document.getElementById('statsServer').classList.toggle('hidden', tab.dataset.tab !== 'server');
+      if (tab.dataset.tab === 'server') {
+        socket.emit('admin:getServerStats');
+      }
+    });
+  });
   document.getElementById('statsRoomsToggle')?.addEventListener('click', () => {
     const el = document.getElementById('statsRoomDetails');
     if (el) el.classList.toggle('hidden');
@@ -179,6 +192,17 @@ socket.on('admin:stats', (data) => {
     socket.emit('admin:getPlayers');
   });
   $.statsPanel.classList.remove('hidden');
+});
+
+socket.on('admin:serverStats', (data) => {
+  const el = document.getElementById('statsServer');
+  if (!el) return;
+  el.innerHTML = '<div>Memory: ' + data.memoryMB + ' MB <span style="opacity:0.5">(heap ' + data.heapMB + ' MB)</span></div>'
+    + '<div>CPU cores: ' + data.cpuCores + '</div>'
+    + '<div>CPU lifetime: ' + data.cpuLoad + '</div>'
+    + '<div>CPU (10s): ' + data.cpuRealtime + '</div>';
+  if (state._serverStatsTimer) clearTimeout(state._serverStatsTimer);
+  state._serverStatsTimer = setTimeout(() => socket.emit('admin:getServerStats'), 10000);
 });
 
 socket.on('admin:playerList', ({ players, count }) => {
