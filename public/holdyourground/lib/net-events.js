@@ -175,6 +175,9 @@ export function registerEvents(socket) {
       state.isSpectator = info.isSpectator;
       updateJoinButton();
     }
+    if (info.id === state.myId && info.statPoints != null) {
+      state.statPoints = info.statPoints;
+    }
     if (state.players[info.id]) {
       const p = state.players[info.id];
       p.name = info.name; p.color = info.color || '#888888';
@@ -231,8 +234,9 @@ export function registerEvents(socket) {
     if (nearest && nearDist < 60) playMobSound(nearest.mobType, 'hit', { x: x, y: y });
   });
 
-  socket.on('accountUpdate', ({ exp, level, expToNext, gold }) => {
+  socket.on('accountUpdate', ({ exp, level, expToNext, gold, statPoints }) => {
     state.exp = exp; state.level = level; state.expToNext = expToNext; state.gold = gold;
+    if (statPoints != null) state.statPoints = statPoints;
   });
 
   socket.on('attackStyleChanged', ({ attackStyle }) => {

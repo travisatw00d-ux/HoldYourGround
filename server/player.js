@@ -29,6 +29,14 @@ function recalcStats(p) {
   p.attackDmg = BASE_ATTACK_DMG + (item ? (item.stats.attackDmg || 0) : 0);
   p.attackSpeed = BASE_ATTACK_SPEED_MS + (item ? (item.stats.attackSpeed || 0) : 0);
   p.turnSpeed = BASE_TURN_SPEED + (item ? (item.stats.turnSpeed || 0) : 0);
+  p.maxHealth = BASE_HEALTH + (p.investedPoints.maxHealth || 0) * 10;
+  p.maxEnergy = 100 + (p.investedPoints.maxEnergy || 0) * 10;
+  if (p.investedPoints) {
+    p.speed = Math.min(16, p.speed + (p.investedPoints.speed || 0) * 0.03);
+    p.attackDmg += (p.investedPoints.attackDmg || 0) * 1;
+    p.attackSpeed += (p.investedPoints.attackSpeed || 0) * (-20);
+    p.turnSpeed += (p.investedPoints.turnSpeed || 0) * 1;
+  }
 }
 
 let colorIndex = 0;
@@ -91,7 +99,9 @@ function addPlayer(id, name, players, zombies, accountType, accountId) {
     _lastMouseAngle: 0,
     _spinLungeAngle: 0,
     _jabHitCleared: 0,
-    isSpectator: false
+    isSpectator: false,
+    statPoints: 0,
+    investedPoints: {}
   };
   recalcStats(players[id]);
 }
@@ -118,7 +128,7 @@ function respawnPlayer(id, players, zombies) {
   p.alive = true;
   p.input = { dx: 0, dy: 0 };
   p.lastHitById = null;
-  p.health = BASE_HEALTH;
+  p.health = p.maxHealth || BASE_HEALTH;
   p.attackCooldown = 0;
   p.attacking = false;
   p.attackAnim = null;
@@ -154,7 +164,8 @@ function playerInfoObj(p) {
     lvl: p.lvl || 1,
     playerClass: p.playerClass || 'knight',
     attackStyle: p.attackStyle || 'jab',
-    isSpectator: p.isSpectator
+    isSpectator: p.isSpectator,
+    statPoints: p.statPoints || 0
   };
 }
 

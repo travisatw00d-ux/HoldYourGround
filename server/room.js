@@ -243,11 +243,14 @@ class Room {
   _awardExp(playerId, zombieLvl) {
     const p = this.players[playerId];
     if (!p || !p.alive || p.isSpectator) return;
+    const prevLvl = p.lvl;
     p.exp += expMod.getExpForKill(zombieLvl);
     p.gold += expMod.getGoldForKill(zombieLvl);
     const result = expMod.fromCumulativeExp(p.exp);
     p.lvl = result.level;
-    this.io.to(playerId).emit('accountUpdate', { exp: result.exp, level: p.lvl, expToNext: expMod.getExpToNext(p.lvl), gold: p.gold });
+    const levelGain = Math.max(0, p.lvl - prevLvl);
+    p.statPoints = (p.statPoints || 0) + levelGain;
+    this.io.to(playerId).emit('accountUpdate', { exp: result.exp, level: p.lvl, expToNext: expMod.getExpToNext(p.lvl), gold: p.gold, statPoints: p.statPoints });
   }
 
   _saveRound() {
@@ -260,6 +263,7 @@ class Room {
       if (sessionGain <= 0) continue;
       updateStmt.run(sessionGain, p.accountId);
       this._persistedExp.set(p.id, p.exp);
+      this._persistedExp.set('sp_' + p.id, p.statPoints || 0);
     }
   }
 

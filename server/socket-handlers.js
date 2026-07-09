@@ -185,13 +185,33 @@ module.exports = function registerSocket(socket, { io, broadcastRoomList, broadc
     if (!room) return;
     const p = room.players[socket.id];
     if (!p) return;
-    p.lvl = Math.max(1, (p.lvl || 1) + delta);
+    const prevLvl = p.lvl || 1;
+    p.lvl = Math.max(1, prevLvl + delta);
+    const levelGain = Math.max(0, p.lvl - prevLvl);
+    p.statPoints = (p.statPoints || 0) + levelGain;
     const totalExp = expMod.cumulativeExp(p.lvl, 0);
     p.exp = totalExp;
     room._persistedExp.set(socket.id, totalExp);
     playerMod.recalcStats(p);
     const expToNext = expMod.getExpToNext(p.lvl);
-    socket.emit('accountUpdate', { exp: p.exp, level: p.lvl, expToNext, gold: p.gold });
+    socket.emit('accountUpdate', { exp: p.exp, level: p.lvl, expToNext, gold: p.gold, statPoints: p.statPoints });
+    for (const oid in room.players) {
+      room.io.to(oid).emit('playerInfo', playerMod.playerInfoObj(p));
+    }
+  });
+
+  socket.on('spendStatPoint', ({ stat }) => {
+    const room = roomManager.getPlayerRoom(socket.id);
+    if (!room) return;
+    const p = room.players[socket.id];
+    if (!p || !p.alive || p.isSpectator || !p.statPoints) return;
+    const validStats = ['maxHealth', 'maxEnergy', 'speed', 'attackDmg'];
+    if (!validStats.includes(stat)) return;
+    p.statPoints--;
+    if (!p.investedPoints) p.investedPoints = {};
+    p.investedPoints[stat] = (p.investedPoints[stat] || 0) + 1;
+    playerMod.recalcStats(p);
+    socket.emit('accountUpdate', { exp: p.exp, level: p.lvl, expToNext: require('./exp').getExpToNext(p.lvl), gold: p.gold, statPoints: p.statPoints });
     for (const oid in room.players) {
       room.io.to(oid).emit('playerInfo', playerMod.playerInfoObj(p));
     }

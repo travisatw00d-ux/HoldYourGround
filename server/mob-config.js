@@ -11,7 +11,7 @@ function getMobProgressLevel(serverLevel, unlockLevel) {
 function getMobSpawnLevelRange(serverLevel, unlockLevel) {
   const progress = getMobProgressLevel(serverLevel, unlockLevel);
   if (progress < 1) return null;
-  const min = progress <= 10 ? 1 : progress - 10;
+  const min = Math.max(1, progress - 5);
   const max = progress;
   return { min, max };
 }

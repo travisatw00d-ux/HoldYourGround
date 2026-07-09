@@ -9,11 +9,12 @@ import {
   $, showScreen, joinGame, renderRoomList,
   showLoginForm, showRegisterForm, onAuth,
   leaveToMenu, hideEscapeMenu, showEscapeMenu,
-  hideStatsPanel,
+  hideStatsPanel, showCharStats, hideCharStats,
   getSelectedRoomId, getCurrentRooms
 } from './lib/ui.js';
 
 const socket = connect();
+window.socket = socket;
 
 showScreen('menu');
 
@@ -144,6 +145,7 @@ $.statsBtn.addEventListener('click', () => {
 });
 
 $.statsClose.addEventListener('click', hideStatsPanel);
+$.charStatsClose.addEventListener('click', hideCharStats);
 
 socket.on('admin:stats', (data) => {
   let html = '';
@@ -348,7 +350,9 @@ document.addEventListener('fullscreenchange', () => {
 });
 
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && state.screen === 'playing') {
+  if (e.key === 'Escape') {
+    if (!$.charStatsPanel.classList.contains('hidden')) { hideCharStats(); return; }
+    if (state.screen === 'playing') {
     e.preventDefault();
     if ($.escapeMenu.classList.contains('hidden')) {
       showEscapeMenu();
@@ -356,6 +360,7 @@ document.addEventListener('keydown', (e) => {
       hideEscapeMenu();
     }
     return;
+    }
   }
   if (e.key === 'F11') {
     e.preventDefault();
@@ -368,6 +373,13 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Tab') {
     e.preventDefault();
     toggleNWPopup();
+  }
+  if ((e.key === 'c' || e.key === 'C') && state.screen === 'playing') {
+    if ($.charStatsPanel.classList.contains('hidden')) {
+      showCharStats();
+    } else {
+      hideCharStats();
+    }
   }
 });
 

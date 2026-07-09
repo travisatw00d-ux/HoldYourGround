@@ -34,7 +34,8 @@ function handleDirectJoin(room, id) {
     return;
   }
   p.isSpectator = false;
-  p.lvl = 1; p.exp = 0; p.gold = 0;
+  p.lvl = 1; p.exp = 0; p.gold = 0; p.statPoints = 0;
+  p.investedPoints = {};
   room._persistedExp.delete(p.id);
   const qIdx = room._joinQueue.indexOf(id);
   if (qIdx >= 0) room._joinQueue.splice(qIdx, 1);
@@ -81,7 +82,8 @@ function _promoteFromQueue(room) {
     const qp = room.players[qid];
     if (!qp || !qp.isSpectator) { continue; }
     qp.isSpectator = false;
-    qp.lvl = 1; qp.exp = 0; qp.gold = 0;
+    qp.lvl = 1; qp.exp = 0; qp.gold = 0; qp.statPoints = 0;
+    qp.investedPoints = {};
     room._persistedExp.delete(qp.id);
     playerMod.recalcStats(qp);
 

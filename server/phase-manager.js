@@ -50,15 +50,9 @@ function startMatch(room, fromEnded) {
       if (firstReady) { p.x = firstReady.x; p.y = firstReady.y; }
     } else if (readySet.size > 0 || !isRestart || !p.isSpectator) {
       p.isSpectator = false;
-      if (room._persistedExp.has(id)) {
-        const totalExp = room._persistedExp.get(id);
-        const result = expMod.fromCumulativeExp(totalExp);
-        p.lvl = Math.max(1, result.level);
-        p.exp = totalExp - expMod.cumulativeExp(Math.max(1, p.lvl - 1), 0);
-        p.gold = 0;
-      } else {
-        p.lvl = 1; p.exp = 0; p.gold = 0;
-      }
+      p.lvl = 1; p.exp = 0; p.gold = 0;
+      p.statPoints = room._persistedExp.get('sp_' + id) || 0;
+      p.investedPoints = {};
       playerMod.recalcStats(p);
       if (!p.alive) playerMod.respawnPlayer(id, room.players, room.zombies);
     }
