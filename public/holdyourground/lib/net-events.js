@@ -178,6 +178,11 @@ export function registerEvents(socket) {
     if (info.id === state.myId && info.statPoints != null) {
       state.statPoints = info.statPoints;
     }
+    if (info.playerBuild && state.screen === 'lobby') {
+      const entry = state.lobbyPlayers.find(p => p.id === info.id);
+      if (entry) entry.playerBuild = info.playerBuild;
+      renderLobbyCards();
+    }
     if (state.players[info.id]) {
       const p = state.players[info.id];
       p.name = info.name; p.color = info.color || '#888888';

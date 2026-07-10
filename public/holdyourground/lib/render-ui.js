@@ -182,6 +182,8 @@ export function renderLobbyCards() {
   const frameData = state.cardFrames?.['KnightCard.png'];
   const hasAssets = state.cardSheet && frameData;
   const nameColors = { guest: '#eee', basic: '#228B22', admin: '#FFD700' };
+  const BUILD_NAMES = { standard: 'Standard', glassCannon: 'Glass Cannon', tank: 'Tank' };
+  const BUILD_CYCLE = ['standard', 'glassCannon', 'tank'];
   for (let i = 0; i < 10; i++) {
     const card = document.querySelector(`.lobby-card[data-slot="${i}"]`);
     if (!card) continue;
@@ -205,12 +207,36 @@ export function renderLobbyCards() {
         const dy = (canvas.height - dh) / 2;
         ctx.drawImage(state.cardSheet, f.x, f.y, f.w, f.h, dx, dy, dw, dh);
       }
+      const isOwn = p.id === state.myId;
+      const build = p.playerBuild || 'standard';
+      let buildEl = card.querySelector('.lobby-card-build');
+      if (isOwn) {
+        if (!buildEl) {
+          buildEl = document.createElement('div');
+          buildEl.className = 'lobby-card-build';
+          card.appendChild(buildEl);
+        }
+        const idx = BUILD_CYCLE.indexOf(build);
+        const prev = BUILD_CYCLE[(idx - 1 + BUILD_CYCLE.length) % BUILD_CYCLE.length];
+        const next = BUILD_CYCLE[(idx + 1) % BUILD_CYCLE.length];
+        buildEl.innerHTML = '<span class="build-arrow" data-build="' + prev + '">\u25C0</span><span class="build-name">' + (BUILD_NAMES[build] || build) + '</span><span class="build-arrow" data-build="' + next + '">\u25B6</span>';
+        buildEl.querySelectorAll('.build-arrow').forEach(el => {
+          el.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (window.socket) window.socket.emit('setBuild', { build: el.dataset.build });
+          });
+        });
+      } else {
+        if (buildEl) buildEl.remove();
+      }
     } else {
       card.classList.add('empty');
       nameEl.textContent = 'Waiting...';
       nameEl.style.color = '';
       expEl.textContent = '';
       ctx.clearRect(0, 0, canvas.width, canvas.height);
+      const buildEl = card.querySelector('.lobby-card-build');
+      if (buildEl) buildEl.remove();
     }
   }
 }

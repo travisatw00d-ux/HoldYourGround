@@ -262,8 +262,11 @@ export function showCharStats() {
   if (!me) { el.innerHTML = '<div style="text-align:center;opacity:0.5">Not in game</div>'; return; }
   const itemName = (window.ITEMS && window.ITEMS[me.currentItem]) ? window.ITEMS[me.currentItem].name : me.currentItem;
   const pts = state.statPoints || 0;
+  const build = (state.playerMeta[state.myId] && state.playerMeta[state.myId].playerBuild) || 'standard';
+  const buildDisplay = { standard: 'Standard', glassCannon: 'Glass Cannon', tank: 'Tank' };
   let html = '';
   html += '<div class="char-stat-row" style="color:var(--accent);font-weight:700"><span>Points to Spend</span><span>' + pts + '</span></div>';
+  html += '<div class="char-stat-row" style="font-size:0.7rem;opacity:0.5"><span>Build</span><span>' + (buildDisplay[build] || build) + '</span></div>';
   html += '<div style="border-top:1px solid rgba(255,255,255,0.06);margin:6px 0"></div>';
   html += '<div class="char-stat-row"><span class="char-stat-label">Player</span><span class="char-stat-value">' + (me.name || '\u2014') + '</span></div>';
   html += '<div class="char-stat-row"><span class="char-stat-label">Level</span><span class="char-stat-value">' + (state.level || 1) + '</span></div>';
@@ -298,13 +301,12 @@ export function showCharStats() {
           window.socket.emit('spendStatPoint', { stat: row.dataset.stat });
           const p = state.players[state.myId];
           if (p) {
+            const scale = ({ standard: { mh:10,me:10,sp:0.03,ad:1,sc:16 }, glassCannon: { mh:5,me:10,sp:0.03,ad:2,sc:16 }, tank: { mh:15,me:10,sp:0.05,ad:0.5,sc:16 } })[build] || { mh:10,me:10,sp:0.03,ad:1,sc:16 };
             switch (row.dataset.stat) {
-              case 'maxHealth': p.health = (p.health || 100) + 10; p.maxHealth = (p.maxHealth || 100) + 10; break;
-              case 'maxEnergy': p.energy = (p.energy || 100) + 10; p.maxEnergy = (p.maxEnergy || 100) + 10; break;
-              case 'speed': p.speed = Math.min(16, (p.speed || 13) + 0.03); break;
-              case 'attackDmg': p.attackDmg = (p.attackDmg || 5) + 1; break;
-              case 'attackSpeed': p.attackSpeed = (p.attackSpeed || 800) - 20; break;
-              case 'turnSpeed': p.turnSpeed = (p.turnSpeed || 12) + 1; break;
+              case 'maxHealth': p.health = (+p.health || 100) + scale.mh; p.maxHealth = (+p.maxHealth || 100) + scale.mh; break;
+              case 'maxEnergy': p.energy = (+p.energy || 100) + scale.me; p.maxEnergy = (+p.maxEnergy || 100) + scale.me; break;
+              case 'speed': p.speed = Math.min(scale.sc, (+p.speed || 13) + scale.sp); break;
+              case 'attackDmg': p.attackDmg = (+p.attackDmg || 5) + scale.ad; break;
             }
           }
           state.statPoints--;

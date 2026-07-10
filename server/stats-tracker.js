@@ -1,7 +1,8 @@
 const fs = require('fs');
 const path = require('path');
 
-const LOG_PATH = path.join(__dirname, '..', 'data', 'game-stats.jsonl');
+const DATA_DIR = fs.existsSync('/data') ? '/data' : path.join(__dirname, '..', 'data');
+const LOG_PATH = path.join(DATA_DIR, 'game-stats.jsonl');
 
 function recordGameStart(roomId, playerNames) {
   try {

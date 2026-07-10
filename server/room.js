@@ -59,7 +59,7 @@ class Room {
     return this._lobbyOrder.map(id => {
       const p = this.players[id];
       if (!p) return null;
-      return { id, name: p.name, accountType: p.accountType || 'guest', level: p.lvl || 1, exp: p.exp || 0 };
+      return { id, name: p.name, accountType: p.accountType || 'guest', level: p.lvl || 1, exp: p.exp || 0, playerBuild: p.playerBuild || 'standard' };
     }).filter(Boolean);
   }
 
@@ -249,18 +249,19 @@ class Room {
     const result = expMod.fromCumulativeExp(p.exp);
     p.lvl = result.level;
     const levelGain = Math.max(0, p.lvl - prevLvl);
-    p.statPoints = (p.statPoints || 0) + levelGain;
-    this.io.to(playerId).emit('accountUpdate', { exp: result.exp, level: p.lvl, expToNext: expMod.getExpToNext(p.lvl), gold: p.gold, statPoints: p.statPoints });
+    if (levelGain > 0) p.statPoints = (p.statPoints || 0) + levelGain;
+    this.io.to(playerId).emit('accountUpdate', { exp: result.exp, level: p.lvl, expToNext: expMod.getExpToNext(p.lvl), gold: p.gold, statPoints: p.statPoints || 0 });
   }
 
   _saveRound() {
     const updateStmt = db.prepare('UPDATE accounts SET cumulative_exp = cumulative_exp + ? WHERE id = ?');
     for (const id in this.players) {
       const p = this.players[id];
-      if (p.isSpectator || !p.accountId || p.exp <= 0) continue;
+      if (p.isSpectator || !p.accountId) continue;
+      if (!Number.isFinite(p.exp) || p.exp <= 0) continue;
       const alreadyPersisted = this._persistedExp.get(p.id) || 0;
       const sessionGain = p.exp - alreadyPersisted;
-      if (sessionGain <= 0) continue;
+      if (!Number.isFinite(sessionGain) || sessionGain <= 0) continue;
       updateStmt.run(sessionGain, p.accountId);
       this._persistedExp.set(p.id, p.exp);
       this._persistedExp.set('sp_' + p.id, p.statPoints || 0);

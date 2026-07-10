@@ -193,8 +193,8 @@ module.exports = function registerSocket(socket, { io, broadcastRoomList, broadc
     p.exp = totalExp;
     room._persistedExp.set(socket.id, totalExp);
     playerMod.recalcStats(p);
-    const expToNext = expMod.getExpToNext(p.lvl);
-    socket.emit('accountUpdate', { exp: p.exp, level: p.lvl, expToNext, gold: p.gold, statPoints: p.statPoints });
+    const expResult = expMod.fromCumulativeExp(p.exp);
+    socket.emit('accountUpdate', { exp: expResult.exp, level: expResult.level, expToNext: expMod.getExpToNext(expResult.level), gold: p.gold, statPoints: p.statPoints });
     for (const oid in room.players) {
       room.io.to(oid).emit('playerInfo', playerMod.playerInfoObj(p));
     }
@@ -211,9 +211,30 @@ module.exports = function registerSocket(socket, { io, broadcastRoomList, broadc
     if (!p.investedPoints) p.investedPoints = {};
     p.investedPoints[stat] = (p.investedPoints[stat] || 0) + 1;
     playerMod.recalcStats(p);
-    socket.emit('accountUpdate', { exp: p.exp, level: p.lvl, expToNext: require('./exp').getExpToNext(p.lvl), gold: p.gold, statPoints: p.statPoints });
+    const expResult = require('./exp').fromCumulativeExp(p.exp);
+    socket.emit('accountUpdate', { exp: expResult.exp, level: expResult.level, expToNext: require('./exp').getExpToNext(expResult.level), gold: p.gold, statPoints: p.statPoints });
     for (const oid in room.players) {
       room.io.to(oid).emit('playerInfo', playerMod.playerInfoObj(p));
+    }
+  });
+
+  const BUILD_CYCLE = ['standard', 'glassCannon', 'tank'];
+
+  socket.on('setBuild', ({ build }) => {
+    const room = roomManager.getPlayerRoom(socket.id);
+    if (!room) return;
+    const p = room.players[socket.id];
+    if (!p) return;
+    if (BUILD_CYCLE.includes(build) && build !== p.playerBuild) {
+      const totalEarned = Object.values(p.investedPoints || {}).reduce((a, b) => a + b, 0) + (p.statPoints || 0);
+      p.investedPoints = {};
+      p.statPoints = totalEarned;
+      p.playerBuild = build;
+      playerMod.recalcStats(p);
+      if (p.health > p.maxHealth) p.health = p.maxHealth;
+      for (const oid in room.players) {
+        room.io.to(oid).emit('playerInfo', playerMod.playerInfoObj(p));
+      }
     }
   });
 

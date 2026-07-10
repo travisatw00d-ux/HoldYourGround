@@ -25,19 +25,36 @@ function randomSpawn(zombies, minDist) {
 
 function recalcStats(p) {
   const item = p.currentItem ? ITEMS[p.currentItem] : null;
-  p.speed = BASE_SPEED + (item ? (item.stats.speed || 0) : 0);
-  p.attackDmg = BASE_ATTACK_DMG + (item ? (item.stats.attackDmg || 0) : 0);
+  const build = p.playerBuild || 'standard';
+  const base = BUILD_BASE[build] || {};
+  const scale = BUILD_SCALING[build] || BUILD_SCALING.standard;
+  p.speed = (base.speed ?? BASE_SPEED) + (item ? (item.stats.speed || 0) : 0);
+  p.attackDmg = (base.attackDmg ?? BASE_ATTACK_DMG) + (item ? (item.stats.attackDmg || 0) : 0);
   p.attackSpeed = BASE_ATTACK_SPEED_MS + (item ? (item.stats.attackSpeed || 0) : 0);
   p.turnSpeed = BASE_TURN_SPEED + (item ? (item.stats.turnSpeed || 0) : 0);
-  p.maxHealth = BASE_HEALTH + (p.investedPoints.maxHealth || 0) * 10;
-  p.maxEnergy = 100 + (p.investedPoints.maxEnergy || 0) * 10;
+  p.maxHealth = base.maxHealth ?? BASE_HEALTH;
+  p.maxEnergy = 100;
   if (p.investedPoints) {
-    p.speed = Math.min(16, p.speed + (p.investedPoints.speed || 0) * 0.03);
-    p.attackDmg += (p.investedPoints.attackDmg || 0) * 1;
+    p.maxHealth += (p.investedPoints.maxHealth || 0) * scale.maxHealth;
+    p.maxEnergy += (p.investedPoints.maxEnergy || 0) * scale.maxEnergy;
+    p.speed = Math.min(scale.speedCap || 16, p.speed + (p.investedPoints.speed || 0) * scale.speed);
+    p.attackDmg += (p.investedPoints.attackDmg || 0) * scale.attackDmg;
     p.attackSpeed += (p.investedPoints.attackSpeed || 0) * (-20);
     p.turnSpeed += (p.investedPoints.turnSpeed || 0) * 1;
   }
+  if (p.health > p.maxHealth) p.health = p.maxHealth;
 }
+
+const BUILD_SCALING = {
+  standard: { maxHealth: 10, maxEnergy: 10, speed: 0.03, attackDmg: 1, speedCap: 16 },
+  glassCannon: { maxHealth: 5, maxEnergy: 10, speed: 0.03, attackDmg: 2, speedCap: 16 },
+  tank: { maxHealth: 15, maxEnergy: 10, speed: 0.05, attackDmg: 0.5, speedCap: 16 }
+};
+
+const BUILD_BASE = {
+  glassCannon: { maxHealth: 80, attackDmg: 8 },
+  tank: { maxHealth: 150, speed: 11, attackDmg: 3 }
+};
 
 let colorIndex = 0;
 
@@ -101,7 +118,8 @@ function addPlayer(id, name, players, zombies, accountType, accountId) {
     _jabHitCleared: 0,
     isSpectator: false,
     statPoints: 0,
-    investedPoints: {}
+    investedPoints: {},
+    playerBuild: 'standard'
   };
   recalcStats(players[id]);
 }
@@ -165,10 +183,11 @@ function playerInfoObj(p) {
     playerClass: p.playerClass || 'knight',
     attackStyle: p.attackStyle || 'jab',
     isSpectator: p.isSpectator,
-    statPoints: p.statPoints || 0
+    statPoints: p.statPoints || 0,
+    playerBuild: p.playerBuild || 'standard'
   };
 }
 
 function resetColorIndex() { colorIndex = 0; }
 
-module.exports = { randomSpawn, recalcStats, addPlayer, respawnPlayer, playerInfoObj, resetColorIndex, setFullscreen, setCameraZoom };
+module.exports = { randomSpawn, recalcStats, addPlayer, respawnPlayer, playerInfoObj, resetColorIndex, setFullscreen, setCameraZoom, BUILD_SCALING, BUILD_BASE };

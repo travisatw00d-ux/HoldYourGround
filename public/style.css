@@ -953,6 +953,34 @@ button:active {
   font-style: italic;
 }
 
+.lobby-card-build {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+  font-size: 0.7rem;
+  color: var(--accent);
+  user-select: none;
+}
+
+.build-arrow {
+  cursor: pointer;
+  padding: 0 2px;
+  font-size: 0.65rem;
+  color: rgba(255, 255, 255, 0.4);
+  transition: color 0.15s;
+}
+
+.build-arrow:hover {
+  color: var(--accent);
+}
+
+.build-name {
+  font-weight: 600;
+  min-width: 60px;
+  text-align: center;
+}
+
 .lobby-actions {
   display: flex;
   gap: 10px;
