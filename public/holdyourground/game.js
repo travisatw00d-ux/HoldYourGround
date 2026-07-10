@@ -156,11 +156,20 @@ socket.on('admin:stats', (data) => {
   html += '<div>Version: ' + (data.build || '\u2014') + '</div>';
   html += '<div>Games (24h): ' + (data.gamesPlayed24h ?? '\u2014') + '</div>';
   html += '<div>Players (24h): ' + (data.playersPlayed24h ?? '\u2014');
-  const names = data.playersPlayed24hList;
-  if (names && names.length > 0) {
+  const pnames = data.playersPlayed24hList;
+  if (pnames && pnames.length > 0) {
     html += ' <span id="players24hToggle" style="cursor:pointer;opacity:0.5;font-size:0.65rem">[show]</span>';
     html += '<div id="players24hList" class="hidden" style="margin-top:2px;padding-left:8px;opacity:0.6">';
-    for (const n of names) html += '<div>' + n + '</div>';
+    for (const n of pnames) html += '<div>' + n + '</div>';
+    html += '</div>';
+  }
+  html += '</div>';
+  html += '<div>Visitors (24h): ' + (data.visitors24h ?? '\u2014');
+  const vnames = data.visitors24hList;
+  if (vnames && vnames.length > 0) {
+    html += ' <span id="visitors24hToggle" style="cursor:pointer;opacity:0.5;font-size:0.65rem">[show]</span>';
+    html += '<div id="visitors24hList" class="hidden" style="margin-top:2px;padding-left:8px;opacity:0.6">';
+    for (const n of vnames) html += '<div>' + n + '</div>';
     html += '</div>';
   }
   html += '</div>';
@@ -204,6 +213,14 @@ socket.on('admin:stats', (data) => {
   document.getElementById('players24hToggle')?.addEventListener('click', () => {
     const el = document.getElementById('players24hList');
     const toggle = document.getElementById('players24hToggle');
+    if (el && toggle) {
+      el.classList.toggle('hidden');
+      toggle.textContent = el.classList.contains('hidden') ? '[show]' : '[hide]';
+    }
+  });
+  document.getElementById('visitors24hToggle')?.addEventListener('click', () => {
+    const el = document.getElementById('visitors24hList');
+    const toggle = document.getElementById('visitors24hToggle');
     if (el && toggle) {
       el.classList.toggle('hidden');
       toggle.textContent = el.classList.contains('hidden') ? '[show]' : '[hide]';

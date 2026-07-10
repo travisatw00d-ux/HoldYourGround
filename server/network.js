@@ -47,6 +47,8 @@ function broadcastLobbyUpdate(room) {
 function joinLobby(socket) {
   lobbySockets.add(socket.id);
   broadcastLobbyCount();
+  const name = socket.account?.displayName || socket._guestName || 'anon';
+  try { require('./stats-tracker').recordVisit(name); } catch (e) {}
 }
 
 function leaveLobby(socket) {
