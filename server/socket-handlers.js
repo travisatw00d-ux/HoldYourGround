@@ -3,7 +3,7 @@ const auth = require('./auth');
 const playerMod = require('./player');
 const roomManager = require('./game-loop');
 const expMod = require('./exp');
-const { getStats24h } = require('./stats-tracker');
+const { getStats24h, recordVisit } = require('./stats-tracker');
 const os = require('os');
 const fs = require('fs');
 const path = require('path');
@@ -37,6 +37,7 @@ module.exports = function registerSocket(socket, { io, broadcastRoomList, broadc
       }
       activeSessions.set(accountId, socket.id);
       socket.account = result.account;
+      recordVisit(result.account.displayName);
       socket.emit('authSuccess', { account: result.account, rooms: roomManager.getRoomList() });
       console.log(`[${socket.id}] logged in as "${result.account.username}"`);
     } else {
@@ -46,6 +47,7 @@ module.exports = function registerSocket(socket, { io, broadcastRoomList, broadc
 
   socket.on('playAsGuest', ({ name }) => {
     socket._guestName = name;
+    recordVisit(name);
     socket.emit('guestJoined', { name, rooms: roomManager.getRoomList() });
     console.log(`[${socket.id}] playing as guest "${name}"`);
   });

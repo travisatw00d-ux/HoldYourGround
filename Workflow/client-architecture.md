@@ -27,23 +27,23 @@ index.html → game.js
 
 | Module | Lines | Role |
 |---|---|---|
-| `game.js` | 233 | Orchestrator, event bindings, intervals |
-| `state.js` | 73 | All shared state |
+| `game.js` | 420 | Orchestrator, event bindings, intervals |
+| `state.js` | 76 | All shared state |
 | `net.js` | 18 | Socket connect + build checker |
-| `net-events.js` | 431 | Socket event handlers + binary parser |
+| `net-events.js` | 467 | Socket event handlers + binary parser |
 | `render.js` | 229 | Main render loop (rAF) |
-| `render-entity.js`| 241 | Entity drawing |
-| `anims.js` | 483 | Animation engine |
-| `render-ui.js` | 229 | UI draws + leaderboard |
+| `render-entity.js`| 257 | Entity drawing |
+| `anims.js` | 510 | Animation engine |
+| `render-ui.js` | 275 | UI draws + leaderboard |
 | `hud.js` | 421 | HUD bar rendering |
 | `camera.js` | 26 | Camera calc |
 | `input.js` | 125 | Keyboard/mouse |
 | `audio.js` | 117 | Sound system |
 | `assets.js` | 121 | Load images + enterGame |
-| `next-wave-popup.js` | 189 | Wave popup |
-| `ui.js` | 224 | DOM + screens + auth |
+| `next-wave-popup.js` | 215 | Wave popup |
+| `ui.js` | 335 | DOM + screens + auth |
 | `diag.js` | 26 | Diagnostics overlay |
-| `game-data.js` | 326 | Constants & data |
+| `game-data.js` | 320 | Constants & data |
 | `callback-registry.js` | 11 | Callback registration |
 
 See [rendering-system.md](./rendering-system.md), [animation-system.md](./animation-system.md), [combat-system.md](./combat-system.md), [protocol.md](./protocol.md).

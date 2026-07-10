@@ -46,5 +46,7 @@ See [wave-system.md](./wave-system.md) for mob config and spawning, [combat-syst
 | `admin:getStats` | Admin only | Returns general stats: uptime, rooms, players, games/players 24h. |
 | `admin:getServerStats` | Admin only | Returns RSS/VM memory, CPU lifetime + 10s realtime sampler. |
 | `admin:getPlayers` | Admin only | Returns all connected sockets alphabetically with name/type/room. |
+| `setBuild` | All players | Changes `player.build`. Redistributes invested points to statPoints, recalcs stats. |
+| `spendStatPoint` | All players | Spends one stat point on a stat. Build-scaling affects the bonus amount. |
 
 See [join-queue.md](./join-queue.md), [results-rejoin.md](./results-rejoin.md), [match-lifecycle.md](./match-lifecycle.md) for phase flow and queue rules.

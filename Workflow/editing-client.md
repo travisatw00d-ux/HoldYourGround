@@ -16,6 +16,8 @@ All client files live in `public/holdyourground/lib/`. Entry: `game.js` (importe
 | NW popup | `lib/next-wave-popup.js` | wave-system.md |
 | Socket handling | `lib/net-events.js` (registerEvents) | protocol.md |
 | Admin stats panel | `game.js` (admin:stats/serverStats handlers), `lib/ui.js` (showStatsPanel), `style.css` (stats-*) | server-architecture.md |
+| Char Stats panel | `lib/ui.js` (showCharStats/hideCharStats), `game.js` (C key toggle), `style.css` (.char-stats-*) | — |
+| Build selector (lobby) | `lib/render-ui.js` (renderLobbyCards), `lib/net-events.js` (playerBuild in playerInfo) | — |
 | Online players list | `game.js` (admin:getPlayers handler), `socket-handlers.js` (admin:getPlayers) | server-architecture.md |
 | Asset loading | `lib/assets.js` (enterGame, ensureAssets) | — |
 | Audio | `lib/audio.js` (playSound, playMobSound) | — |
