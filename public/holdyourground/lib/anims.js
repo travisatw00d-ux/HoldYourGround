@@ -122,8 +122,13 @@ function getKnightIdleVis(handKey, styleOverride) {
     const elapsed = performance.now() - state.idleTransition.startTime;
     const dur = state.idleTransition.durationMs;
     const t = Math.min(1, elapsed / dur);
-    const from = handKey === 'knight_sword' ? state.idleTransition.fromSword : state.idleTransition.fromHand;
-    const to = handKey === 'knight_sword' ? state.idleTransition.toSword : state.idleTransition.toHand;
+    // knight_right_hand (the unarmed fist) shares the transition's "sword"
+    // slot with knight_sword — see the swordTargetKey comment in
+    // playReturnAnim() for why. knight_sword and knight_right_hand are drawn
+    // mutually exclusively (armed vs unarmed) so there's never a conflict.
+    const isPrimarySlot = handKey === 'knight_sword' || handKey === 'knight_right_hand';
+    const from = isPrimarySlot ? state.idleTransition.fromSword : state.idleTransition.fromHand;
+    const to = isPrimarySlot ? state.idleTransition.toSword : state.idleTransition.toHand;
     const vis = lerpPosePolar(from, to, t);
     if (t >= 1) state.idleTransition = null;
     const sway = getIdleSway(handKey);
@@ -134,7 +139,20 @@ function getKnightIdleVis(handKey, styleOverride) {
       rotation: +(vis.rotation + sway.rotOffset).toFixed(2)
     };
   }
-  const style = styleOverride || state.attackStyle || 'jab';
+  const me = state.players[state.myId];
+  // Unarmed's fist idle pose is always the basic (jab) pose, never the
+  // player's jab/swing toggle — KNIGHT_VISUALS.swing.knight_right_hand is a
+  // leftover duplicate of the sword's swing pose, not a real fist pose (that
+  // was the "idle position looks like end of swing attack" bug). The right
+  // hand slot is unarmed-exclusive (only ever drawn via drawKnightRightHand),
+  // so it's always forced. The left hand (knight_hand) is shared with the
+  // armed off-hand grip, so it's only forced when this is the local player
+  // and currently unarmed with no explicit style override requested (remote
+  // unarmed forcing happens at the render-entity.js call site instead, since
+  // "me" here is always the local player).
+  const forceJab = handKey === 'knight_right_hand'
+    || (handKey === 'knight_hand' && !styleOverride && me && !me.currentItem);
+  const style = forceJab ? 'jab' : (styleOverride || state.attackStyle || 'jab');
   const base = KNIGHT_VISUALS?.[style]?.[handKey];
   if (!base) return null;
   const sway = getIdleSway(handKey);
@@ -153,6 +171,10 @@ function startIdleTransition(newStyle) {
   if (oldStyle === newStyle) return;
   const visuals = KNIGHT_VISUALS;
   if (!visuals?.[oldStyle] || !visuals?.[newStyle]) return;
+  // Unarmed fists always sit at the basic (jab) pose regardless of the jab/
+  // swing toggle (see forceJab in getKnightIdleVis), so toggling styles while
+  // unarmed has nothing to visually blend — skip the transition entirely.
+  if (!me.currentItem) return;
   state.idleTransition = {
     fromSword: { ...visuals[oldStyle].knight_sword },
     fromHand: { ...visuals[oldStyle].knight_hand },
@@ -179,20 +201,25 @@ function getKnightInterpolatedVis(handKey) {
 }
 
 function getKnightRemoteVis(handKey, p) {
-  const style = state.playerMeta[p.id]?.attackStyle || 'jab';
+  // idleStyle (jab/swing) governs the resting pose target; animStyle governs
+  // which KNIGHT_ANIMATIONS entry actually plays — unarmed always uses the
+  // 'unarmed' combo set regardless of the player's jab/swing toggle.
+  const idleStyle = state.playerMeta[p.id]?.attackStyle || 'jab';
+  const isUnarmed = !p.currentItem;
+  const animStyle = isUnarmed ? 'unarmed' : idleStyle;
   const st = _remoteAnimState.get(p.id);
   const stillRelevant = p.attacking || (p.comboChainWindow && (p.comboStep || 0) > 0);
 
   if (st && st.key === p.attackStartTime && stillRelevant) {
   } else if (p.attacking) {
     const step = p.comboStep || 1;
-    const comboKey = style + '_combo' + step;
-    const anim = KNIGHT_ANIMATIONS?.[comboKey] || KNIGHT_ANIMATIONS?.[style + '_combo1'];
+    const comboKey = animStyle + '_combo' + step;
+    const anim = KNIGHT_ANIMATIONS?.[comboKey] || KNIGHT_ANIMATIONS?.[animStyle + '_combo1'];
     if (!anim || !anim.knight_sword || anim.knight_sword.keyframes.length < 2) return null;
-    const isSpin = step >= 4 && style === 'swing';
+    const isSpin = step >= 4 && animStyle === 'swing';
     const totalFrames = anim.segments.reduce((a, b) => a + b, 0);
     const segs = anim.segments;
-    const doHold = style === 'swing' && step < 5;
+    const doHold = animStyle === 'swing' && step < 5;
     const midKf = Math.floor(anim.knight_sword.keyframes.length / 2);
     let halfFrames = 0;
     for (let i = 0; i < midKf && i < segs.length; i++) halfFrames += segs[i];
@@ -231,7 +258,7 @@ function getKnightRemoteVis(handKey, p) {
     const relTotal = entry.totalFrames;
     const relDuration = (relTotal / 60) * 1000 / 2;
     if (performance.now() - entry.startTime >= relDuration) {
-      if (entry.comboStep === 2 && style === 'swing') {
+      if (entry.comboStep === 2 && animStyle === 'swing') {
         entry.phase = 'returning';
         entry.returnStart = performance.now();
       } else {
@@ -252,7 +279,14 @@ function getKnightRemoteVis(handKey, p) {
   const duration = (total / 60) * 1000 / 2;
   if (entry.phase === 'returning') {
     const from = entry.returnFrom[handKey];
-    const baseIdle = KNIGHT_VISUALS?.[style]?.[handKey];
+    // knight_sword's idle target is knight_right_hand while unarmed — see
+    // swordTargetKey in playReturnAnim() for the local-player equivalent.
+    const idleKey = (isUnarmed && handKey === 'knight_sword') ? 'knight_right_hand' : handKey;
+    // Unarmed always returns to the basic (jab) fist pose regardless of the
+    // player's jab/swing toggle — same reasoning as playReturnAnim()'s style
+    // override for the local player.
+    const baseIdleStyle = isUnarmed ? 'jab' : idleStyle;
+    const baseIdle = KNIGHT_VISUALS?.[baseIdleStyle]?.[idleKey];
     if (!from || !baseIdle) { _remoteAnimState.delete(p.id); return null; }
     const rElapsed = performance.now() - entry.returnStart;
     if (rElapsed >= 350) { _remoteAnimState.delete(p.id); return null; }
@@ -410,13 +444,21 @@ function startAttackAnim(lockedAngle, comboStep) {
   const me = state.players[state.myId];
   if (!me) return;
   state.idleTransition = null;
-  state._mirrorSword = (state.attackStyle === 'swing') && (comboStep || 1) >= 2;
+  const isUnarmed = !me.currentItem;
+  // Unarmed punches never mirror (that flip is a swing-combo sword-in-left-
+  // hand visual trick — doesn't apply to bare fists) and never hold mid-swing
+  // waiting on a chain input (maxCombo is 2, so it always just plays through,
+  // same as jab). style still reflects the player's jab/swing toggle (used
+  // for idle stance + whenever they re-equip); animStyle is what actually
+  // picks the KNIGHT_ANIMATIONS entry.
+  state._mirrorSword = !isUnarmed && (state.attackStyle === 'swing') && (comboStep || 1) >= 2;
   const style = state.attackStyle || 'jab';
-  const comboKey = style + '_combo' + (comboStep || 1);
+  const animStyle = isUnarmed ? 'unarmed' : style;
+  const comboKey = animStyle + '_combo' + (comboStep || 1);
   const knightFrame = state.knightFrames?.['T1KnightHead.png']?.frame;
-  const isSwing = state.attackStyle === 'swing';
+  const isSwing = !isUnarmed && state.attackStyle === 'swing';
   if (knightFrame) {
-    const anim = KNIGHT_ANIMATIONS?.[comboKey] || KNIGHT_ANIMATIONS?.[style + '_combo1'];
+    const anim = KNIGHT_ANIMATIONS?.[comboKey] || KNIGHT_ANIMATIONS?.[animStyle + '_combo1'];
     if (!anim || !anim.knight_sword || anim.knight_sword.keyframes.length < 2) return;
     const totalFrames = anim.segments.reduce((a, b) => a + b, 0);
     const segs = anim.segments;
@@ -426,7 +468,7 @@ function startAttackAnim(lockedAngle, comboStep) {
     const locked = (typeof lockedAngle === 'number') ? lockedAngle : (me.facingAngle || 0);
     const doHold = isSwing && comboStep < 5;
     const holdFrame = doHold ? (comboStep === 1 || comboStep === 4 ? halfFrames : totalFrames) : 0;
-    state.localAnim = { type: 'knight', knight_sword: { keyframes: anim.knight_sword.keyframes }, knight_hand: { keyframes: anim.knight_hand.keyframes }, segments: anim.segments, frame: 0, totalFrames, lockedAngle: locked, startTime: performance.now(), _holdFrame: holdFrame, _holding: doHold, _spinning: comboStep === 4 && isSwing, spinStartAngle: locked, spinStartTime: performance.now(), _comboStep: comboStep, _style: style };
+    state.localAnim = { type: 'knight', knight_sword: { keyframes: anim.knight_sword.keyframes }, knight_hand: { keyframes: anim.knight_hand.keyframes }, segments: anim.segments, frame: 0, totalFrames, lockedAngle: locked, startTime: performance.now(), _holdFrame: holdFrame, _holding: doHold, _spinning: comboStep === 4 && isSwing, spinStartAngle: locked, spinStartTime: performance.now(), _comboStep: comboStep, _style: animStyle };
   } else {
     const anim = ANIMATIONS && ANIMATIONS[me.currentItem] && (ANIMATIONS[me.currentItem][comboKey] || ANIMATIONS[me.currentItem][style + '_combo1']);
     if (anim) {
@@ -460,13 +502,27 @@ function playReturnAnim() {
   state._mirrorSword = false;
   const curSword = getKnightInterpolatedVis('knight_sword');
   const curHand = getKnightInterpolatedVis('knight_hand');
-  const style = state.attackStyle || 'jab';
+  const me = state.players[state.myId];
+  const isUnarmed = !(me && me.currentItem);
+  // Unarmed always returns to the basic (jab) fist pose regardless of the
+  // jab/swing toggle — see forceJab in getKnightIdleVis for why: the swing
+  // style's "right hand" entry is a leftover sword-pose duplicate, not a
+  // real fist idle, and using it here was the bug where finishing a swing
+  // attack while unarmed left the fists frozen looking like the end of a
+  // sword swing.
+  const style = isUnarmed ? 'jab' : (state.attackStyle || 'jab');
   const visuals = KNIGHT_VISUALS?.[style];
-  if (curSword && curHand && visuals) {
+  // The animated data for the "primary hand" always lives under the
+  // knight_sword slot (see the unarmed_combo comment in game-data.js), but
+  // when unarmed its idle target is knight_right_hand, not knight_sword —
+  // using the wrong key here would blend to the sword's idle spot and then
+  // visibly pop to the fist's real idle spot once the transition finishes.
+  const swordTargetKey = isUnarmed ? 'knight_right_hand' : 'knight_sword';
+  if (curSword && curHand && visuals && visuals[swordTargetKey]) {
     state.idleTransition = {
       fromSword: { offsetX: curSword.offsetX, offsetY: curSword.offsetY, scale: curSword.scale, rotation: curSword.rotation },
       fromHand: { offsetX: curHand.offsetX, offsetY: curHand.offsetY, scale: curHand.scale, rotation: curHand.rotation },
-      toSword: { ...visuals.knight_sword },
+      toSword: { ...visuals[swordTargetKey] },
       toHand: { ...visuals.knight_hand },
       startTime: performance.now(),
       durationMs: 350

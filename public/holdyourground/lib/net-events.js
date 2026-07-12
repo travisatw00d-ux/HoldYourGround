@@ -7,6 +7,7 @@ import { callbacks } from './callback-registry.js';
 import { playSound, playMobSound, loadSounds } from './audio.js';
 import { ensureAssets, enterGame } from './assets.js';
 import { showNWPopup, toggleNWPopup, resetWavePopup, hideNWPopup, populateNWRows, updateNWCounts } from './next-wave-popup.js';
+import { hideCharStats, hideInventory, showCharStats, showInventory, hideDropTooltip, $ } from './ui.js';
 import { ZOMBIE_ANIMATIONS, MOB_TYPES } from './game-data.js';
 
 export function registerEvents(socket) {
@@ -24,9 +25,34 @@ export function registerEvents(socket) {
     state.worldH = arenaHeight;
   });
 
+  // World item drops (loot from zombie kills — server/item-drops.js).
+  // itemDropsInit seeds the current list on join (room.getItemDropsList());
+  // itemDropAdded/itemDropRemoved keep it live afterward, broadcast
+  // room-wide since any player can see and click-pick-up any drop.
+  socket.on('itemDropsInit', ({ drops }) => {
+    state.itemDrops = {};
+    for (const d of drops) state.itemDrops[d.id] = d;
+  });
+  socket.on('itemDropAdded', (d) => { state.itemDrops[d.id] = d; });
+  socket.on('itemDropRemoved', ({ id }) => {
+    delete state.itemDrops[id];
+    // Covers the case where the drop under the cursor got picked up (by us
+    // or someone else) without the mouse moving afterward — input.js's own
+    // hover-tracking only re-checks on mousemove, so the tooltip would
+    // otherwise keep showing a now-gone item until the next mouse jiggle.
+    hideDropTooltip();
+  });
+  // Full wipe at the start of the next wave (see room.js's clearItemDrops(),
+  // called from phase-manager.js's daytime->nighttime transition) — one
+  // broadcast instead of replaying individual itemDropRemoved events.
+  socket.on('itemDropsCleared', () => {
+    state.itemDrops = {};
+    hideDropTooltip();
+  });
+
   socket.on('joined', async () => {
     resetKeys();
-    state.players = {}; state.zombies = []; state.activePlayerCount = 0; state.lobbyPlayers = [];
+    state.players = {}; state.zombies = []; state.itemDrops = {}; state.activePlayerCount = 0; state.lobbyPlayers = [];
     state.lbSig = ''; state.matchPhase = null; state.phaseTimer = 0; state.isSpectator = false;
     state.isDeadSpectating = false; state.queuedPlayers = []; state.spectatingTargetIndex = 0;
     state.localAnim = null; state._mirrorSword = false; state.currentWave = 0; state.serverLevel = 0;
@@ -106,10 +132,25 @@ export function registerEvents(socket) {
         const p = {
           id, x, y, health, alive, attacking, facingAngle, attackLockedAngle, attackStartTime, kills, lvl, comboStep, comboChainWindow, name, isSpectator,
           energy, maxEnergy,
-          color: meta.color || '#888888', currentItem: meta.currentItem || 'wooden_sword',
+          color: meta.color || '#888888',
+          // currentItem can be legitimately null (weapon slot dragged empty) —
+          // only fall back to the starter sword when meta has never been set at
+          // all (brand new player, no playerInfo received yet). `!== undefined`
+          // instead of `||` so an intentional null survives every rebuild below.
+          currentItem: meta.currentItem !== undefined ? meta.currentItem : 'wooden_sword',
           inventory: meta.inventory || ['wooden_sword'], maxHealth: meta.maxHealth || 100,
           speed: meta.speed != null ? meta.speed : 13, attackDmg: meta.attackDmg != null ? meta.attackDmg : 5,
-          attackSpeed: meta.attackSpeed != null ? meta.attackSpeed : 800
+          attackSpeed: meta.attackSpeed != null ? meta.attackSpeed : 800,
+          // Equipment/bag/derived-stat fields aren't part of the binary protocol
+          // at all — they only ever come from playerMeta (the last playerInfo
+          // payload). This whole `p` object replaces state.players[id] on every
+          // snapshot (~18x/sec), so these must be re-applied here every time or
+          // they vanish the moment the next snapshot arrives after a drag/equip.
+          equipment: meta.equipment, inventorySlots: meta.inventorySlots,
+          defense: meta.defense != null ? meta.defense : 0,
+          fortune: meta.fortune != null ? meta.fortune : 0,
+          turnSpeed: meta.turnSpeed != null ? meta.turnSpeed : 18,
+          playerClass: meta.playerClass || 'knight'
         };
         if (old && Math.abs(x - old.x) < 200 && Math.abs(y - old.y) < 200) { p.px = old.x; p.py = old.y; p.pfacingAngle = old.facingAngle; }
         else { p.px = x; p.py = y; p.pfacingAngle = facingAngle; }
@@ -186,13 +227,31 @@ export function registerEvents(socket) {
     if (state.players[info.id]) {
       const p = state.players[info.id];
       p.name = info.name; p.color = info.color || '#888888';
-      p.currentItem = info.currentItem || 'wooden_sword'; p.maxHealth = info.maxHealth || 100;
+      p.currentItem = info.currentItem !== undefined ? info.currentItem : 'wooden_sword'; p.maxHealth = info.maxHealth || 100;
+      p.equipment = info.equipment || p.equipment;
+      p.inventorySlots = info.inventorySlots || p.inventorySlots;
+      p.defense = info.defense != null ? info.defense : 0;
+      p.fortune = info.fortune != null ? info.fortune : 0;
       p.speed = info.speed != null ? info.speed : 13;
       p.attackDmg = info.attackDmg != null ? info.attackDmg : 5;
       p.attackSpeed = info.attackSpeed != null ? info.attackSpeed : 800;
       p.turnSpeed = info.turnSpeed != null ? info.turnSpeed : 18;
       state.lbSig = '';
       updateLeaderboard();
+      // Re-render the inventory panel's slots so a drag-and-drop move (or an
+      // item pickup) shows up immediately while the panel is open, instead of
+      // only refreshing the next time it's opened. showInventory() is cheap
+      // (a few DOM writes) and only runs when the panel is actually visible.
+      if (info.id === state.myId && $.inventoryPanel && !$.inventoryPanel.classList.contains('hidden')) {
+        showInventory();
+      }
+      // Same idea for Char Stats — equipping/unequipping anything changes
+      // attackDmg/attackSpeed/defense/etc, and the panel should reflect that
+      // the instant it happens (e.g. dragging the sword off the weapon slot),
+      // not just the next time it's reopened.
+      if (info.id === state.myId && $.charStatsPanel && !$.charStatsPanel.classList.contains('hidden')) {
+        showCharStats();
+      }
     }
   });
   socket.on('playerLeft', (id) => { delete state.playerMeta[id]; });
@@ -356,8 +415,12 @@ export function registerEvents(socket) {
         updateJoinButton();
         return;
       }
+      hideCharStats();
+      hideInventory();
       document.getElementById('lobbyScreen').classList.remove('hidden');
-      document.getElementById('resultsOverlay').classList.remove('hidden');
+    hideCharStats();
+    hideInventory();
+    document.getElementById('resultsOverlay').classList.remove('hidden');
       document.getElementById('resultsTimerValue').textContent = Math.ceil(timer / 1000);
       state.screen = 'results';
     } else if (phase !== 'waiting' && (state.screen === 'lobby' || state.screen === 'joining' || state.screen === 'results')) {

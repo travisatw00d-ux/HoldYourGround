@@ -87,6 +87,7 @@ module.exports = function registerSocket(socket, { io, broadcastRoomList, broadc
     if (room.players[socket.id]?.isSpectator) {
       socket.emit('spectatorAssigned');
     }
+    socket.emit('itemDropsInit', { drops: room.getItemDropsList() });
     socket.emit('lobbyUpdate', { players: room.getFilteredLobbyPlayers() });
     socket.emit('matchPhase', { phase: room.matchPhase, timer: room.phaseTimer, wave: room.currentWave, activePlayers: room.getActivePlayerIds() });
     if (room.matchPhase === 'ended') {
@@ -135,6 +136,16 @@ module.exports = function registerSocket(socket, { io, broadcastRoomList, broadc
   socket.on('equip', ({ slot }) => {
     const room = roomManager.getPlayerRoom(socket.id);
     if (room) room.handleEquip(socket.id, slot);
+  });
+
+  socket.on('moveItem', ({ from, to }) => {
+    const room = roomManager.getPlayerRoom(socket.id);
+    if (room) room.handleMoveItem(socket.id, from, to);
+  });
+
+  socket.on('pickupItem', ({ id }) => {
+    const room = roomManager.getPlayerRoom(socket.id);
+    if (room) room.handlePickupItem(socket.id, id);
   });
 
   socket.on('fullscreen', ({ enabled }) => {

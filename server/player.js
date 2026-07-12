@@ -1,8 +1,13 @@
 const {
   WORLD_W, WORLD_H, PLAYER_RADIUS, BASE_SPEED, BASE_ATTACK_DMG,
   BASE_ATTACK_SPEED_MS, BASE_HEALTH, COLORS, SPAWN_MIN_DIST, ITEMS,
-  BASE_TURN_SPEED
+  ITEM_SLOTS, CLASS_LOADOUTS, INVENTORY_SIZE, BASE_TURN_SPEED
 } = require('./config');
+const { resolveBaseItemId, calculateItemStatBonuses } = require('./item-generator');
+
+function getLoadout(playerClass) {
+  return CLASS_LOADOUTS[playerClass] || CLASS_LOADOUTS.knight;
+}
 
 function randomSpawn(zombies, minDist) {
   const margin = PLAYER_RADIUS * 4;
@@ -23,17 +28,43 @@ function randomSpawn(zombies, minDist) {
   return { x: WORLD_W / 2 + (Math.random() - 0.5) * 200, y: WORLD_H / 2 + (Math.random() - 0.5) * 200 };
 }
 
+// Sums stats off every equipped item: weapon (p.currentItem, hotbar-swappable)
+// plus armor/ring/necklace/helmet (p.equipment). Each slot can hold either a
+// plain base-item-id string (starter gear from CLASS_LOADOUTS, which never
+// rolls attributes) or a full rolled instance object (anything from a drop —
+// see item-generator.js/item-drops.js) — calculateItemStatBonuses() handles
+// both shapes and also applies scaling attributes against p.lvl.
+function equippedStatTotal(p, statKey) {
+  let total = 0;
+  if (p.currentItem) total += calculateItemStatBonuses(p.currentItem, p)[statKey] || 0;
+  const equipment = p.equipment;
+  if (equipment) {
+    for (const slot of ITEM_SLOTS) {
+      if (slot === 'weapon') continue;
+      const item = equipment[slot];
+      if (item) total += calculateItemStatBonuses(item, p)[statKey] || 0;
+    }
+  }
+  return total;
+}
+
 function recalcStats(p) {
-  const item = p.currentItem ? ITEMS[p.currentItem] : null;
   const build = p.playerBuild || 'standard';
   const base = BUILD_BASE[build] || {};
   const scale = BUILD_SCALING[build] || BUILD_SCALING.standard;
-  p.speed = (base.speed ?? BASE_SPEED) + (item ? (item.stats.speed || 0) : 0);
-  p.attackDmg = (base.attackDmg ?? BASE_ATTACK_DMG) + (item ? (item.stats.attackDmg || 0) : 0);
-  p.attackSpeed = BASE_ATTACK_SPEED_MS + (item ? (item.stats.attackSpeed || 0) : 0);
-  p.turnSpeed = BASE_TURN_SPEED + (item ? (item.stats.turnSpeed || 0) : 0);
-  p.maxHealth = base.maxHealth ?? BASE_HEALTH;
-  p.maxEnergy = 100;
+  p.speed = (base.speed ?? BASE_SPEED) + equippedStatTotal(p, 'speed');
+  p.attackDmg = (base.attackDmg ?? BASE_ATTACK_DMG) + equippedStatTotal(p, 'attackDmg');
+  p.attackSpeed = BASE_ATTACK_SPEED_MS + equippedStatTotal(p, 'attackSpeed');
+  p.turnSpeed = BASE_TURN_SPEED + equippedStatTotal(p, 'turnSpeed');
+  // Defense is tracked and displayed but not yet applied to incoming zombie
+  // damage in zombie-ai.js — that mitigation formula is follow-up combat work.
+  p.defense = equippedStatTotal(p, 'defense');
+  // Fortune/Luck is tracked and displayed (Char Stats, item tooltips) but
+  // nothing consumes it yet (e.g. affecting drop odds/rarity) — same
+  // "wired but not yet applied" status as defense above, follow-up work.
+  p.fortune = equippedStatTotal(p, 'fortune');
+  p.maxHealth = (base.maxHealth ?? BASE_HEALTH) + equippedStatTotal(p, 'maxHealth');
+  p.maxEnergy = 100 + equippedStatTotal(p, 'maxEnergy');
   if (p.investedPoints) {
     p.maxHealth += (p.investedPoints.maxHealth || 0) * scale.maxHealth;
     p.maxEnergy += (p.investedPoints.maxEnergy || 0) * scale.maxEnergy;
@@ -61,6 +92,8 @@ let colorIndex = 0;
 function addPlayer(id, name, players, zombies, accountType, accountId) {
   const spawn = randomSpawn(zombies, SPAWN_MIN_DIST);
   const ci = colorIndex++ % COLORS.length;
+  const playerClass = 'knight';
+  const loadout = getLoadout(playerClass);
   players[id] = {
     id,
     _idBytes: Buffer.from(id, 'utf8'),
@@ -79,8 +112,14 @@ function addPlayer(id, name, players, zombies, accountType, accountId) {
     maxEnergy: 100,
     attackCooldown: 0,
     facingAngle: 0,
-    currentItem: 'wooden_sword',
-    inventory: ['wooden_sword'],
+    currentItem: loadout.weapon,
+    inventory: [loadout.weapon],
+    equipment: { armor: loadout.armor, ring: loadout.ring, necklace: loadout.necklace, helmet: loadout.helmet || null },
+    // General-purpose item bag — distinct from `inventory` above (that's the
+    // weapon hotbar). Picked-up items land in the first null slot here; see
+    // addToInventory(). Fixed size, left-to-right/top-to-bottom like InvSlot1..16
+    // in hud-layout.json.
+    inventorySlots: new Array(INVENTORY_SIZE).fill(null),
     kills: 0,
     lastHitById: null,
     attacking: false,
@@ -93,7 +132,7 @@ function addPlayer(id, name, players, zombies, accountType, accountId) {
     lvl: 1,
     exp: 0,
     gold: 0,
-    playerClass: 'knight',
+    playerClass,
     cameraZoom: 1.0,
     viewW: 800,
     viewH: 600,
@@ -137,6 +176,99 @@ function setCameraZoom(id, players, opts) {
   if (opts && opts.viewH) p.viewH = opts.viewH;
 }
 
+// Puts a picked-up item into the first empty bag slot (left-to-right, top-to-
+// bottom — array index order matches InvSlot1..16 in hud-layout.json). Returns
+// the slot index it landed in, or -1 if the bag is full. Doesn't equip it —
+// that's a separate action (drag onto an equipment slot). `itemOrInstance` is
+// either a plain base-item-id string or a full rolled instance object (see
+// item-generator.js) — this function just stores whatever it's given, it
+// doesn't care which.
+function addToInventory(p, itemOrInstance) {
+  if (!p || !p.inventorySlots || !itemOrInstance) return -1;
+  const idx = p.inventorySlots.indexOf(null);
+  if (idx === -1) return -1;
+  p.inventorySlots[idx] = itemOrInstance;
+  return idx;
+}
+
+// Drag-and-drop item locations. Two shapes, matching the client's slot defs
+// (InvSlot1..16 -> bag index 0..15, EquipWeapon/Armor/Ring/Necklace/Helmet ->
+// equip slot names in ITEM_SLOTS):
+//   { kind: 'bag', index: 0..INVENTORY_SIZE-1 }
+//   { kind: 'equip', slot: 'weapon'|'armor'|'ring'|'necklace'|'helmet' }
+// 'weapon' is special-cased to p.currentItem (the existing hotbar-swappable
+// source of truth) rather than living in p.equipment like the other four.
+function getItemAtLocation(p, loc) {
+  if (!p || !loc) return null;
+  if (loc.kind === 'bag') {
+    if (!p.inventorySlots || loc.index < 0 || loc.index >= p.inventorySlots.length) return null;
+    return p.inventorySlots[loc.index] || null;
+  }
+  if (loc.kind === 'equip') {
+    if (loc.slot === 'weapon') return p.currentItem || null;
+    return (p.equipment && p.equipment[loc.slot]) || null;
+  }
+  return null;
+}
+
+function setItemAtLocation(p, loc, itemId) {
+  if (loc.kind === 'bag') {
+    p.inventorySlots[loc.index] = itemId;
+  } else if (loc.kind === 'equip') {
+    if (loc.slot === 'weapon') p.currentItem = itemId;
+    else p.equipment[loc.slot] = itemId;
+  }
+}
+
+// Slots that require the item's `class` to match the player's class in
+// addition to its `type` matching the slot name — weapon/armor/helmet are
+// class-specific gear; rings/necklaces are universal accessories.
+const CLASS_RESTRICTED_SLOTS = new Set(['weapon', 'armor', 'helmet']);
+
+function canPlaceItem(itemDef, loc, playerClass) {
+  if (loc.kind === 'bag') return true; // bag slots take any item
+  if (!itemDef) return false;
+  if (itemDef.type !== loc.slot) return false;
+  if (CLASS_RESTRICTED_SLOTS.has(loc.slot) && itemDef.class !== playerClass) return false;
+  return true;
+}
+
+// Moves an item between any two locations (bag<->bag, bag<->equip), and, for
+// equip slots, only if the item's type/class match — see canPlaceItem. If
+// the destination is already occupied, this SWAPS instead of no-oping (added
+// 2026-07-12 specifically so dragging a new ring/necklace onto an already-
+// equipped one replaces it and the displaced item lands in the exact bag
+// slot the new one came from) — the swap only goes through if the displaced
+// item is also valid to land in `from` (always true when `from` is a bag
+// slot, since canPlaceItem lets bag slots take anything; for an equip<->equip
+// drag both items' types would need to match the other slot too, which in
+// practice means only same-slot swaps are possible there). Returns true if
+// the move/swap happened (caller should recalcStats + broadcast playerInfo).
+function moveItem(p, from, to) {
+  if (!p || !from || !to) return false;
+  if (to.kind === 'bag' && (!p.inventorySlots || to.index < 0 || to.index >= p.inventorySlots.length)) return false;
+  if (to.kind === 'equip' && !ITEM_SLOTS.includes(to.slot)) return false;
+  if (from.kind === to.kind && from.kind === 'bag' && from.index === to.index) return false;
+  if (from.kind === to.kind && from.kind === 'equip' && from.slot === to.slot) return false;
+  const itemAtFrom = getItemAtLocation(p, from);
+  if (!itemAtFrom) return false;
+  const itemDefFrom = ITEMS[resolveBaseItemId(itemAtFrom)];
+  if (!canPlaceItem(itemDefFrom, to, p.playerClass)) return false;
+
+  const itemAtTo = getItemAtLocation(p, to);
+  if (itemAtTo) {
+    const itemDefTo = ITEMS[resolveBaseItemId(itemAtTo)];
+    if (!canPlaceItem(itemDefTo, from, p.playerClass)) return false; // displaced item wouldn't be valid back in `from`
+    setItemAtLocation(p, from, itemAtTo);
+    setItemAtLocation(p, to, itemAtFrom);
+    return true;
+  }
+
+  setItemAtLocation(p, from, null);
+  setItemAtLocation(p, to, itemAtFrom);
+  return true;
+}
+
 function respawnPlayer(id, players, zombies) {
   const p = players[id];
   if (!p) return;
@@ -177,8 +309,19 @@ function playerInfoObj(p) {
   return {
     id: p.id, name: p.name, color: p.color,
     currentItem: p.currentItem, inventory: p.inventory,
-    maxHealth: p.maxHealth, speed: p.speed, attackDmg: p.attackDmg, attackSpeed: p.attackSpeed,
-    turnSpeed: p.turnSpeed,
+    // Unified 5-slot view for HUD/character-window display. weapon mirrors
+    // currentItem (still the hotbar-swappable source of truth); armor/ring/
+    // necklace/helmet come from p.equipment.
+    equipment: {
+      weapon: p.currentItem,
+      armor: p.equipment && p.equipment.armor,
+      ring: p.equipment && p.equipment.ring,
+      necklace: p.equipment && p.equipment.necklace,
+      helmet: p.equipment && p.equipment.helmet
+    },
+    inventorySlots: p.inventorySlots,
+    maxHealth: p.maxHealth, maxEnergy: p.maxEnergy, speed: p.speed, attackDmg: p.attackDmg, attackSpeed: p.attackSpeed,
+    turnSpeed: p.turnSpeed, defense: p.defense || 0, fortune: p.fortune || 0,
     lvl: p.lvl || 1,
     playerClass: p.playerClass || 'knight',
     attackStyle: p.attackStyle || 'jab',
@@ -190,4 +333,4 @@ function playerInfoObj(p) {
 
 function resetColorIndex() { colorIndex = 0; }
 
-module.exports = { randomSpawn, recalcStats, addPlayer, respawnPlayer, playerInfoObj, resetColorIndex, setFullscreen, setCameraZoom, BUILD_SCALING, BUILD_BASE };
+module.exports = { randomSpawn, recalcStats, addPlayer, respawnPlayer, playerInfoObj, resetColorIndex, setFullscreen, setCameraZoom, addToInventory, moveItem, BUILD_SCALING, BUILD_BASE };

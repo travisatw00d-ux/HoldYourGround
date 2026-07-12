@@ -211,7 +211,7 @@ export function drawHUD(ctx) {
         ctx.shadowBlur = 0;
         ctx.restore();
       }
-      if (el.name === 'ServerLevel.png' || el.name === 'settingsgear.png') continue;
+      if (el.name === 'ServerLevel.png' || el.name === 'settingsgear.png' || el.name === 'inventory.png' || el.name === 'Stats.png') continue;
       const fr = fd.frame;
       const scl = isGroup ? 1 : viewportScale;
       const dw = sss.w * el.scale * scl;

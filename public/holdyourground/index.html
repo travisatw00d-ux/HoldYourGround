@@ -9,6 +9,12 @@
 <body>
   <div id="wrapper">
     <canvas id="canvas"></canvas>
+    <div id="dropTooltip" class="item-tooltip drop-tooltip hidden"></div>
+    <!-- Lives directly in #wrapper (not nested in #inventoryPanel) so the
+         panel's overflow:hidden can never clip it — it needs to be free to
+         extend past the panel's bottom/right edge. positionItemTooltip() in
+         ui.js positions it relative to #wrapper, same as positionDropTooltip(). -->
+    <div id="itemTooltip" class="item-tooltip hidden"></div>
 
     <div id="menu" class="overlay">
       <h1>Hold Your Ground</h1>
@@ -243,13 +249,15 @@
         </div>
       </div>
     </div>
-
     <div id="charStatsPanel" class="char-stats-panel hidden">
-      <div class="char-stats-header">
-        <span>Character Stats</span>
-        <button id="charStatsClose">&times;</button>
-      </div>
+      <canvas id="charStatsCanvas"></canvas>
+      <button id="charStatsClose">&times;</button>
       <div id="charStatsContent"></div>
+    </div>
+    <div id="inventoryPanel" class="inventory-panel hidden">
+      <div id="inventoryContent"><canvas id="inventoryCanvas"></canvas></div>
+      <div id="inventorySlotsLayer"></div>
+      <button id="inventoryClose" class="inventory-close">&times;</button>
     </div>
 
     <!-- Next Wave Popup -->

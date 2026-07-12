@@ -335,14 +335,9 @@ button:active {
 
 .char-stats-panel {
   position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 260px;
-  background: rgba(10, 10, 15, 0.95);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 10px;
   z-index: 30;
+  /* Clip to the panel's own bounds (set in JS to match the Stats.png art) so
+     stat-row text can never visually spill past the artwork like it was. */
   overflow: hidden;
 }
 
@@ -350,26 +345,43 @@ button:active {
   display: none;
 }
 
-.char-stats-header {
+#charStatsCanvas {
+  display: block;
+  pointer-events: none;
+}
+
+#charStatsContent {
+  position: absolute;
+  top: 10%;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  font-family: monospace;
+  color: rgba(255, 255, 255, 0.85);
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+#charStatsContent .char-stat-row {
+  cursor: pointer;
   display: flex;
-  align-items: center;
   justify-content: space-between;
-  padding: 12px 16px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-  font-size: 1rem;
-  font-weight: 600;
-  color: var(--accent);
+  gap: 6px;
 }
 
 #charStatsClose {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  z-index: 2;
   background: none;
   border: none;
-  color: rgba(255, 255, 255, 0.4);
-  font-size: 1.3rem;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 1.1rem;
   cursor: pointer;
   padding: 0;
-  width: 28px;
-  height: 28px;
+  width: 22px;
+  height: 22px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -377,16 +389,175 @@ button:active {
 }
 
 #charStatsClose:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.15);
   color: #fff;
 }
 
-#charStatsContent {
-  padding: 14px 16px;
+.inventory-panel {
+  position: absolute;
+  z-index: 30;
+  overflow: hidden;
+}
+
+.inventory-panel.hidden {
+  display: none;
+}
+
+#inventoryCanvas {
+  display: block;
+}
+
+#inventorySlotsLayer {
+  position: absolute;
+  inset: 0;
+  /* Layer itself doesn't intercept clicks — individual .inv-slot/.equip-slot
+     elements re-enable pointer-events so drag/drop (not built yet) can target
+     just the slots, not the whole panel. */
+  pointer-events: none;
+}
+
+.inv-slot, .equip-slot {
+  position: absolute;
+  pointer-events: auto;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   font-family: monospace;
-  font-size: 0.8rem;
-  line-height: 1.7;
+  font-size: 0.55rem;
+  color: rgba(255, 255, 255, 0.75);
+  text-align: center;
+  overflow: hidden;
+  /* No border/background by default — the slot art is already baked into
+     inventory.png. Borders only show up with HUD debug (J key) for alignment
+     checks, via .slot-debug below. */
+}
+
+.inv-slot.slot-debug {
+  border: 1px dashed rgba(78, 205, 196, 0.85);
+  background: rgba(78, 205, 196, 0.08);
+}
+
+.equip-slot.slot-debug {
+  border: 1px dashed rgba(255, 200, 61, 0.85);
+  background: rgba(255, 200, 61, 0.08);
+}
+
+.slot-item-label {
+  padding: 2px;
+  word-break: break-word;
+  line-height: 1.1;
+}
+
+.slot-item-icon {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.item-tooltip {
+  position: absolute;
+  z-index: 50;
+  pointer-events: none;
+  background: rgba(10, 10, 15, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  padding: 8px 10px;
+  min-width: 120px;
+  font-family: monospace;
+  font-size: 0.7rem;
+  line-height: 1.5;
   color: rgba(255, 255, 255, 0.85);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+.item-tooltip.hidden {
+  display: none;
+}
+
+.item-tooltip .tooltip-name {
+  color: var(--accent);
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.item-tooltip .tooltip-stat {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.item-tooltip .tooltip-stat span:last-child {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+/* World item-drop hover tooltip — lives directly in #wrapper (not nested in
+   #inventoryPanel like the slot tooltip above) so it works regardless of
+   whether the inventory panel is open. Adds an icon next to the name, which
+   the plain slot tooltip doesn't need since the slot itself already shows
+   the icon. */
+.drop-tooltip .tooltip-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.drop-tooltip .tooltip-icon-wrap {
+  width: 32px;
+  height: 32px;
+  flex: none;
+}
+
+.drop-tooltip .tooltip-header .tooltip-name {
+  margin-bottom: 0;
+}
+
+.slot-occupied {
+  cursor: grab;
+}
+
+.slot-dragging {
+  opacity: 0.35;
+}
+
+.drag-ghost {
+  position: fixed;
+  z-index: 200;
+  pointer-events: none;
+  opacity: 0.9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: monospace;
+  font-size: 0.55rem;
+  color: rgba(255, 255, 255, 0.85);
+  text-align: center;
+}
+
+.inventory-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+
+.inventory-close:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+#inventoryContent {
+  width: 100%;
+  height: 100%;
+  position: relative;
 }
 
 .char-stat-row {

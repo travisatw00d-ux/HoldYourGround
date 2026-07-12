@@ -1,0 +1,35 @@
+{
+  "frames": {
+    "T1HealthPotion.png": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 76,
+        "h": 105
+      },
+      "rotated": false,
+      "trimmed": true,
+      "spriteSourceSize": {
+        "x": 26,
+        "y": 9,
+        "w": 76,
+        "h": 105
+      },
+      "sourceSize": {
+        "w": 128,
+        "h": 128
+      }
+    }
+  },
+  "meta": {
+    "app": "SpriteSheet Maker",
+    "version": "1.0",
+    "image": "ItemSheet.png",
+    "format": "RGBA8888",
+    "size": {
+      "w": 76,
+      "h": 105
+    },
+    "scale": "1"
+  }
+}

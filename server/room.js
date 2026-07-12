@@ -17,6 +17,7 @@ const phaseManager = require('./phase-manager');
 const joinManager = require('./join-manager');
 const combatSystem = require('./combat-system');
 const specManager = require('./spectator-manager');
+const itemDrops = require('./item-drops');
 
 const DIAG_LOG = path.join(__dirname, '..', 'Workflow', 'diag-log.json');
 
@@ -49,6 +50,8 @@ class Room {
     this.spectatorFollows = new Map();
     this.tickNum = 0;
     this._nightMaxPop = 0;
+    this.itemDrops = {};
+    this._nextDropId = 1;
   }
 
   setIo(io) { this.io = io; }
@@ -193,6 +196,62 @@ class Room {
   _executeAttack(id, step, pendingAngle) { combatSystem._executeAttack(this, id, step, pendingAngle); }
   handleEquip(id, slot) { combatSystem.handleEquip(this, id, slot); }
 
+  // Drag-and-drop between bag/equipment slots (see moveItem in player.js for
+  // the location format + type/class validation rules). No-ops silently on an
+  // invalid move (occupied destination, wrong item type, wrong class) — the
+  // client never got an optimistic update, so nothing needs to roll back.
+  handleMoveItem(id, from, to) {
+    const p = this.players[id];
+    if (!p || !p.alive) return;
+    const moved = playerMod.moveItem(p, from, to);
+    if (moved) {
+      playerMod.recalcStats(p);
+      this.io.to('room:' + this.id).emit('playerInfo', playerMod.playerInfoObj(p));
+    }
+  }
+
+  // World item drops (loot from zombie kills — see itemDrops.rollDropInstance(),
+  // called from emitEvents()'s 'zombieKilled' case above). `item` is a full
+  // rolled instance from item-generator.js (instanceId/baseItemId/itemTier/
+  // rarityId/attributes) — the client renders whatever's in it, it never
+  // generates or rerolls one itself. Broadcast room-wide since any player can
+  // see and click-pick-up any drop, not just the one who landed the kill.
+  _spawnItemDrop(item, x, y) {
+    const id = 'drop' + (this._nextDropId++);
+    const drop = { id, item, x, y };
+    this.itemDrops[id] = drop;
+    this.io.to('room:' + this.id).emit('itemDropAdded', drop);
+  }
+
+  getItemDropsList() {
+    return Object.values(this.itemDrops);
+  }
+
+  // Full wipe of world item drops — called from phase-manager.js's
+  // 'daytime'->'nighttime' transition (the moment the next wave starts), so
+  // drops survive the nighttime they spawned in plus the following
+  // intermission and daytime, but never carry over past the next wave. No
+  // per-drop removal events — a single broadcast is simpler for clients to
+  // apply than replaying N individual itemDropRemoved events.
+  clearItemDrops() {
+    if (Object.keys(this.itemDrops).length === 0) return;
+    this.itemDrops = {};
+    this.io.to('room:' + this.id).emit('itemDropsCleared');
+  }
+
+  handlePickupItem(id, dropId) {
+    const p = this.players[id];
+    const drop = this.itemDrops[dropId];
+    if (!p || !p.alive || p.isSpectator || !drop) return;
+    const dx = p.x - drop.x, dy = p.y - drop.y;
+    if (dx * dx + dy * dy > itemDrops.PICKUP_RANGE * itemDrops.PICKUP_RANGE) return;
+    const idx = playerMod.addToInventory(p, drop.item);
+    if (idx === -1) return; // bag full — leave the drop where it is
+    delete this.itemDrops[dropId];
+    this.io.to('room:' + this.id).emit('itemDropRemoved', { id: dropId });
+    this.io.to(id).emit('playerInfo', playerMod.playerInfoObj(p));
+  }
+
   respawnPlayer(id) {
     playerMod.respawnPlayer(id, this.players, this.zombies);
     this._roundSaved = false;
@@ -234,7 +293,13 @@ class Room {
         case 'hitConfirm': this.io.to(e.to).emit('hitConfirm', { targetId: e.targetId, dmg: e.dmg, x: e.x, y: e.y }); break;
         case 'gotHit': this.io.to(e.to).emit('gotHit', { attackerId: e.attackerId, dmg: e.dmg, health: e.health }); break;
         case 'eliminated': this.io.to(e.to).emit('eliminated', { kills: e.kills }); break;
-        case 'zombieKilled': this._awardExp(e.playerId, e.zombieLvl); this.io.to(e.playerId).emit('mobKilled', { mobType: e.mobType, x: e.x, y: e.y }); break;
+        case 'zombieKilled': {
+          this._awardExp(e.playerId, e.zombieLvl);
+          this.io.to(e.playerId).emit('mobKilled', { mobType: e.mobType, x: e.x, y: e.y });
+          const droppedInstance = itemDrops.rollDropInstance();
+          if (droppedInstance) this._spawnItemDrop(droppedInstance, e.x, e.y);
+          break;
+        }
         case 'zombieAttackStart': this.io.to(e.to).emit('zombieAttackStart', { zombieId: e.zombieId, mobType: e.mobType }); break;
       }
     }

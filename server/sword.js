@@ -50,13 +50,30 @@ function checkSwordHit(p, zombies, players, grid) {
   let halfFrames = 0;
   for (let i = 0; i < midKf; i++) halfFrames += segs[i];
 
-  const isSwing = p.attackStyle === 'swing';
+  // Unarmed punches always behave like a basic single-hit swing (no swing
+  // damage penalty/wider hit margin, no jab/swing-specific combo-3 logic —
+  // unarmed's maxCombo is 2, so isJabFinal/isSwingThird below never trigger
+  // for it regardless). p.attackStyle keeps whatever jab/swing preference the
+  // player has toggled (it still governs idle stance + re-equip behavior),
+  // it just shouldn't affect punch damage/hitbox math.
+  const isUnarmed = p.playerClass === 'knight' && !p.currentItem;
+  const isSwing = !isUnarmed && p.attackStyle === 'swing';
   const isJabFinal = p.comboStep === 3 && p.attackStyle === 'jab';
   const isSwingThird = p.comboStep === 3 && isSwing;
   if (isJabFinal) halfFrames = totalFrames; // process all frames for triple jab
   const dmgLimit = isSwingThird ? totalFrames : halfFrames + (isSwing ? 4 : 1);
-  p.comboChainWindow = currentCf < halfFrames + (isSwing ? 4 : 1);
-  if (isJabFinal && currentCf % 20 >= 10) p.comboChainWindow = false;
+  // Jab/swing open the chain window partway through the forward swing (this
+  // line) so clicking early cancels the recovery half into the next hit's
+  // startup — that's the intentional fluid-combo feel. Unarmed should NOT do
+  // that: the full punch (forward AND return-to-idle) has to finish before
+  // the next one can start. So leave p.comboChainWindow alone here when
+  // unarmed — it stays false (set at attack start in _executeAttack) until
+  // processCombatTick's attackFrame>=totalTicks check opens it once the
+  // whole animation has actually played out.
+  if (!isUnarmed) {
+    p.comboChainWindow = currentCf < halfFrames + (isSwing ? 4 : 1);
+    if (isJabFinal && currentCf % 20 >= 10) p.comboChainWindow = false;
+  }
   const cfs = [];
   if (p.prevCf >= 0 && p.prevCf !== currentCf) {
     const span = currentCf - p.prevCf;
@@ -96,14 +113,21 @@ function checkSwordHit(p, zombies, players, grid) {
   // Clear hit IDs at forward segment boundaries for jab triple combo
   if (isJabFinal) p._jabHitCleared = 0;
 
+  // Unarmed punches only ever land on one target per swing, and never landed
+  // on anyone yet if attackHitIds already has an entry — skip all hit
+  // processing outright rather than relying on the mid-loop break below to
+  // catch every case across ticks.
+  if (isUnarmed && p.attackHitIds.length > 0) return events;
+
   const nearbyZombies = grid.getNearbyZombies(p.x, p.y);
 
+  hitLoop:
   for (let si = 0; si < cfs.length; si++) {
     const cf = cfs[si];
     const vis = interpHitbox(p.attackAnim, cf);
     if (!vis) continue;
     const isKnight = p.playerClass === 'knight';
-    const mirS = (isKnight && p.attackStyle === 'swing' && (p.comboStep || 0) >= 2) ? -1 : 1;
+    const mirS = (isKnight && isSwing && (p.comboStep || 0) >= 2) ? -1 : 1;
     const btX = (isKnight ? KNIGHT_BLADE_TIP_X : BLADE_TIP_X) * mirS;
     const btY = isKnight ? KNIGHT_BLADE_TIP_Y : BLADE_TIP_Y;
     const bhX = (isKnight ? KNIGHT_BLADE_HILT_X : BLADE_HILT_X) * mirS;
@@ -133,8 +157,11 @@ function checkSwordHit(p, zombies, players, grid) {
       if (!(p.comboStep === 3 && isSwing && cf >= halfFrames) && p.attackHitIds.includes(z.id)) continue;
       const d2 = distToSegSq(z.x, z.y, hiltX, hiltY, tipX, tipY);
       if (d2 < (bladeW + z.radius) * (bladeW + z.radius)) {
-        const dmgMult = p.attackStyle === 'swing' ? 0.7 : 1.0;
-        z.health -= Math.round(p.attackDmg * dmgMult);
+        // Bare-knuckle punches deal a flat, weak 2 damage regardless of
+        // attackDmg/build/gear (rings etc. only matter once a weapon's
+        // equipped again) and never get the swing damage multiplier.
+        const dmg = isUnarmed ? 2 : Math.round(p.attackDmg * (p.attackStyle === 'swing' ? 0.7 : 1.0));
+        z.health -= dmg;
         const kzx = z.x - p.x, kzy = z.y - p.y;
         const kzd = Math.sqrt(kzx * kzx + kzy * kzy) || 1;
         z.x += (kzx / kzd) * ATTACK_KNOCKBACK * 3;
@@ -145,7 +172,11 @@ function checkSwordHit(p, zombies, players, grid) {
           p.kills++;
           events.push({ type: 'zombieKilled', playerId: p.id, zombieLvl: z.lvl, mobType: z.mobType, x: z.x, y: z.y });
         }
-        events.push({ type: 'hitConfirm', to: p.id, targetId: z.id, dmg: Math.round(p.attackDmg * dmgMult), x: z.x, y: z.y });
+        events.push({ type: 'hitConfirm', to: p.id, targetId: z.id, dmg, x: z.x, y: z.y });
+        // Unarmed: exactly one target per punch, full stop — see the
+        // attackHitIds.length guard above the loop for the cross-tick half
+        // of this same rule.
+        if (isUnarmed) break hitLoop;
       }
     }
   }

@@ -6,8 +6,40 @@
     attackDmg: 5,
     attackSpeed: 800,
     health: 100,
-    maxHealth: 100
+    maxHealth: 100,
+    defense: 0,
+    fortune: 0
   };
+
+  // Equipment slots every character has. 'weapon' stays hotbar-swappable via
+  // currentItem/inventory (unchanged); armor/ring/necklace/helmet are new and
+  // live on player.equipment. See CLASS_LOADOUTS for starter items per class.
+  const ITEM_SLOTS = ['weapon', 'armor', 'ring', 'necklace', 'helmet'];
+
+  // Starter loadout per playerClass. Only 'knight' exists today (no class
+  // picker yet) but this keeps the door open for more classes later without
+  // reworking how defaults are resolved. ring/necklace/helmet have no starter
+  // item — rings and necklaces only come from zombie drops now (removed the
+  // basic_ring/basic_necklace filler items 2026-07-12, since they had no
+  // visual representation and were confusingly occupying the slot, blocking
+  // the first real ring/necklace pickup from being dragged in).
+  const CLASS_LOADOUTS = {
+    knight: { weapon: 'wooden_sword', armor: 'basic_armor', ring: null, necklace: null, helmet: null }
+  };
+
+  // Size of the general-purpose item bag (distinct from the weapon hotbar
+  // currentItem/inventory above). Picked-up items land here first — see
+  // addToInventory() in server/player.js — before being equipped. Slot order is
+  // left-to-right, top-to-bottom, matching the InvSlot1..16 layout entries in
+  // hud-layout.json (positioned via Workflow/hud-position-tool.html).
+  const INVENTORY_SIZE = 16;
+
+  // How close (world units) a player has to be to a world item drop to see
+  // what it is or pick it up — see the matching comment in game-data.js.
+  // item-drops.js is the actual authority (enforced in room.js's
+  // handlePickupItem); the client mirrors this number so it doesn't show a
+  // tooltip/allow a click the server would just reject.
+  const ITEM_PICKUP_RANGE = 200;
 
   const SWORD_IMG_SIZE = 1254;
   const BLADE_W = 6;
@@ -16,12 +48,80 @@
   const BLADE_HILT_X = -366;
   const BLADE_HILT_Y = 396;
 
+  // `type` doubles as the equipment-slot category (must equal an ITEM_SLOTS
+  // name). `class` restricts weapon/armor/helmet items to a matching
+  // playerClass; rings/necklaces have no `class` — any class can wear them.
   const ITEMS = {
     wooden_sword: {
       name: 'Wooden Sword',
       type: 'weapon',
+      class: 'knight',
       stats: { attackDmg: 5, attackSpeed: -200 }
+    },
+    basic_armor: {
+      name: 'Basic Armor',
+      type: 'armor',
+      class: 'knight',
+      stats: {}
+    },
+    // Zombie-drop loot — see server/item-drops.js + server/item-generator.js.
+    // `tier` feeds generateItemInstance()'s attribute-value ranges. `stats`
+    // stays empty on purpose: a drop's bonuses live entirely in its rolled
+    // `attributes` array (generated once, server-side, at drop time) — see
+    // item-generation-system.md.
+    t1_ring: {
+      name: 'T1 Ring',
+      type: 'ring',
+      tier: 1,
+      stats: {}
+    },
+    t1_necklace: {
+      name: 'T1 Necklace',
+      type: 'necklace',
+      tier: 1,
+      stats: {}
     }
+  };
+
+  // Item progression tiers — distinct from rarity (ITEM_RARITIES below). See
+  // the matching comment in game-data.js for the full explanation.
+  const ITEM_TIERS = {
+    1: { id: 1, name: 'Tier 1' }
+  };
+
+  // Rarity roll table — see server/item-generator.js's rollItemRarity() and
+  // the matching comment in game-data.js. `weight` is relative (normalized
+  // at roll time by the sum of all weights), `attributeCount` is how many
+  // rolled attributes that rarity gets, `color` drives the tooltip name color.
+  const ITEM_RARITIES = [
+    { id: 'common', name: 'Common', color: '#ffffff', weight: 50, attributeCount: 1 },
+    { id: 'uncommon', name: 'Uncommon', color: '#22c55e', weight: 30, attributeCount: 2 },
+    { id: 'rare', name: 'Rare', color: '#3b82f6', weight: 10, attributeCount: 3 },
+    { id: 'epic', name: 'Epic', color: '#a855f7', weight: 5, attributeCount: 4 },
+    { id: 'legendary', name: 'Legendary', color: '#f97316', weight: 3, attributeCount: 5 },
+    { id: 'mythic', name: 'Mythic', color: '#ef4444', weight: 1, attributeCount: 6 },
+    { id: 'ungodly', name: 'Ungodly', color: '#ffd700', weight: 0.5, attributeCount: 7 }
+  ];
+
+  // Full pool of rollable item attributes (Tier 1) — see the matching
+  // comment in game-data.js for the full field-by-field explanation. Keep
+  // this in sync with game-data.js exactly; server/item-generator.js is the
+  // authority that actually rolls against these ranges.
+  const ITEM_ATTRIBUTES = {
+    attackDamageFlat: { id: 'attackDamageFlat', displayName: 'Attack Damage', stat: 'attackDmg', mode: 'flat', tiers: [1], categories: null, ranges: { 1: { min: 1, max: 4, precision: 0 } } },
+    attackDamageScaling: { id: 'attackDamageScaling', displayName: 'Attack Damage', stat: 'attackDmg', mode: 'scaling', tiers: [1], categories: null, ranges: { 1: { min: 0.1, max: 0.5, precision: 2 } } },
+    attackSpeedFlat: { id: 'attackSpeedFlat', displayName: 'Attack Speed', stat: 'attackSpeed', mode: 'flat', tiers: [1], categories: null, ranges: { 1: { min: -60, max: -10, precision: 0 } } },
+    attackSpeedScaling: { id: 'attackSpeedScaling', displayName: 'Attack Speed', stat: 'attackSpeed', mode: 'scaling', tiers: [1], categories: null, ranges: { 1: { min: -3, max: -0.5, precision: 2 } } },
+    armorFlat: { id: 'armorFlat', displayName: 'Armor', stat: 'defense', mode: 'flat', tiers: [1], categories: null, ranges: { 1: { min: 1, max: 4, precision: 0 } } },
+    armorScaling: { id: 'armorScaling', displayName: 'Armor', stat: 'defense', mode: 'scaling', tiers: [1], categories: null, ranges: { 1: { min: 0.1, max: 0.4, precision: 2 } } },
+    turnRateFlat: { id: 'turnRateFlat', displayName: 'Turn Rate', stat: 'turnSpeed', mode: 'flat', tiers: [1], categories: null, ranges: { 1: { min: 1, max: 3, precision: 0 } } },
+    turnRateScaling: { id: 'turnRateScaling', displayName: 'Turn Rate', stat: 'turnSpeed', mode: 'scaling', tiers: [1], categories: null, ranges: { 1: { min: 0.05, max: 0.2, precision: 2 } } },
+    maxEnergyFlat: { id: 'maxEnergyFlat', displayName: 'Max Energy', stat: 'maxEnergy', mode: 'flat', tiers: [1], categories: null, ranges: { 1: { min: 5, max: 20, precision: 0 } } },
+    maxEnergyScaling: { id: 'maxEnergyScaling', displayName: 'Max Energy', stat: 'maxEnergy', mode: 'scaling', tiers: [1], categories: null, ranges: { 1: { min: 0.5, max: 2, precision: 2 } } },
+    maxHealthFlat: { id: 'maxHealthFlat', displayName: 'Max Health', stat: 'maxHealth', mode: 'flat', tiers: [1], categories: null, ranges: { 1: { min: 5, max: 20, precision: 0 } } },
+    maxHealthScaling: { id: 'maxHealthScaling', displayName: 'Max Health', stat: 'maxHealth', mode: 'scaling', tiers: [1], categories: null, ranges: { 1: { min: 0.5, max: 2.5, precision: 2 } } },
+    fortuneFlat: { id: 'fortuneFlat', displayName: 'Fortune', stat: 'fortune', mode: 'flat', tiers: [1], categories: null, ranges: { 1: { min: 1, max: 3, precision: 0 } } },
+    fortuneScaling: { id: 'fortuneScaling', displayName: 'Fortune', stat: 'fortune', mode: 'scaling', tiers: [1], categories: null, ranges: { 1: { min: 0.05, max: 0.25, precision: 2 } } }
   };
 
   const ITEM_VISUALS = {
@@ -124,14 +224,20 @@
   const KNIGHT_BLADE_HILT_X = 4;
   const KNIGHT_BLADE_HILT_Y = 16;
 
+  // knight_right_hand is the unarmed fist that replaces knight_sword when
+  // p.currentItem is empty (see drawKnightRightHand() in render-entity.js).
   const KNIGHT_VISUALS = {
     jab: {
       knight_sword: { offsetX: 19, offsetY: 37, scale: 0.43, rotation: 1.65 },
-      knight_hand:  { offsetX: 25, offsetY: -17, scale: 0.383, rotation: 0.14 }
+      knight_hand:  { offsetX: 28, offsetY: -23, scale: 0.383, rotation: 0.00 },
+      knight_right_hand: { offsetX: 28, offsetY: 23, scale: 0.383, rotation: 3.14 }
     },
     swing: {
       knight_sword: { offsetX: 25, offsetY: -43, scale: 0.43, rotation: -0.42 },
-      knight_hand:  { offsetX: 3, offsetY: -33, scale: 0.383, rotation: -0.09 }
+      knight_hand:  { offsetX: 3, offsetY: -33, scale: 0.383, rotation: -0.09 },
+      // Unused (client always forces unarmed to the .jab pose regardless of
+      // jab/swing toggle) — see the matching comment in game-data.js.
+      knight_right_hand: { offsetX: 25, offsetY: -43, scale: 0.383, rotation: -0.42 }
     }
   };
 
@@ -316,15 +422,60 @@
           { offsetX: -4, offsetY: -35, scale: 0.383, rotation: -0.30 },
         ]
       }
+    },
+
+    // Unarmed 2-hit punch combo — see the matching comment in
+    // lib/game-data.js for why this reuses the knight_sword/knight_hand
+    // keyframe slots instead of introducing separate punch keys.
+    unarmed_combo1: {
+      segments: [30, 30],
+      knight_sword: {
+        keyframes: [
+          { offsetX: 28, offsetY: 23, scale: 0.383, rotation: 3.14 },
+          { offsetX: 67, offsetY: 10, scale: 0.383, rotation: 2.87 },
+          { offsetX: 28, offsetY: 23, scale: 0.383, rotation: 3.14 },
+        ]
+      },
+      knight_hand: {
+        keyframes: [
+          { offsetX: 28, offsetY: -23, scale: 0.383, rotation: 0.00 },
+          { offsetX: 10, offsetY: -37, scale: 0.383, rotation: -0.36 },
+          { offsetX: 28, offsetY: -23, scale: 0.383, rotation: 0.00 },
+        ]
+      }
+    },
+    unarmed_combo2: {
+      segments: [30, 30],
+      knight_sword: {
+        keyframes: [
+          { offsetX: 28, offsetY: 23, scale: 0.383, rotation: 3.14 },
+          { offsetX: 10, offsetY: 9, scale: 0.383, rotation: 3.50 },
+          { offsetX: 28, offsetY: 23, scale: 0.383, rotation: 3.14 },
+        ]
+      },
+      knight_hand: {
+        keyframes: [
+          { offsetX: 28, offsetY: -23, scale: 0.383, rotation: 0.00 },
+          { offsetX: 67, offsetY: -10, scale: 0.383, rotation: 0.27 },
+          { offsetX: 28, offsetY: -23, scale: 0.383, rotation: 0.00 },
+        ]
+      }
     }
   };
 
   if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { MOB_TYPES, BASE_STATS, BASE_TURN_SPEED, ITEMS, ITEM_VISUALS, ANIMATIONS, SWORD_IMG_SIZE, BLADE_W, BLADE_TIP_X, BLADE_TIP_Y, BLADE_HILT_X, BLADE_HILT_Y, ZOMBIE_VISUALS, ZOMBIE_ANIMATIONS, SCREEN_UI, KNIGHT_VISUALS, KNIGHT_ANIMATIONS, KNIGHT_BLADE_TIP_X, KNIGHT_BLADE_TIP_Y, KNIGHT_BLADE_HILT_X, KNIGHT_BLADE_HILT_Y };
+    module.exports = { MOB_TYPES, BASE_STATS, BASE_TURN_SPEED, ITEM_SLOTS, CLASS_LOADOUTS, INVENTORY_SIZE, ITEM_PICKUP_RANGE, ITEMS, ITEM_TIERS, ITEM_RARITIES, ITEM_ATTRIBUTES, ITEM_VISUALS, ANIMATIONS, SWORD_IMG_SIZE, BLADE_W, BLADE_TIP_X, BLADE_TIP_Y, BLADE_HILT_X, BLADE_HILT_Y, ZOMBIE_VISUALS, ZOMBIE_ANIMATIONS, SCREEN_UI, KNIGHT_VISUALS, KNIGHT_ANIMATIONS, KNIGHT_BLADE_TIP_X, KNIGHT_BLADE_TIP_Y, KNIGHT_BLADE_HILT_X, KNIGHT_BLADE_HILT_Y };
   } else {
     window.BASE_TURN_SPEED = BASE_TURN_SPEED;
     window.BASE_STATS = BASE_STATS;
+    window.ITEM_SLOTS = ITEM_SLOTS;
+    window.CLASS_LOADOUTS = CLASS_LOADOUTS;
+    window.INVENTORY_SIZE = INVENTORY_SIZE;
+    window.ITEM_PICKUP_RANGE = ITEM_PICKUP_RANGE;
     window.ITEMS = ITEMS;
+    window.ITEM_TIERS = ITEM_TIERS;
+    window.ITEM_RARITIES = ITEM_RARITIES;
+    window.ITEM_ATTRIBUTES = ITEM_ATTRIBUTES;
     window.ITEM_VISUALS = ITEM_VISUALS;
     window.ANIMATIONS = ANIMATIONS;
     window.SWORD_IMG_SIZE = SWORD_IMG_SIZE;

@@ -1,25 +1,415 @@
 [
-  { "name": "EnergyBarBG.png", "x": 142, "y": 429, "scale": 1, "zIndex": 0 },
-  { "name": "EnergyBar.png", "x": 127, "y": 457, "scale": 1, "zIndex": 1, "fillX": 61, "fillY": 59, "fillW": 320, "fillH": 30 },
-  { "name": "HealthBarBG.png", "x": 140, "y": 387, "scale": 1, "zIndex": 2 },
-  { "name": "HealthBar.png", "x": 124, "y": 393, "scale": 1, "zIndex": 3, "fillX": 66, "fillY": 77, "fillW": 316, "fillH": 39 },
-  { "name": "NameBar.png", "x": 35, "y": 391, "scale": 0.8, "zIndex": 6 },
-  { "name": "PlayerName", "x": 237, "y": 452, "scale": 1.15, "zIndex": 6, "textSize": 27 },
-  { "name": "CharacterWindow.png", "x": -25, "y": 400, "scale": 1, "zIndex": 7 },
-  { "name": "Hotkey.png", "x": -7, "y": 519, "scale": 0.25, "zIndex": 8 },
-  { "name": "KnightCharacter.png", "x": -6, "y": 408, "scale": 0.8, "zIndex": 8 },
-  { "name": "settingsgear.png", "x": 978, "y": 9, "scale": 0.55, "zIndex": 8 },
-  { "name": "TimeBar.png", "x": 45, "y": -33, "scale": 1, "zIndex": 9 },
-  { "name": "ServerLevel.png", "x": -3, "y": -1, "scale": 0.45, "zIndex": 10, "textX": 65, "textY": 62, "textSize": 37 },
-  { "name": "XPBarBG.png", "x": 110, "y": 495, "scale": 0.5, "zIndex": 98 },
-  { "name": "PlayerLevel", "x": 49, "y": 503, "scale": 1, "zIndex": 100, "textX": 85, "textY": 64, "textSize": 20 },
-  { "name": "ExperienceBar.png", "x": 110, "y": 495, "scale": 0.5, "zIndex": 101, "fillX": 88, "fillY": 116, "fillW": 681, "fillH": 39 },
-  { "name": "JabAttack.png", "x": 907, "y": 300, "scale": 0.7, "zIndex": 102 },
-  { "name": "SwingAttack.png", "x": 906, "y": 438, "scale": 0.7, "zIndex": 103 },
-  { "name": "JabHighlight", "x": 997, "y": 314, "scale": 0.1, "zIndex": 104 },
-  { "name": "SwingHighlight", "x": 997, "y": 452, "scale": 0.1, "zIndex": 104 },
-  { "name": "Space.png", "x": 889, "y": 392, "scale": 0.8, "zIndex": 105 },
-  { "name": "PhaseName", "x": 350, "y": 20, "scale": 1, "zIndex": 199, "textX": -120, "textY": 25, "textSize": 28 },
-  { "name": "PhaseTimer", "x": 491, "y": 20, "scale": 1, "zIndex": 199, "textX": -110, "textY": 26, "textSize": 28 },
-  { "name": "StatsHotkey", "x": -7, "y": 525, "scale": 1, "zIndex": 200, "textX": 25, "textY": 22, "textSize": 23 }
+  {
+    "name": "EnergyBarBG.png",
+    "x": 142,
+    "y": 429,
+    "scale": 1,
+    "zIndex": 0
+  },
+  {
+    "name": "EnergyBar.png",
+    "x": 127,
+    "y": 457,
+    "scale": 1,
+    "zIndex": 1,
+    "fillX": 61,
+    "fillY": 59,
+    "fillW": 320,
+    "fillH": 30
+  },
+  {
+    "name": "HealthBarBG.png",
+    "x": 140,
+    "y": 387,
+    "scale": 1,
+    "zIndex": 2
+  },
+  {
+    "name": "HealthBar.png",
+    "x": 124,
+    "y": 393,
+    "scale": 1,
+    "zIndex": 3,
+    "fillX": 66,
+    "fillY": 77,
+    "fillW": 316,
+    "fillH": 39
+  },
+  {
+    "name": "NameBar.png",
+    "x": 35,
+    "y": 391,
+    "scale": 0.8,
+    "zIndex": 6
+  },
+  {
+    "name": "PlayerName",
+    "x": 237,
+    "y": 452,
+    "scale": 1.15,
+    "zIndex": 6,
+    "textSize": 27
+  },
+  {
+    "name": "CharacterWindow.png",
+    "x": -25,
+    "y": 400,
+    "scale": 1,
+    "zIndex": 7
+  },
+  {
+    "name": "settingsgear.png",
+    "x": 978,
+    "y": 9,
+    "scale": 0.55,
+    "zIndex": 8
+  },
+  {
+    "name": "Hotkey.png",
+    "x": -7,
+    "y": 519,
+    "scale": 0.25,
+    "zIndex": 8
+  },
+  {
+    "name": "KnightCharacter.png",
+    "x": -6,
+    "y": 408,
+    "scale": 0.8,
+    "zIndex": 8
+  },
+  {
+    "name": "TimeBar.png",
+    "x": 45,
+    "y": -33,
+    "scale": 1,
+    "zIndex": 9
+  },
+  {
+    "name": "ServerLevel.png",
+    "x": -3,
+    "y": -1,
+    "scale": 0.45,
+    "zIndex": 10,
+    "textX": 65,
+    "textY": 62,
+    "textSize": 37
+  },
+  {
+    "name": "XPBarBG.png",
+    "x": 110,
+    "y": 495,
+    "scale": 0.5,
+    "zIndex": 98
+  },
+  {
+    "name": "PlayerLevel",
+    "x": 49,
+    "y": 503,
+    "scale": 1,
+    "zIndex": 100,
+    "textX": 85,
+    "textY": 64,
+    "textSize": 20
+  },
+  {
+    "name": "ExperienceBar.png",
+    "x": 110,
+    "y": 495,
+    "scale": 0.5,
+    "zIndex": 101,
+    "fillX": 88,
+    "fillY": 116,
+    "fillW": 681,
+    "fillH": 39
+  },
+  {
+    "name": "JabAttack.png",
+    "x": 907,
+    "y": 300,
+    "scale": 0.7,
+    "zIndex": 102
+  },
+  {
+    "name": "SwingAttack.png",
+    "x": 906,
+    "y": 438,
+    "scale": 0.7,
+    "zIndex": 103
+  },
+  {
+    "name": "JabHighlight",
+    "x": 997,
+    "y": 314,
+    "scale": 0.1,
+    "zIndex": 104
+  },
+  {
+    "name": "SwingHighlight",
+    "x": 997,
+    "y": 452,
+    "scale": 0.1,
+    "zIndex": 104
+  },
+  {
+    "name": "Space.png",
+    "x": 889,
+    "y": 392,
+    "scale": 0.8,
+    "zIndex": 105
+  },
+  {
+    "name": "Stats.png",
+    "x": 131,
+    "y": 52,
+    "scale": 0.85,
+    "zIndex": 105
+  },
+  {
+    "name": "inventory.png",
+    "x": 338,
+    "y": 18,
+    "scale": 0.8,
+    "zIndex": 105
+  },
+  {
+    "name": "EquipWeapon",
+    "x": 614,
+    "y": 136,
+    "scale": 0.9,
+    "zIndex": 110,
+    "type": "slot",
+    "w": 65,
+    "h": 65
+  },
+  {
+    "name": "EquipArmor",
+    "x": 401,
+    "y": 260,
+    "scale": 0.9,
+    "zIndex": 110,
+    "type": "slot",
+    "w": 65,
+    "h": 65
+  },
+  {
+    "name": "EquipRing",
+    "x": 614,
+    "y": 224,
+    "scale": 0.9,
+    "zIndex": 110,
+    "type": "slot",
+    "w": 65,
+    "h": 65
+  },
+  {
+    "name": "EquipNecklace",
+    "x": 614,
+    "y": 311,
+    "scale": 0.9,
+    "zIndex": 110,
+    "type": "slot",
+    "w": 65,
+    "h": 65
+  },
+  {
+    "name": "EquipHelmet",
+    "x": 401,
+    "y": 145,
+    "scale": 0.9,
+    "zIndex": 110,
+    "type": "slot",
+    "w": 65,
+    "h": 65
+  },
+  {
+    "name": "InvSlot1",
+    "x": 719,
+    "y": 154,
+    "scale": 0.8,
+    "zIndex": 115,
+    "type": "slot",
+    "w": 75,
+    "h": 75
+  },
+  {
+    "name": "InvSlot2",
+    "x": 788,
+    "y": 154,
+    "scale": 0.8,
+    "zIndex": 115,
+    "type": "slot",
+    "w": 75,
+    "h": 75
+  },
+  {
+    "name": "InvSlot3",
+    "x": 857,
+    "y": 154,
+    "scale": 0.8,
+    "zIndex": 115,
+    "type": "slot",
+    "w": 75,
+    "h": 75
+  },
+  {
+    "name": "InvSlot4",
+    "x": 926,
+    "y": 154,
+    "scale": 0.8,
+    "zIndex": 115,
+    "type": "slot",
+    "w": 75,
+    "h": 75
+  },
+  {
+    "name": "InvSlot5",
+    "x": 719,
+    "y": 223,
+    "scale": 0.8,
+    "zIndex": 115,
+    "type": "slot",
+    "w": 75,
+    "h": 75
+  },
+  {
+    "name": "InvSlot6",
+    "x": 788,
+    "y": 223,
+    "scale": 0.8,
+    "zIndex": 115,
+    "type": "slot",
+    "w": 75,
+    "h": 74
+  },
+  {
+    "name": "InvSlot7",
+    "x": 857,
+    "y": 223,
+    "scale": 0.8,
+    "zIndex": 115,
+    "type": "slot",
+    "w": 75,
+    "h": 74
+  },
+  {
+    "name": "InvSlot8",
+    "x": 926,
+    "y": 223,
+    "scale": 0.8,
+    "zIndex": 115,
+    "type": "slot",
+    "w": 75,
+    "h": 75
+  },
+  {
+    "name": "InvSlot9",
+    "x": 719,
+    "y": 291,
+    "scale": 0.8,
+    "zIndex": 115,
+    "type": "slot",
+    "w": 75,
+    "h": 75
+  },
+  {
+    "name": "InvSlot10",
+    "x": 788,
+    "y": 291,
+    "scale": 0.8,
+    "zIndex": 115,
+    "type": "slot",
+    "w": 75,
+    "h": 75
+  },
+  {
+    "name": "InvSlot11",
+    "x": 857,
+    "y": 291,
+    "scale": 0.8,
+    "zIndex": 115,
+    "type": "slot",
+    "w": 75,
+    "h": 75
+  },
+  {
+    "name": "InvSlot12",
+    "x": 926,
+    "y": 291,
+    "scale": 0.8,
+    "zIndex": 115,
+    "type": "slot",
+    "w": 75,
+    "h": 75
+  },
+  {
+    "name": "InvSlot13",
+    "x": 719,
+    "y": 359,
+    "scale": 0.8,
+    "zIndex": 115,
+    "type": "slot",
+    "w": 75,
+    "h": 75
+  },
+  {
+    "name": "InvSlot14",
+    "x": 788,
+    "y": 359,
+    "scale": 0.8,
+    "zIndex": 115,
+    "type": "slot",
+    "w": 75,
+    "h": 75
+  },
+  {
+    "name": "InvSlot15",
+    "x": 857,
+    "y": 359,
+    "scale": 0.8,
+    "zIndex": 115,
+    "type": "slot",
+    "w": 75,
+    "h": 75
+  },
+  {
+    "name": "InvSlot16",
+    "x": 926,
+    "y": 359,
+    "scale": 0.8,
+    "zIndex": 115,
+    "type": "slot",
+    "w": 75,
+    "h": 75
+  },
+  {
+    "name": "PhaseName",
+    "x": 350,
+    "y": 20,
+    "scale": 1,
+    "zIndex": 199,
+    "textX": -120,
+    "textY": 25,
+    "textSize": 28
+  },
+  {
+    "name": "PhaseTimer",
+    "x": 491,
+    "y": 20,
+    "scale": 1,
+    "zIndex": 199,
+    "textX": -110,
+    "textY": 26,
+    "textSize": 28
+  },
+  {
+    "name": "StatsHotkey",
+    "x": -7,
+    "y": 525,
+    "scale": 1,
+    "zIndex": 200,
+    "textX": 25,
+    "textY": 22,
+    "textSize": 23
+  }
 ]

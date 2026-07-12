@@ -1,12 +1,12 @@
 import { state } from './state.js';
 import { getCamera } from './camera.js';
 import { getInput, resetKeys } from './input.js';
-import { drawPlayer, drawZombie, drawDebugSwordHitbox } from './render-entity.js';
+import { drawPlayer, drawZombie, drawDebugSwordHitbox, getSpriteFromSheet } from './render-entity.js';
 import { getBladeSegment, handleAnimNaturalEnd } from './anims.js';
 import { drawStatHUD, drawServerLevel, drawSpectatingUI, drawDeadSpectatingUI, drawDmgNumbers, drawBuildWatermark, drawHitFlash } from './render-ui.js';
 import { drawHUD } from './hud.js';
 import { drawDiag } from './diag.js';
-import { ZOMBIE_ANIMATIONS, KNIGHT_VISUALS, BLADE_W } from './game-data.js';
+import { ZOMBIE_ANIMATIONS, KNIGHT_VISUALS, BLADE_W, ITEM_DROP_ICON_H } from './game-data.js';
 
 function shortAngleDist(a, b) {
   let diff = b - a;
@@ -125,6 +125,30 @@ function render() {
     const lightBg = state.matchPhase === 'daytime' || state.matchPhase === 'intermission';
     const bg = (lightBg && state.backgroundCanvasLight) ? state.backgroundCanvasLight : state.backgroundCanvas;
     ctx.drawImage(bg, cam.x, cam.y, eW, eH, 0, 0, eW, eH);
+  }
+
+  // World item-drop icons (loot from zombie kills) — just the generic
+  // "loot.png" marker (added to spritesheet.png/.json) for every drop,
+  // regardless of what's actually inside; no background/glow behind it by
+  // design (Travis: "I want just the bag to be visible") — hovering reveals
+  // the real item (icon/name/stats via ui.js's showDropTooltip, triggered
+  // from input.js's mousemove). Size comes from ITEM_DROP_ICON_H
+  // (game-data.js) — input.js's hitTestItemDrop() uses the exact same value
+  // to build a tight click/hover rectangle matching the visible icon with no
+  // padding, since drops can land close together and need precise targets.
+  // Click/hover hit-testing anchors on the same world-space point (d.x, d.y)
+  // with no offset, so don't add a y-offset here without updating that too.
+  // Drawn right after the background (2026-07-11) so zombies/players always
+  // render on top of drops lying on the ground, not the other way around.
+  const lootFrame = state.spriteFrames?.['loot.png']?.frame;
+  if (lootFrame) {
+    const dh = ITEM_DROP_ICON_H, dw = dh * (lootFrame.w / lootFrame.h);
+    for (const id in state.itemDrops) {
+      const d = state.itemDrops[id];
+      const sx = d.x - cam.x, sy = d.y - cam.y;
+      if (sx < -40 || sx > eW + 40 || sy < -40 || sy > eH + 40) continue;
+      ctx.drawImage(getSpriteFromSheet(state.spriteSheet, dw, dh, lootFrame), sx - dw / 2, sy - dh / 2, dw, dh);
+    }
   }
 
   ctx.font = '11px "Segoe UI", system-ui, sans-serif';

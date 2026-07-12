@@ -50,7 +50,7 @@ function startMatch(room, fromEnded) {
       if (firstReady) { p.x = firstReady.x; p.y = firstReady.y; }
     } else if (readySet.size > 0 || !isRestart || !p.isSpectator) {
       p.isSpectator = false;
-      p.lvl = 1; p.exp = 0; p.gold = 0;
+      p.lvl = 1; p.exp = 0; p.gold = 0; p.kills = 0;
       p.statPoints = room._persistedExp.get('sp_' + id) || 0;
       p.investedPoints = {};
       playerMod.recalcStats(p);
@@ -114,6 +114,11 @@ function _advancePhase(room) {
       room.matchPhase = 'nighttime';
       room.phaseTimer = 0;
       room.zombies.length = 0;
+      // Full wipe of any item drops left over from the wave that just ended
+      // (they were allowed to sit through that whole nighttime + the
+      // intermission + daytime that followed — this is the "next wave
+      // starts" cutoff, so nothing carries over further than that).
+      room.clearItemDrops();
       const maxAlive = 100 + (room.waveServerLevel - 1);
       room._nightMaxPop = Math.round(maxAlive * 0.3);
       zombieAi.ensureCount(room.zombies, room.mobSpawnPool, room.waveServerLevel, room.players, room._nightMaxPop);

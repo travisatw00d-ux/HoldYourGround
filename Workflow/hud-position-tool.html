@@ -208,7 +208,10 @@ Promise.all([
   for (const laid of layoutArr) {
     if (!hudFrames[laid.name] && !items.find(i => i.name === laid.name)) {
       let virtualFrame = null;
-      let virtW = 80, virtH = 30;
+      // Interactive slot squares (inventory grid / equipment slots) have no sprite —
+      // default to a 128x128 square matching the item icon size unless already sized.
+      let virtW = laid.type === 'slot' ? 128 : 80;
+      let virtH = laid.type === 'slot' ? 128 : 30;
       // Highlights use Activated.png sprite (hidden from layer list but assigned as frame)
       if ((laid.name === 'JabHighlight' || laid.name === 'SwingHighlight') && hudFrames['Activated.png']) {
         virtualFrame = hudFrames['Activated.png'];
@@ -216,8 +219,8 @@ Promise.all([
         virtH = laid.h || virtualFrame.sourceSize.h;
       }
       items.push({
-        name: laid.name, x: laid.x, y: laid.y, w: virtW, h: virtH,
-        zIndex: laid.zIndex, visible: true, scale: laid.scale || 1.0,
+        name: laid.name, x: laid.x, y: laid.y, w: laid.w || virtW, h: laid.h || virtH,
+        zIndex: laid.zIndex, visible: true, scale: laid.scale || 1.0, type: laid.type,
         textX: laid.textX, textY: laid.textY, textSize: laid.textSize, frame: virtualFrame
       });
     }
@@ -254,6 +257,19 @@ function renderLayerList() {
       const cx = c.getContext('2d');
       const fr = frame.frame;
       cx.drawImage(hudSheet, fr.x, fr.y, fr.w, fr.h, 0, 0, tw, th);
+      dataUrl = c.toDataURL();
+    } else if (item.type === 'slot') {
+      // Slots have no sprite — give the layer list a colored swatch matching
+      // the canvas marker instead of a broken/blank thumbnail image.
+      const c = document.createElement('canvas');
+      c.width = tw; c.height = th;
+      const cx = c.getContext('2d');
+      const isEquip = item.name.startsWith('Equip');
+      cx.fillStyle = isEquip ? 'rgba(255, 200, 61, 0.25)' : 'rgba(78, 205, 196, 0.25)';
+      cx.fillRect(0, 0, tw, th);
+      cx.strokeStyle = isEquip ? '#FFC83D' : '#4ECDC4';
+      cx.lineWidth = 1.5;
+      cx.strokeRect(0.75, 0.75, tw - 1.5, th - 1.5);
       dataUrl = c.toDataURL();
     }
     return `<div class="layer-item${active}" data-idx="${realIdx}">
@@ -370,6 +386,13 @@ function renderOutput() {
       scale: Math.round(i.scale * 100) / 100,
       zIndex: i.zIndex
     };
+    if (i.type === 'slot') {
+      // Slots have no atlas frame to derive size from at runtime, so w/h (and the
+      // type marker itself) must round-trip through the saved layout.
+      obj.type = 'slot';
+      obj.w = Math.round(i.w);
+      obj.h = Math.round(i.h);
+    }
     if ((i.fillX ?? i.frame?.spriteSourceSize?.x) !== i.frame?.spriteSourceSize?.x ||
         (i.fillY ?? i.frame?.spriteSourceSize?.y) !== i.frame?.spriteSourceSize?.y ||
         (i.fillW ?? i.frame?.spriteSourceSize?.w) !== i.frame?.spriteSourceSize?.w ||
@@ -407,7 +430,7 @@ function render() {
     const idx = items.indexOf(item);
     const frame = item.frame;
     if (!frame || !hudSheet.complete) {
-      if (item.name !== 'StatsHotkey') continue;
+      if (item.name !== 'StatsHotkey' && item.type !== 'slot') continue;
     }
 
     ctx.save();
@@ -549,6 +572,24 @@ function render() {
         }
         ctx.drawImage(hudSheet, fr.x, fr.y, sss.w, sss.h, dx, dy, drawW, drawH);
       }
+    } else if (item.type === 'slot') {
+      // Interactive item slot (inventory grid cell or equipment slot) — no sprite of its
+      // own, since the slot artwork is already baked into inventory.png. Draw a plain
+      // marker so it can be seen/dragged/resized to line up against that baked-in art.
+      const isEquip = item.name.startsWith('Equip');
+      ctx.strokeStyle = isEquip ? 'rgba(255, 200, 61, 0.85)' : 'rgba(78, 205, 196, 0.85)';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([4, 3]);
+      ctx.strokeRect(item.x, item.y, sw, sh);
+      ctx.setLineDash([]);
+      ctx.fillStyle = isEquip ? 'rgba(255, 200, 61, 0.08)' : 'rgba(78, 205, 196, 0.08)';
+      ctx.fillRect(item.x, item.y, sw, sh);
+      ctx.fillStyle = 'rgba(255,255,255,0.55)';
+      ctx.font = '10px monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      const shortLabel = isEquip ? item.name.replace('Equip', '') : item.name.replace('InvSlot', '#');
+      ctx.fillText(shortLabel, item.x + sw / 2, item.y + sh / 2);
     }
 
     // Selection highlight

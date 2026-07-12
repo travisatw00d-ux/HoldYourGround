@@ -44,7 +44,7 @@ function preRenderMiniIcons() {
 }
 
 async function loadGameAssets() {
-  const [sheet, meta, kSheet, kMeta, hSheet, hMeta, layout, mSheet, mMeta, cSheet, cMeta] = await Promise.all([
+  const [sheet, meta, kSheet, kMeta, hSheet, hMeta, layout, mSheet, mMeta, cSheet, cMeta, kwSheet, kwMeta, rSheet, rMeta, nSheet, nMeta] = await Promise.all([
     loadImage('/images/spritesheet.png'),
     fetch('/images/spritesheet.json').then(r => r.json()),
     loadImage('/images/KnightSheet.png'),
@@ -55,7 +55,13 @@ async function loadGameAssets() {
     loadImage('/images/Minis.png'),
     fetch('/images/Minis.json').then(r => r.json()),
     loadImage('/images/CardSheet.png'),
-    fetch('/images/CardSheet.json').then(r => r.json())
+    fetch('/images/CardSheet.json').then(r => r.json()),
+    loadImage('/images/KnightWeapons.png'),
+    fetch('/images/KnightWeapons.json').then(r => r.json()),
+    loadImage('/images/Ringsheet.png'),
+    fetch('/images/Ringsheet.json').then(r => r.json()),
+    loadImage('/images/Necklacesheet.png'),
+    fetch('/images/Necklacesheet.json').then(r => r.json())
   ]);
   state.spriteSheet = sheet;
   state.spriteFrames = meta.frames;
@@ -68,6 +74,15 @@ async function loadGameAssets() {
   state.miniFrames = mMeta.frames;
   state.cardSheet = cSheet;
   state.cardFrames = cMeta.frames;
+  // Flat item icons (inventory/equipment slots) — separate from knightSheet, which
+  // holds in-hand combat animation frames. See ITEM_ICONS in game-data.js for the
+  // itemId -> frame name mapping.
+  state.knightWeaponsSheet = kwSheet;
+  state.knightWeaponsFrames = kwMeta.frames;
+  state.ringSheet = rSheet;
+  state.ringFrames = rMeta.frames;
+  state.necklaceSheet = nSheet;
+  state.necklaceFrames = nMeta.frames;
 
   const gearFrame = state.hudFrames?.['settingsgear.png']?.frame;
   if (gearFrame) {

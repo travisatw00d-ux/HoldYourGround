@@ -1,5 +1,41 @@
 import { state } from './state.js';
 import { startIdleTransition } from './anims.js';
+import { getCamera } from './camera.js';
+import { showDropTooltip, positionDropTooltip, hideDropTooltip } from './ui.js';
+import { ITEM_DROP_ICON_H, ITEM_PICKUP_RANGE } from './game-data.js';
+
+// Tight rectangle hit test matching the drawn loot icon exactly (same
+// ITEM_DROP_ICON_H + sprite aspect ratio render.js uses, no padding) — drops
+// can land close together, so this needs to be precise rather than a
+// generous click radius that could grab the wrong one. Also requires the
+// local player to actually be within ITEM_PICKUP_RANGE of the drop — without
+// this, a zoomed-out camera could hover/reveal (tooltip) or click-pickup
+// loot from across the map. Same range the server enforces for the actual
+// pickup, so nothing shown/clickable here would get silently rejected.
+function hitTestItemDrop() {
+  const lootFrame = state.spriteFrames?.['loot.png']?.frame;
+  if (!lootFrame) return null;
+  const me = state.players[state.myId];
+  if (!me) return null;
+  const dh = ITEM_DROP_ICON_H, dw = dh * (lootFrame.w / lootFrame.h);
+  const halfW = dw / 2, halfH = dh / 2;
+  const zoom = state.cameraZoom || 1;
+  const cam = getCamera();
+  const wx = state.mouseX / zoom + cam.x;
+  const wy = state.mouseY / zoom + cam.y;
+  let closestId = null;
+  let closestD2 = Infinity;
+  for (const id in state.itemDrops) {
+    const d = state.itemDrops[id];
+    const pdx = me.x - d.x, pdy = me.y - d.y;
+    if (pdx * pdx + pdy * pdy > ITEM_PICKUP_RANGE * ITEM_PICKUP_RANGE) continue;
+    const dx = wx - d.x, dy = wy - d.y;
+    if (Math.abs(dx) > halfW || Math.abs(dy) > halfH) continue;
+    const d2 = dx * dx + dy * dy;
+    if (d2 < closestD2) { closestD2 = d2; closestId = id; }
+  }
+  return closestId;
+}
 
 const keys = {};
 const keyTimers = {};
@@ -127,13 +163,38 @@ export function setupInput(socket, canvas) {
 
   canvas.addEventListener('mousedown', (e) => {
     if (e.button === 0 && state.screen === 'playing') {
+      const dropId = hitTestItemDrop();
+      if (dropId) {
+        socket.emit('pickupItem', { id: dropId });
+        return;
+      }
       socket.emit('attack', { facingAngle: state.players[state.myId]?.realAngle || state.players[state.myId]?.facingAngle || 0 });
     }
   });
 
+  let hoveredDropId = null;
   canvas.addEventListener('mousemove', (e) => {
     const rect = canvas.getBoundingClientRect();
     state.mouseX = (e.clientX - rect.left) * (canvas.width / rect.width);
     state.mouseY = (e.clientY - rect.top) * (canvas.height / rect.height);
+
+    if (state.screen === 'playing') {
+      const dropId = hitTestItemDrop();
+      if (dropId !== hoveredDropId) {
+        hoveredDropId = dropId;
+        if (dropId) showDropTooltip(state.itemDrops[dropId]?.item, e);
+        else hideDropTooltip();
+      } else if (dropId) {
+        positionDropTooltip(e);
+      }
+    } else if (hoveredDropId) {
+      hoveredDropId = null;
+      hideDropTooltip();
+    }
+  });
+
+  canvas.addEventListener('mouseleave', () => {
+    hoveredDropId = null;
+    hideDropTooltip();
   });
 }

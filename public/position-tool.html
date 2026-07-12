@@ -69,6 +69,7 @@ button:active { background: #3ca39c; }
       <div class="slot-row">
         <button class="slot-btn active" data-slot="knight_sword">Sword</button>
         <button class="slot-btn" data-slot="knight_hand">Left Hand</button>
+        <button class="slot-btn" data-slot="knight_right_hand">Right Hand</button>
       </div>
     </div>
 
@@ -108,11 +109,25 @@ const hands = {
 };
 let activeHand = 'left_hand';
 
+// Seeded from the live "jab" values in lib/game-data.js / shared/data.js
+// KNIGHT_VISUALS as of 2026-07-11, so the tool opens matching what's actually
+// on screen in-game instead of stale guesses. Re-sync these if the live
+// values drift (there's no automatic fetch — this is a hand-copied snapshot).
 const knightItems = {
-  knight_sword: { offsetX: 23, offsetY: 24, scale: 0.43, rotation: 0.76 },
-  knight_hand:  { offsetX: 16, offsetY: -28, scale: 0.35, rotation: -1.55 }
+  knight_sword: { offsetX: 19, offsetY: 37, scale: 0.43, rotation: 1.65 },
+  knight_hand:  { offsetX: 28, offsetY: -23, scale: 0.383, rotation: 0.00 },
+  // Unarmed look: this fist replaces the sword when the weapon slot is empty
+  // (see drawKnightRightHand() in render-entity.js).
+  knight_right_hand: { offsetX: 28, offsetY: 23, scale: 0.383, rotation: 3.14 }
 };
 let activeKnightItem = 'knight_sword';
+
+// Maps a knightItems key to its sprite frame name in KnightSheet.json.
+const KNIGHT_FRAME_MAP = {
+  knight_sword: 'T1KnightSword.png',
+  knight_hand: 'T1KnightLeftHand.png',
+  knight_right_hand: 'T1KnightRightHand.png'
+};
 
 const screenUI = { x: 53, y: 56, scale: 0.4, ty: 0 };
 
@@ -285,12 +300,15 @@ function drawKnightMode() {
   ctx.fillStyle = 'rgba(78, 205, 196, 0.15)'; ctx.fill();
   ctx.strokeStyle = 'rgba(78, 205, 196, 0.3)'; ctx.lineWidth = 1.5; ctx.stroke();
 
-  // Knight head
+  // Knight head — same 56px-box formula as drawPlayer() in render-entity.js,
+  // using frame.w/h (trimmed) not sourceSize so the aspect ratio passed to
+  // getSpriteFromSheet always matches (see position-tool.html gotcha in
+  // Workflow/editing-client.md for why sourceSize causes distortion here).
   const headFrame = knightFrames ? knightFrames['T1KnightHead.png'] : null;
   if (headFrame) {
-    const hsz = 56 / Math.max(headFrame.sourceSize.w, headFrame.sourceSize.h);
-    const hw = headFrame.sourceSize.w * hsz;
-    const hh = headFrame.sourceSize.h * hsz;
+    const hsz = 56 / Math.max(headFrame.frame.w, headFrame.frame.h);
+    const hw = headFrame.frame.w * hsz;
+    const hh = headFrame.frame.h * hsz;
     ctx.save();
     ctx.translate(CX, CY);
     ctx.rotate(-Math.PI / 2);
@@ -303,8 +321,8 @@ function drawKnightMode() {
   const isSwordActive = activeKnightItem === 'knight_sword';
   const swordFrame = knightFrames ? knightFrames['T1KnightSword.png'] : null;
   if (swordFrame) {
-    const sw = swordFrame.sourceSize.w * ks.scale;
-    const sh = swordFrame.sourceSize.h * ks.scale;
+    const sw = swordFrame.frame.w * ks.scale;
+    const sh = swordFrame.frame.h * ks.scale;
     ctx.save();
     ctx.globalAlpha = isSwordActive ? 1 : 0.25;
     ctx.translate(CX + ks.offsetX, CY + ks.offsetY);
@@ -322,8 +340,8 @@ function drawKnightMode() {
   const isHandActive = activeKnightItem === 'knight_hand';
   const handFrame = knightFrames ? knightFrames['T1KnightLeftHand.png'] : null;
   if (handFrame) {
-    const sw = handFrame.sourceSize.w * kh.scale;
-    const sh = handFrame.sourceSize.h * kh.scale;
+    const sw = handFrame.frame.w * kh.scale;
+    const sh = handFrame.frame.h * kh.scale;
     ctx.save();
     ctx.globalAlpha = isHandActive ? 1 : 0.25;
     ctx.translate(CX + kh.offsetX, CY + kh.offsetY);
@@ -336,14 +354,34 @@ function drawKnightMode() {
   ctx.textAlign = 'center';
   ctx.fillText('hand', CX + kh.offsetX, CY + kh.offsetY + 30);
 
+  // Knight right hand (unarmed fist — replaces the sword when unequipped)
+  const krh = knightItems.knight_right_hand;
+  const isRightHandActive = activeKnightItem === 'knight_right_hand';
+  const rightHandFrame = knightFrames ? knightFrames['T1KnightRightHand.png'] : null;
+  if (rightHandFrame) {
+    const sw = rightHandFrame.frame.w * krh.scale;
+    const sh = rightHandFrame.frame.h * krh.scale;
+    ctx.save();
+    ctx.globalAlpha = isRightHandActive ? 1 : 0.25;
+    ctx.translate(CX + krh.offsetX, CY + krh.offsetY);
+    ctx.rotate(krh.rotation);
+    ctx.drawImage(getSpriteFromSheet(knightSheet, sw, sh, rightHandFrame.frame), -sw / 2, -sh / 2, sw, sh);
+    ctx.restore();
+  }
+  ctx.fillStyle = isRightHandActive ? 'rgba(78,205,196,0.8)' : 'rgba(255,255,255,0.2)';
+  ctx.font = '10px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('right hand', CX + krh.offsetX, CY + krh.offsetY + 30);
+
   const item = knightItems[activeKnightItem];
   scaleVal.textContent = item.scale.toFixed(3);
   rotVal.textContent = item.rotation.toFixed(2);
 
   output.textContent =
-    `// Paste into shared/data.js → KNIGHT_VISUALS\n` +
+    `// Paste into game-data.js/shared/data.js → KNIGHT_VISUALS\n` +
     `knight_sword: {\n  offsetX: ${knightItems.knight_sword.offsetX},\n  offsetY: ${knightItems.knight_sword.offsetY},\n  scale: ${knightItems.knight_sword.scale.toFixed(3)},\n  rotation: ${knightItems.knight_sword.rotation.toFixed(2)}\n},\n` +
-    `knight_hand: {\n  offsetX: ${knightItems.knight_hand.offsetX},\n  offsetY: ${knightItems.knight_hand.offsetY},\n  scale: ${knightItems.knight_hand.scale.toFixed(3)},\n  rotation: ${knightItems.knight_hand.rotation.toFixed(2)}\n}`;
+    `knight_hand: {\n  offsetX: ${knightItems.knight_hand.offsetX},\n  offsetY: ${knightItems.knight_hand.offsetY},\n  scale: ${knightItems.knight_hand.scale.toFixed(3)},\n  rotation: ${knightItems.knight_hand.rotation.toFixed(2)}\n},\n` +
+    `knight_right_hand: {\n  offsetX: ${knightItems.knight_right_hand.offsetX},\n  offsetY: ${knightItems.knight_right_hand.offsetY},\n  scale: ${knightItems.knight_right_hand.scale.toFixed(3)},\n  rotation: ${knightItems.knight_right_hand.rotation.toFixed(2)}\n}`;
 }
 
 function drawHandsMode() {
@@ -475,9 +513,9 @@ canvas.addEventListener('mousedown', (e) => {
     }
   } else if (mode === 'knight') {
     const item = knightItems[activeKnightItem];
-    const frameKey = activeKnightItem === 'knight_sword' ? 'T1KnightSword.png' : 'T1KnightLeftHand.png';
+    const frameKey = KNIGHT_FRAME_MAP[activeKnightItem];
     const frame = knightFrames ? knightFrames[frameKey] : null;
-    const sz = frame ? Math.max(frame.sourceSize.w, frame.sourceSize.h) * item.scale : 30;
+    const sz = frame ? Math.max(frame.frame.w, frame.frame.h) * item.scale : 30;
     const dx = p.x - (CX + item.offsetX);
     const dy = p.y - (CY + item.offsetY);
     if (Math.sqrt(dx * dx + dy * dy) < sz / 2 + 20) {
@@ -526,9 +564,9 @@ canvas.addEventListener('mousemove', (e) => {
       canvas.style.cursor = Math.sqrt(dx * dx + dy * dy) < sz / 2 + 15 ? 'grab' : 'default';
     } else if (mode === 'knight') {
       const item = knightItems[activeKnightItem];
-      const frameKey = activeKnightItem === 'knight_sword' ? 'T1KnightSword.png' : 'T1KnightLeftHand.png';
+      const frameKey = KNIGHT_FRAME_MAP[activeKnightItem];
       const frame = knightFrames ? knightFrames[frameKey] : null;
-      const sz = frame ? Math.max(frame.sourceSize.w, frame.sourceSize.h) * item.scale : 30;
+      const sz = frame ? Math.max(frame.frame.w, frame.frame.h) * item.scale : 30;
       const dx = p.x - (W / 2 + item.offsetX);
       const dy = p.y - (H / 2 + item.offsetY);
       canvas.style.cursor = Math.sqrt(dx * dx + dy * dy) < sz / 2 + 20 ? 'grab' : 'default';
@@ -574,7 +612,7 @@ copyBtn.addEventListener('click', () => {
   if (mode === 'screen') {
     text = `// SCREEN_UI\nserverLevel: {\n  x: ${screenUI.x},\n  y: ${screenUI.y},\n  scale: ${screenUI.scale.toFixed(1)},\n  ty: ${screenUI.ty}\n}`;
   } else if (mode === 'knight') {
-    text = `// KNIGHT_VISUALS\nknight_sword: {\n  offsetX: ${knightItems.knight_sword.offsetX},\n  offsetY: ${knightItems.knight_sword.offsetY},\n  scale: ${knightItems.knight_sword.scale.toFixed(3)},\n  rotation: ${knightItems.knight_sword.rotation.toFixed(2)}\n},\nknight_hand: {\n  offsetX: ${knightItems.knight_hand.offsetX},\n  offsetY: ${knightItems.knight_hand.offsetY},\n  scale: ${knightItems.knight_hand.scale.toFixed(3)},\n  rotation: ${knightItems.knight_hand.rotation.toFixed(2)}\n}`;
+    text = `// KNIGHT_VISUALS\nknight_sword: {\n  offsetX: ${knightItems.knight_sword.offsetX},\n  offsetY: ${knightItems.knight_sword.offsetY},\n  scale: ${knightItems.knight_sword.scale.toFixed(3)},\n  rotation: ${knightItems.knight_sword.rotation.toFixed(2)}\n},\nknight_hand: {\n  offsetX: ${knightItems.knight_hand.offsetX},\n  offsetY: ${knightItems.knight_hand.offsetY},\n  scale: ${knightItems.knight_hand.scale.toFixed(3)},\n  rotation: ${knightItems.knight_hand.rotation.toFixed(2)}\n},\nknight_right_hand: {\n  offsetX: ${knightItems.knight_right_hand.offsetX},\n  offsetY: ${knightItems.knight_right_hand.offsetY},\n  scale: ${knightItems.knight_right_hand.scale.toFixed(3)},\n  rotation: ${knightItems.knight_right_hand.rotation.toFixed(2)}\n}`;
   } else {
     text = `// ZOMBIE_VISUALS\nleft_hand: {\n  offsetX: ${hands.left_hand.offsetX},\n  offsetY: ${hands.left_hand.offsetY},\n  scale: ${hands.left_hand.scale.toFixed(3)},\n  rotation: ${hands.left_hand.rotation.toFixed(2)}\n},\nright_hand: {\n  offsetX: ${hands.right_hand.offsetX},\n  offsetY: ${hands.right_hand.offsetY},\n  scale: ${hands.right_hand.scale.toFixed(3)},\n  rotation: ${hands.right_hand.rotation.toFixed(2)}\n}`;
   }

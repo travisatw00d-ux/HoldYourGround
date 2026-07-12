@@ -10,6 +10,7 @@ import {
   showLoginForm, showRegisterForm, onAuth,
   leaveToMenu, hideEscapeMenu, showEscapeMenu,
   hideStatsPanel, showCharStats, hideCharStats,
+  showInventory, hideInventory,
   getSelectedRoomId, getCurrentRooms
 } from './lib/ui.js';
 
@@ -146,6 +147,7 @@ $.statsBtn.addEventListener('click', () => {
 
 $.statsClose.addEventListener('click', hideStatsPanel);
 $.charStatsClose.addEventListener('click', hideCharStats);
+$.inventoryClose.addEventListener('click', hideInventory);
 
 socket.on('admin:stats', (data) => {
   let html = '';
@@ -364,11 +366,17 @@ document.addEventListener('fullscreenchange', () => {
     socket.emit('fullscreen', { enabled: false });
     socket.emit('cameraZoom', { zoom: state.cameraZoom, viewW: state.viewW, viewH: state.viewH });
   }
+  // Both popups size/position themselves off state.viewW (see ui.js), which just
+  // changed above — reposition them immediately if either is already open instead
+  // of leaving them at their pre-toggle size/spot until next open.
+  if (!$.charStatsPanel.classList.contains('hidden')) showCharStats();
+  if (!$.inventoryPanel.classList.contains('hidden')) showInventory();
 });
 
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     if (!$.charStatsPanel.classList.contains('hidden')) { hideCharStats(); return; }
+    if (!$.inventoryPanel.classList.contains('hidden')) { hideInventory(); return; }
     if (state.screen === 'playing') {
     e.preventDefault();
     if ($.escapeMenu.classList.contains('hidden')) {
@@ -396,6 +404,14 @@ document.addEventListener('keydown', (e) => {
       showCharStats();
     } else {
       hideCharStats();
+    }
+  }
+  if ((e.key === 'i' || e.key === 'I') && state.screen === 'playing') {
+    e.preventDefault();
+    if ($.inventoryPanel.classList.contains('hidden')) {
+      showInventory();
+    } else {
+      hideInventory();
     }
   }
 });
