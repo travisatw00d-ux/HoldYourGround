@@ -1,8 +1,28 @@
 {
   "frames": {
-    "T1HealthPotion.png": {
+    "goldcoin.png": {
       "frame": {
         "x": 0,
+        "y": 0,
+        "w": 116,
+        "h": 119
+      },
+      "rotated": false,
+      "trimmed": true,
+      "spriteSourceSize": {
+        "x": 6,
+        "y": 5,
+        "w": 116,
+        "h": 119
+      },
+      "sourceSize": {
+        "w": 128,
+        "h": 128
+      }
+    },
+    "T1HealthPotion.png": {
+      "frame": {
+        "x": 118,
         "y": 0,
         "w": 76,
         "h": 105
@@ -27,8 +47,8 @@
     "image": "ItemSheet.png",
     "format": "RGBA8888",
     "size": {
-      "w": 76,
-      "h": 105
+      "w": 194,
+      "h": 119
     },
     "scale": "1"
   }

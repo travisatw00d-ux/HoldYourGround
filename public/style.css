@@ -449,6 +449,65 @@ button:active {
   line-height: 1.1;
 }
 
+/* Wallet readout inside the inventory panel (2026-07-13) — positioned/sized
+   via the same CurrencyDisplay hud-layout.json entry Travis places with
+   hud-position-tool.html, same panel-relative math as .inv-slot/.equip-slot
+   above. Unlike those, this is plain text, not an interactive slot — no
+   pointer-events needed, no drag/drop, no hover tooltip. */
+.currency-display {
+  position: absolute;
+  pointer-events: none;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  /* Left-aligned within its box (2026-07-13, per Travis), not centered —
+     the box sits over art he placed on the left side of the panel. */
+  justify-content: flex-start;
+  padding-left: 4px;
+  font-family: "Teko", "Rajdhani", sans-serif;
+  font-weight: 700;
+  font-size: 1rem;
+  text-align: left;
+  /* No color/text-shadow here anymore (2026-07-13) — every denomination gets
+     its own color via .currency-gold/-silver/-bronze below, set via
+     game-data.js's formatCurrencyHtml(). This is just a fallback for the
+     rare case content ends up here NOT wrapped in one of those spans. */
+  color: #fff;
+}
+
+/* Per-denomination currency colors (2026-07-13, per Travis: "a nice vibrant
+   bronze... a nice shiny silver... a nice gold") — used everywhere currency
+   is displayed (inventory panel, welcome panel, Char Stats, gold-coin world-
+   drop hover tooltip), always via game-data.js's formatCurrencyHtml(), never
+   hardcoded per call site, so a color tweak here updates every location at
+   once.
+
+   Originally used a blurred text-shadow "glow" — Travis flagged it as
+   making the text look blurry, and asked for the text itself to be
+   shinier instead. Fixed same day: no more blur-radius shadow (just a
+   crisp 1px shadow for legibility against busy backgrounds, not a glow),
+   and each color is now a metallic gradient (pale highlight -> base color
+   -> darker edge) painted onto the text via background-clip, which reads
+   as "shiny" without softening/blurring the letterforms at all. */
+.currency-gold, .currency-silver, .currency-bronze {
+  font-weight: 700;
+  text-shadow: 0 2px 3px rgba(0, 0, 0, 0.9);
+}
+
+.currency-gold {
+  color: #ffd700;
+}
+
+.currency-silver {
+  color: #b8c8d4;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+.currency-bronze {
+  color: #c07028;
+}
+
 .slot-item-icon {
   display: block;
   width: 100%;
@@ -492,6 +551,18 @@ button:active {
   color: rgba(255, 255, 255, 0.9);
 }
 
+/* Master chest world-hover tooltip (2026-07-14) — reuses #dropTooltip/
+   .item-tooltip's box + .tooltip-header/.tooltip-icon-wrap/.tooltip-name
+   (same as the world item-drop tooltip), just adds this description line
+   underneath. max-width forces the flavor text to wrap instead of stretching
+   the tooltip box out to a single long line. */
+.item-tooltip .tooltip-desc {
+  margin-top: 4px;
+  max-width: 220px;
+  color: rgba(255, 255, 255, 0.6);
+  line-height: 1.4;
+}
+
 /* World item-drop hover tooltip — lives directly in #wrapper (not nested in
    #inventoryPanel like the slot tooltip above) so it works regardless of
    whether the inventory panel is open. Adds an icon next to the name, which
@@ -526,7 +597,7 @@ button:active {
   position: fixed;
   z-index: 200;
   pointer-events: none;
-  opacity: 0.9;
+  opacity: 0.95;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -534,6 +605,17 @@ button:active {
   font-size: 0.55rem;
   color: rgba(255, 255, 255, 0.85);
   text-align: center;
+  /* Solid background/border/shadow so the ghost is always clearly visible
+     against ANY part of the game behind it — fixed 2026-07-13, was
+     previously just a bare icon (or, for the many items with no
+     ITEM_ICONS art yet, a tiny borderless text label) floating with
+     nothing behind it, which players reported as looking "invisible" while
+     dragging. Matches .item-tooltip's box treatment for a consistent,
+     unmistakably-a-UI-element look. */
+  background: rgba(10, 10, 15, 0.9);
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
 }
 
 .inventory-close {
@@ -555,6 +637,12 @@ button:active {
 }
 
 #inventoryContent {
+  width: 100%;
+  height: 100%;
+  position: relative;
+}
+
+#masterChestContent {
   width: 100%;
   height: 100%;
   position: relative;
@@ -1039,11 +1127,6 @@ button:active {
   color: #fff8df;
   font-size: 24px;
   text-shadow: 3px 3px 0 #050505;
-}
-
-
-  min-width: 36px;
-  text-align: center;
 }
 
 #startNowBtn {

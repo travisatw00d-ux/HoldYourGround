@@ -2,10 +2,6 @@ function getExpForKill(zombieLvl) {
   return Math.floor(5 + Math.pow(zombieLvl, 1.5));
 }
 
-function getGoldForKill(zombieLvl) {
-  return Math.floor(zombieLvl * 1.5);
-}
-
 function getExpToNext(level) {
   return level * 100;
 }
@@ -30,4 +26,6 @@ function fromCumulativeExp(cumulative) {
   return { level, exp: remaining };
 }
 
-module.exports = { getExpForKill, getGoldForKill, getExpToNext, cumulativeExp, fromCumulativeExp };
+// getGoldForKill() (flat auto-credit per kill) was removed 2026-07-13 —
+// currency now comes exclusively from world coin pickups, see currency.js.
+module.exports = { getExpForKill, getExpToNext, cumulativeExp, fromCumulativeExp };

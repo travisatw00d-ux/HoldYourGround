@@ -6,7 +6,7 @@ export const state = {
   level: 1,
   exp: 0,
   expToNext: 100,
-  gold: 0,
+  currencyBronze: 0,
   godMode: false,
   worldW: 0,
   worldH: 0,

@@ -35,11 +35,16 @@ function rollForDrop(rng = Math.random) {
 // just gets back a fully-rolled instance ready to store, or null if the
 // 50% roll missed. The item's own `tier` field (ITEMS[baseItemId].tier)
 // decides which attribute-value ranges apply; defaults to 1 if unset.
-function rollDropInstance(rng = Math.random) {
+// `luck` (default 0) is the KILLING PLAYER's current Luck stat — passed
+// straight through to generateItemInstance()/rollItemRarity() to shift the
+// rarity odds toward higher tiers. It does NOT affect the 50% WHICH-item
+// roll above (that's a separate, un-luck-affected chance); it only affects
+// what rarity the item comes out as once one does drop.
+function rollDropInstance(rng = Math.random, luck = 0) {
   const baseItemId = rollForDrop(rng);
   if (!baseItemId) return null;
   const tier = (ITEMS[baseItemId] && ITEMS[baseItemId].tier) || 1;
-  return itemGenerator.generateItemInstance(baseItemId, tier, rng);
+  return itemGenerator.generateItemInstance(baseItemId, tier, rng, luck);
 }
 
 module.exports = { rollForDrop, rollDropInstance, DROP_CHANCE, DROP_POOL, PICKUP_RANGE };

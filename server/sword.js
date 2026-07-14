@@ -61,7 +61,18 @@ function checkSwordHit(p, zombies, players, grid) {
   const isJabFinal = p.comboStep === 3 && p.attackStyle === 'jab';
   const isSwingThird = p.comboStep === 3 && isSwing;
   if (isJabFinal) halfFrames = totalFrames; // process all frames for triple jab
-  const dmgLimit = isSwingThird ? totalFrames : halfFrames + (isSwing ? 4 : 1);
+  // Swing deals damage across the ENTIRE motion of every hit (steps 1-3, not
+  // just the final double-swing) — fixed 2026-07-12, was previously cut off
+  // at `halfFrames + 4` for steps 1/2 (only the forward half of that single
+  // swing could land a hit, the return half was pure recovery with no
+  // damage), which is why zombies caught late in a swing's arc weren't
+  // taking damage. Jab keeps the forward-half-only cutoff (its whole design
+  // is a quick poke, not a sweeping swing) — `isJabFinal`'s `halfFrames =
+  // totalFrames` reassignment above already gives jab's own triple-hit
+  // finisher full coverage the same way, so this ternary only needs the two
+  // real cases: swing (any step) = whole motion, everything else = forward
+  // half + a small buffer.
+  const dmgLimit = isSwing ? totalFrames : halfFrames + 1;
   // Jab/swing open the chain window partway through the forward swing (this
   // line) so clicking early cancels the recovery half into the next hit's
   // startup — that's the intentional fluid-combo feel. Unarmed should NOT do
@@ -103,15 +114,22 @@ function checkSwordHit(p, zombies, players, grid) {
     }
   }
   p.prevCf = currentCf;
-  // Combo3 double-hit: clear hit IDs at the transition between the two swings
-  if (p.comboStep === 3 && !p._combo3MidHit && currentCf >= Math.floor(totalFrames / 3)) {
+  // Swing combo3 double-hit: clear hit IDs exactly at the swing's own
+  // midpoint (`halfFrames`, the same threshold everything else here uses to
+  // mean "forward motion ends / return motion begins") so a target caught in
+  // both the forward AND backward half of the double-swing takes damage
+  // both times, cleanly split at the actual midpoint rather than an
+  // arbitrary totalFrames/3 mark (fixed 2026-07-12, alongside the dmgLimit
+  // fix above). Scoped to `isSwing` — jab's own triple-hit finisher clears
+  // attackHitIds through its own separate mechanism just below
+  // (`_jabHitCleared`/`cf >= 20,40`), so this doesn't need to (and
+  // previously shouldn't have, though it was harmlessly redundant there
+  // since jab already handles its own clearing).
+  if (p.comboStep === 3 && isSwing && !p._combo3MidHit && currentCf >= halfFrames) {
     p.attackHitIds = [];
     p._combo3MidHit = true;
   }
   if (cfs.length === 0) return events;
-
-  // Clear hit IDs at forward segment boundaries for jab triple combo
-  if (isJabFinal) p._jabHitCleared = 0;
 
   // Unarmed punches only ever land on one target per swing, and never landed
   // on anyone yet if attackHitIds already has an entry — skip all hit
@@ -120,6 +138,25 @@ function checkSwordHit(p, zombies, players, grid) {
   if (isUnarmed && p.attackHitIds.length > 0) return events;
 
   const nearbyZombies = grid.getNearbyZombies(p.x, p.y);
+  // DEBUG_COMBAT diagnostics (2026-07-13) — set env var DEBUG_COMBAT=1 before
+  // starting the server to get a one-line-per-swing summary printed when
+  // each attack ends (see combat-system.js's logCombatDiag). Tracks the
+  // widest nearbyZombies count seen and the closest approach (both raw
+  // straight-line distance to the zombie's center, and the actual capsule
+  // distance the hit-test uses) across every tick of the swing — lets us
+  // tell apart "zombie was never even in grid range" from "zombie was close
+  // but the capsule never lined up with it" from "capsule got close but
+  // never quite inside the hit threshold" without guessing from a static
+  // simulation. Zero perf cost when the env var isn't set (the `if` short-
+  // circuits before any of the Math calls run).
+  if (process.env.DEBUG_COMBAT) {
+    p._diagNearbyMax = Math.max(p._diagNearbyMax || 0, nearbyZombies.length);
+    for (const z of nearbyZombies) {
+      if (!z.alive) continue;
+      const rawDist = Math.hypot(z.x - p.x, z.y - p.y);
+      if (p._diagMinRaw === undefined || rawDist < p._diagMinRaw) p._diagMinRaw = rawDist;
+    }
+  }
 
   hitLoop:
   for (let si = 0; si < cfs.length; si++) {
@@ -144,7 +181,26 @@ function checkSwordHit(p, zombies, players, grid) {
     const hiltX = sx + (bhX * cosR - bhY * sinR) * scale;
     const hiltY = sy + (bhX * sinR + bhY * cosR) * scale;
 
-    // Clear hit IDs at forward segment boundaries for jab triple combo
+    // Clear hit IDs at forward segment boundaries for jab triple combo — this
+    // is meant to fire exactly twice for the whole jab_combo3 flourish (once
+    // reopening targets for thrust 2 at cf>=20, once more for thrust 3 at
+    // cf>=40), tracked via `p._jabHitCleared` counting 0->1->2 across the
+    // ENTIRE attack. Fixed 2026-07-13: there used to be a second reset —
+    // `if (isJabFinal) p._jabHitCleared = 0;` — sitting earlier in this
+    // function (right after the `cfs.length === 0` early return), which ran
+    // on EVERY TICK, not just once at attack start. Since that line always
+    // ran before this loop, `_jabHitCleared` was back to 0 at the start of
+    // every single tick from the moment cf first crossed 20 onward, so this
+    // check kept re-triggering (always against the `cf>=20` branch, since
+    // `_jabHitCleared` never got to actually stay at 1 or 2 across a tick
+    // boundary) — attackHitIds got wiped on almost every tick for the rest
+    // of the attack, letting a target that lingered in range for several
+    // consecutive ticks during a single forward thrust take damage far more
+    // than once per thrust (confirmed via simulation: a stationary target
+    // took 4 hits during thrust 3 alone, should be capped at 1). Removing
+    // that per-tick reset (attack-start reset in combat-system.js's
+    // `_executeAttack` is the only one needed) fixes it to exactly 1 hit per
+    // forward thrust, matching what Travis asked for.
     if (isJabFinal && p._jabHitCleared < 2) {
       if (cf >= (p._jabHitCleared === 0 ? 20 : 40)) {
         p.attackHitIds = [];
@@ -154,8 +210,25 @@ function checkSwordHit(p, zombies, players, grid) {
 
     for (const z of nearbyZombies) {
       if (!z.alive) continue;
-      if (!(p.comboStep === 3 && isSwing && cf >= halfFrames) && p.attackHitIds.includes(z.id)) continue;
+      // Used to bypass the attackHitIds check entirely for the whole back
+      // half of swing combo3 (`cf >= halfFrames`), intended to let the
+      // return swing hit an already-hit target a second time — but a bypass
+      // with no re-block after that first extra hit means a target sitting
+      // in the blade's path for several consecutive ticks during the back
+      // half took damage EVERY one of those ticks, not just once more.
+      // Fixed 2026-07-12: removed. The `_combo3MidHit` reset right above
+      // (which clears `attackHitIds` exactly once, at the true midpoint) is
+      // the correct mechanism for "hittable again on the way back" — it
+      // already reopens every target for exactly one more hit, and normal
+      // attackHitIds tracking re-blocks them after that, giving a clean
+      // forward-hit / reset / backward-hit (max 2 total), not unlimited
+      // damage for anything that lingers in range during the return swing.
+      if (p.attackHitIds.includes(z.id)) continue;
       const d2 = distToSegSq(z.x, z.y, hiltX, hiltY, tipX, tipY);
+      if (process.env.DEBUG_COMBAT) {
+        const capsuleDist = Math.sqrt(d2);
+        if (p._diagMinCapsule === undefined || capsuleDist < p._diagMinCapsule) p._diagMinCapsule = capsuleDist;
+      }
       if (d2 < (bladeW + z.radius) * (bladeW + z.radius)) {
         // Bare-knuckle punches deal a flat, weak 2 damage regardless of
         // attackDmg/build/gear (rings etc. only matter once a weapon's
@@ -167,6 +240,7 @@ function checkSwordHit(p, zombies, players, grid) {
         z.x += (kzx / kzd) * ATTACK_KNOCKBACK * 3;
         z.y += (kzy / kzd) * ATTACK_KNOCKBACK * 3;
         p.attackHitIds.push(z.id);
+        if (process.env.DEBUG_COMBAT) p._diagHits = (p._diagHits || 0) + 1;
         if (z.health <= 0) {
           z.alive = false;
           p.kills++;

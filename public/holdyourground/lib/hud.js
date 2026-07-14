@@ -211,7 +211,15 @@ export function drawHUD(ctx) {
         ctx.shadowBlur = 0;
         ctx.restore();
       }
-      if (el.name === 'ServerLevel.png' || el.name === 'settingsgear.png' || el.name === 'inventory.png' || el.name === 'Stats.png') continue;
+      // mctab.png (2026-07-14) skipped for the exact same reason inventory.png
+      // is: its background art is drawn separately, on-demand, by ui.js's
+      // showMasterChest() into the dedicated masterChestCanvas only while the
+      // panel is actually open. Without this skip, this generic per-frame
+      // loop draws EVERY hudLayout entry that has a matching hudFrames
+      // image regardless of any panel's open/closed state — which is what
+      // was making the master chest tab appear permanently in the top-left
+      // corner even before pressing E (found 2026-07-14, reported by Travis).
+      if (el.name === 'ServerLevel.png' || el.name === 'settingsgear.png' || el.name === 'inventory.png' || el.name === 'Stats.png' || el.name === 'mctab.png') continue;
       const fr = fd.frame;
       const scl = isGroup ? 1 : viewportScale;
       const dw = sss.w * el.scale * scl;

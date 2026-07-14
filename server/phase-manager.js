@@ -34,6 +34,13 @@ function startMatch(room, fromEnded) {
   room.matchPhase = 'daytime';
   room.phaseTimer = DAYTIME_MS;
   room.zombies.length = 0;
+  // A fresh match must start on a clean canvas — leftover loot bags from the
+  // previous match (which _endMatch/resetMatch never touched) would
+  // otherwise still be sitting on the ground for whoever's first to hit
+  // Play, even though nothing dropped them this round. clearItemDrops() is
+  // a no-op if there's nothing to clear (see room.js), so this is safe to
+  // call unconditionally here.
+  room.clearItemDrops();
   room.waveServerLevel = Math.max(1, _computeServerLevel(room));
   room.mobSpawnPool = buildSpawnPool(room.waveServerLevel);
   room.grid.clear();
@@ -50,11 +57,19 @@ function startMatch(room, fromEnded) {
       if (firstReady) { p.x = firstReady.x; p.y = firstReady.y; }
     } else if (readySet.size > 0 || !isRestart || !p.isSpectator) {
       p.isSpectator = false;
-      p.lvl = 1; p.exp = 0; p.gold = 0; p.kills = 0;
-      p.statPoints = room._persistedExp.get('sp_' + id) || 0;
+      // p.currencyBronze is not reset here — see the matching comment in
+      // join-manager.js's handleDirectJoin(); currency carries across match
+      // restarts within a session, unlike lvl/exp/kills.
+      p.lvl = 1; p.exp = 0; p.kills = 0; p.statPoints = 0;
       p.investedPoints = {};
       playerMod.recalcStats(p);
       if (!p.alive) playerMod.respawnPlayer(id, room.players, room.zombies);
+      // Sync the client's currency display immediately (it locally resets to
+      // 0 on this same match-start, matching its now-accurate lvl/exp reset
+      // above) — without this a player with a real saved balance would
+      // briefly show "0b" until their next kill/pickup. See the matching
+      // comment in join-manager.js's handleDirectJoin().
+      room.io.to(id).emit('accountUpdate', { exp: 0, level: 1, expToNext: expMod.getExpToNext(1), currencyBronze: p.currencyBronze || 0, statPoints: p.statPoints || 0 });
     }
   }
   const MAX_PLAYERS = require('./config').MAX_PLAYERS;
@@ -142,7 +157,7 @@ function _advancePhase(room) {
           playerMod.respawnPlayer(id, room.players, room.zombies);
           room.io.to(id).emit('respawned');
           const rt = expMod.getExpToNext(room.players[id].lvl);
-          room.io.to(id).emit('accountUpdate', { exp: room.players[id].exp, level: room.players[id].lvl, expToNext: rt, gold: room.players[id].gold });
+          room.io.to(id).emit('accountUpdate', { exp: room.players[id].exp, level: room.players[id].lvl, expToNext: rt, currencyBronze: room.players[id].currencyBronze || 0 });
         }
       }
       room.currentWave++;
@@ -192,6 +207,7 @@ function resetMatch(room) {
   room.mobSpawnPool = buildSpawnPool(room.currentServerLevel || 1);
   room.zombies = initEnemies(room.mobSpawnPool, room.currentServerLevel || 1, room.players);
   room.grid.clear();
+  room.clearItemDrops();
   for (const id in room.players) {
     if (!room.players[id].alive) playerMod.respawnPlayer(id, room.players, room.zombies);
   }
@@ -211,6 +227,7 @@ function _timerEndReset(room) {
   room.mobSpawnPool = buildSpawnPool(sl);
   room.zombies = initEnemies(room.mobSpawnPool, sl, room.players);
   room.grid.clear();
+  room.clearItemDrops();
   room._endGameReady = new Set(readySnapshot);
   for (const id in room.players) {
     if (readySnapshot.includes(id) && !room.players[id].alive) playerMod.respawnPlayer(id, room.players, room.zombies);

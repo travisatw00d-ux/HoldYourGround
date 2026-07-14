@@ -1,6 +1,7 @@
 const { WORLD_W, WORLD_H, MAX_PLAYERS } = require('./config');
 const auth = require('./auth');
 const playerMod = require('./player');
+const combatSystem = require('./combat-system');
 const roomManager = require('./game-loop');
 const expMod = require('./exp');
 const { getStats24h, recordVisit } = require('./stats-tracker');
@@ -19,6 +20,14 @@ module.exports = function registerSocket(socket, { io, broadcastRoomList, broadc
   socket.on('register', ({ username, password, displayName }) => {
     const result = auth.register(username, password, displayName);
     if (result.ok) {
+      // Track this session the same way 'login' below does (2026-07-12 fix)
+      // — without this, a brand-new account had no activeSessions entry
+      // until its FIRST login, so a second tab registering/logging into
+      // that same account before then wasn't blocked by the "already
+      // logged in" check. Two simultaneously-live sessions for one account
+      // both eventually save equipment/exp on leave, and whichever leaves
+      // last silently overwrites the other's — this closes that gap.
+      activeSessions.set(result.account.id, socket.id);
       socket.account = result.account;
       socket.emit('authSuccess', { account: result.account, rooms: roomManager.getRoomList() });
       console.log(`[${socket.id}] registered as "${result.account.username}"`);
@@ -148,6 +157,11 @@ module.exports = function registerSocket(socket, { io, broadcastRoomList, broadc
     if (room) room.handlePickupItem(socket.id, id);
   });
 
+  socket.on('dropItem', ({ from }) => {
+    const room = roomManager.getPlayerRoom(socket.id);
+    if (room) room.handleDropItem(socket.id, from);
+  });
+
   socket.on('fullscreen', ({ enabled }) => {
     const room = roomManager.getPlayerRoom(socket.id);
     if (room) room.setFullscreen(socket.id, enabled);
@@ -163,6 +177,16 @@ module.exports = function registerSocket(socket, { io, broadcastRoomList, broadc
     if (!room) return;
     const p = room.players[socket.id];
     if (!p) return;
+    // Switching jab<->swing mid-combo would change maxCombo/comboKey out from
+    // under an in-progress attack — see isMidCombo's comment in
+    // combat-system.js. This is the exact bug reported 2026-07-12: spacebar
+    // pressed mid-swing (e.g. an accidental/muscle-memory press while
+    // spamming attack) used to flip p.attackStyle instantly, which broke the
+    // spin's continuation check on the very next tick and aborted the combo
+    // back to a fresh, basic attack. Silently ignored while mid-combo, same
+    // "rejected = no-op" convention as every other blocked input — player
+    // can toggle again once the combo (and its recovery cooldown) finishes.
+    if (combatSystem.isMidCombo(p)) return;
     p.attackStyle = p.attackStyle === 'jab' ? 'swing' : 'jab';
     socket.emit('attackStyleChanged', { attackStyle: p.attackStyle });
     const info = playerMod.playerInfoObj(p);
@@ -207,7 +231,7 @@ module.exports = function registerSocket(socket, { io, broadcastRoomList, broadc
     room._persistedExp.set(socket.id, totalExp);
     playerMod.recalcStats(p);
     const expResult = expMod.fromCumulativeExp(p.exp);
-    socket.emit('accountUpdate', { exp: expResult.exp, level: expResult.level, expToNext: expMod.getExpToNext(expResult.level), gold: p.gold, statPoints: p.statPoints });
+    socket.emit('accountUpdate', { exp: expResult.exp, level: expResult.level, expToNext: expMod.getExpToNext(expResult.level), currencyBronze: p.currencyBronze || 0, statPoints: p.statPoints });
     for (const oid in room.players) {
       room.io.to(oid).emit('playerInfo', playerMod.playerInfoObj(p));
     }
@@ -225,7 +249,7 @@ module.exports = function registerSocket(socket, { io, broadcastRoomList, broadc
     p.investedPoints[stat] = (p.investedPoints[stat] || 0) + 1;
     playerMod.recalcStats(p);
     const expResult = require('./exp').fromCumulativeExp(p.exp);
-    socket.emit('accountUpdate', { exp: expResult.exp, level: expResult.level, expToNext: require('./exp').getExpToNext(expResult.level), gold: p.gold, statPoints: p.statPoints });
+    socket.emit('accountUpdate', { exp: expResult.exp, level: expResult.level, expToNext: require('./exp').getExpToNext(expResult.level), currencyBronze: p.currencyBronze || 0, statPoints: p.statPoints });
     for (const oid in room.players) {
       room.io.to(oid).emit('playerInfo', playerMod.playerInfoObj(p));
     }

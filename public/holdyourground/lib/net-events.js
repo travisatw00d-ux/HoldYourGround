@@ -7,7 +7,7 @@ import { callbacks } from './callback-registry.js';
 import { playSound, playMobSound, loadSounds } from './audio.js';
 import { ensureAssets, enterGame } from './assets.js';
 import { showNWPopup, toggleNWPopup, resetWavePopup, hideNWPopup, populateNWRows, updateNWCounts } from './next-wave-popup.js';
-import { hideCharStats, hideInventory, showCharStats, showInventory, hideDropTooltip, $ } from './ui.js';
+import { hideCharStats, hideInventory, showCharStats, showInventory, showMasterChest, hideDropTooltip, $ } from './ui.js';
 import { ZOMBIE_ANIMATIONS, MOB_TYPES } from './game-data.js';
 
 export function registerEvents(socket) {
@@ -149,6 +149,8 @@ export function registerEvents(socket) {
           equipment: meta.equipment, inventorySlots: meta.inventorySlots,
           defense: meta.defense != null ? meta.defense : 0,
           fortune: meta.fortune != null ? meta.fortune : 0,
+          luck: meta.luck != null ? meta.luck : 0,
+          healthRegen: meta.healthRegen != null ? meta.healthRegen : 0,
           turnSpeed: meta.turnSpeed != null ? meta.turnSpeed : 18,
           playerClass: meta.playerClass || 'knight'
         };
@@ -230,8 +232,11 @@ export function registerEvents(socket) {
       p.currentItem = info.currentItem !== undefined ? info.currentItem : 'wooden_sword'; p.maxHealth = info.maxHealth || 100;
       p.equipment = info.equipment || p.equipment;
       p.inventorySlots = info.inventorySlots || p.inventorySlots;
+      p.masterChest = info.masterChest || p.masterChest;
       p.defense = info.defense != null ? info.defense : 0;
       p.fortune = info.fortune != null ? info.fortune : 0;
+      p.luck = info.luck != null ? info.luck : 0;
+      p.healthRegen = info.healthRegen != null ? info.healthRegen : 0;
       p.speed = info.speed != null ? info.speed : 13;
       p.attackDmg = info.attackDmg != null ? info.attackDmg : 5;
       p.attackSpeed = info.attackSpeed != null ? info.attackSpeed : 800;
@@ -252,6 +257,12 @@ export function registerEvents(socket) {
       if (info.id === state.myId && $.charStatsPanel && !$.charStatsPanel.classList.contains('hidden')) {
         showCharStats();
       }
+      // Master chest (2026-07-14) — same live-refresh idea, kept ready for
+      // when it actually holds items; currently always empty so this is a
+      // no-op re-render of 16 blank slots.
+      if (info.id === state.myId && $.masterChestPanel && !$.masterChestPanel.classList.contains('hidden')) {
+        showMasterChest();
+      }
     }
   });
   socket.on('playerLeft', (id) => { delete state.playerMeta[id]; });
@@ -262,7 +273,17 @@ export function registerEvents(socket) {
     const active = state.matchPhase === 'daytime' || state.matchPhase === 'nighttime' || state.matchPhase === 'intermission' || state.matchPhase === 'waveOver';
     if (active) {
       state.isDeadSpectating = true;
-      state.screen = 'playing'; state.level = 1; state.exp = 0; state.expToNext = 100; state.gold = 0;
+      // currencyBronze deliberately NOT reset here (2026-07-13, fixing a
+      // real bug) — unlike level/exp, the server never actually zeroes
+      // p.currencyBronze at these points (see room.js/join-manager.js/
+      // phase-manager.js — currency carries across matches within a
+      // session), so locally zeroing the CLIENT's copy was always wrong.
+      // Worse, in some server paths the corrective `accountUpdate` carrying
+      // the real value gets emitted BEFORE this event, so the local zero
+      // below used to clobber it right back to 0 a moment later. Leaving it
+      // untouched here just keeps showing the last known-correct value,
+      // which is already right since the server never changed it.
+      state.screen = 'playing'; state.level = 1; state.exp = 0; state.expToNext = 100;
     } else {
       stopRender();
       document.getElementById('elimKills').textContent = `Kills: ${kills}`;
@@ -298,8 +319,8 @@ export function registerEvents(socket) {
     if (nearest && nearDist < 60) playMobSound(nearest.mobType, 'hit', { x: x, y: y });
   });
 
-  socket.on('accountUpdate', ({ exp, level, expToNext, gold, statPoints }) => {
-    state.exp = exp; state.level = level; state.expToNext = expToNext; state.gold = gold;
+  socket.on('accountUpdate', ({ exp, level, expToNext, currencyBronze, statPoints }) => {
+    state.exp = exp; state.level = level; state.expToNext = expToNext; state.currencyBronze = currencyBronze;
     if (statPoints != null) state.statPoints = statPoints;
   });
 
@@ -322,7 +343,10 @@ export function registerEvents(socket) {
     state.isSpectator = false;
     state.isDeadSpectating = !!isDead;
     state.queuedPlayers = (state.queuedPlayers || []).filter(q => q.id !== state.myId);
-    state.screen = 'playing'; state.level = 1; state.exp = 0; state.expToNext = 100; state.gold = 0;
+    // currencyBronze deliberately NOT reset here — see the matching comment
+    // on the 'eliminated' handler above; this was the actual cause of
+    // currency appearing to reset to 0 on "Play Again" (2026-07-13 fix).
+    state.screen = 'playing'; state.level = 1; state.exp = 0; state.expToNext = 100;
     updateJoinButton();
     stopRender();
     startRender(socket);

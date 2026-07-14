@@ -11,6 +11,7 @@ import {
   leaveToMenu, hideEscapeMenu, showEscapeMenu,
   hideStatsPanel, showCharStats, hideCharStats,
   showInventory, hideInventory,
+  showMasterChest, hideMasterChest,
   getSelectedRoomId, getCurrentRooms
 } from './lib/ui.js';
 
@@ -148,6 +149,7 @@ $.statsBtn.addEventListener('click', () => {
 $.statsClose.addEventListener('click', hideStatsPanel);
 $.charStatsClose.addEventListener('click', hideCharStats);
 $.inventoryClose.addEventListener('click', hideInventory);
+$.masterChestClose.addEventListener('click', hideMasterChest);
 
 socket.on('admin:stats', (data) => {
   let html = '';
@@ -371,12 +373,14 @@ document.addEventListener('fullscreenchange', () => {
   // of leaving them at their pre-toggle size/spot until next open.
   if (!$.charStatsPanel.classList.contains('hidden')) showCharStats();
   if (!$.inventoryPanel.classList.contains('hidden')) showInventory();
+  if (!$.masterChestPanel.classList.contains('hidden')) showMasterChest();
 });
 
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     if (!$.charStatsPanel.classList.contains('hidden')) { hideCharStats(); return; }
     if (!$.inventoryPanel.classList.contains('hidden')) { hideInventory(); return; }
+    if (!$.masterChestPanel.classList.contains('hidden')) { hideMasterChest(); return; }
     if (state.screen === 'playing') {
     e.preventDefault();
     if ($.escapeMenu.classList.contains('hidden')) {

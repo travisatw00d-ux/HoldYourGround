@@ -4,9 +4,51 @@ const {
   ITEM_SLOTS, CLASS_LOADOUTS, INVENTORY_SIZE, BASE_TURN_SPEED
 } = require('./config');
 const { resolveBaseItemId, calculateItemStatBonuses } = require('./item-generator');
+const db = require('./db');
 
 function getLoadout(playerClass) {
   return CLASS_LOADOUTS[playerClass] || CLASS_LOADOUTS.knight;
+}
+
+// Loads a logged-in player's persisted equipment (see db.js's equipment_json
+// column comment, and room.js's removePlayer() for the write side). Returns
+// null on any failure (no account row, column never written, corrupted/
+// malformed JSON) — addPlayer() treats null as "no saved data, use the
+// class loadout defaults," so a bad row can never block joining. Never
+// called for guests (accountId is null for them) — see addPlayer() below.
+function loadSavedEquipment(accountId) {
+  try {
+    const row = db.prepare('SELECT equipment_json FROM accounts WHERE id = ?').get(accountId);
+    if (!row || !row.equipment_json) return null;
+    const parsed = JSON.parse(row.equipment_json);
+    if (!parsed || typeof parsed !== 'object') return null;
+    return parsed;
+  } catch (e) {
+    // Still degrades to "no saved data" either way (a bad row must never
+    // block joining), but logged now (2026-07-12) so a real DB/parse
+    // failure is visible in server logs instead of just looking identical
+    // to "this account never had anything saved."
+    console.error(`[equipment] load failed for account ${accountId}:`, e);
+    return null;
+  }
+}
+
+// Loads a logged-in player's persisted currency total (currency_bronze —
+// see db.js's column comment and currency.js for the denomination math).
+// Same defensive shape as loadSavedEquipment() above: any failure degrades
+// to 0 (never blocks joining), but logs a real DB/parse failure rather than
+// silently looking like "this account never had any currency." Never called
+// for guests (accountId is null for them).
+function loadSavedCurrency(accountId) {
+  try {
+    const row = db.prepare('SELECT currency_bronze FROM accounts WHERE id = ?').get(accountId);
+    if (!row) return 0;
+    const v = row.currency_bronze;
+    return Number.isFinite(v) && v > 0 ? Math.floor(v) : 0;
+  } catch (e) {
+    console.error(`[currency] load failed for account ${accountId}:`, e);
+    return 0;
+  }
 }
 
 function randomSpawn(zombies, minDist) {
@@ -59,10 +101,21 @@ function recalcStats(p) {
   // Defense is tracked and displayed but not yet applied to incoming zombie
   // damage in zombie-ai.js — that mitigation formula is follow-up combat work.
   p.defense = equippedStatTotal(p, 'defense');
-  // Fortune/Luck is tracked and displayed (Char Stats, item tooltips) but
-  // nothing consumes it yet (e.g. affecting drop odds/rarity) — same
-  // "wired but not yet applied" status as defense above, follow-up work.
+  // Fortune and Luck are separate stats (2026-07-12, per Travis): Fortune
+  // is tracked/displayed but not yet applied to anything — it's reserved
+  // for a future gold-drop % multiplier, "wired but not yet applied" same
+  // as defense above, follow-up work once gold drops exist as a mechanic.
+  // Luck IS applied: room.js reads p.luck at the moment of a zombie kill
+  // and passes it into item-drops.js's rollDropInstance(), which shifts the
+  // rarity roll toward higher tiers — see item-generator.js's
+  // getLuckAdjustedRarities().
   p.fortune = equippedStatTotal(p, 'fortune');
+  p.luck = equippedStatTotal(p, 'luck');
+  // Health Regen (2026-07-12) — HP restored per second, 0 baseline (only
+  // equipped healthRegenFlat/healthRegenScaling grant any). Actually
+  // applied every tick in room.js's gameTick(), not just tracked/displayed
+  // like Defense/Fortune above.
+  p.healthRegen = equippedStatTotal(p, 'healthRegen');
   p.maxHealth = (base.maxHealth ?? BASE_HEALTH) + equippedStatTotal(p, 'maxHealth');
   p.maxEnergy = 100 + equippedStatTotal(p, 'maxEnergy');
   if (p.investedPoints) {
@@ -94,6 +147,16 @@ function addPlayer(id, name, players, zombies, accountType, accountId) {
   const ci = colorIndex++ % COLORS.length;
   const playerClass = 'knight';
   const loadout = getLoadout(playerClass);
+  // Persisted gear (2026-07-12) overrides the class loadout defaults for a
+  // logged-in account that has previously saved equipment — see
+  // loadSavedEquipment() above and room.js's removePlayer() for the write
+  // side. `saved` is either null (guest, brand-new account, or no saved
+  // data yet) or the full {weapon,armor,ring,necklace,helmet} shape; every
+  // field is read defensively with `!== undefined` / `?? null` so a
+  // partial/legacy JSON blob can't leave any slot as `undefined` (which
+  // would behave subtly differently from an intentional `null`/unarmed-or-
+  // unequipped slot down the line — see playerInfoObj/net-events.js).
+  const saved = accountId ? loadSavedEquipment(accountId) : null;
   players[id] = {
     id,
     _idBytes: Buffer.from(id, 'utf8'),
@@ -112,14 +175,23 @@ function addPlayer(id, name, players, zombies, accountType, accountId) {
     maxEnergy: 100,
     attackCooldown: 0,
     facingAngle: 0,
-    currentItem: loadout.weapon,
+    currentItem: saved ? (saved.weapon !== undefined ? saved.weapon : null) : loadout.weapon,
     inventory: [loadout.weapon],
-    equipment: { armor: loadout.armor, ring: loadout.ring, necklace: loadout.necklace, helmet: loadout.helmet || null },
+    equipment: saved
+      ? { armor: saved.armor ?? null, ring: saved.ring ?? null, necklace: saved.necklace ?? null, helmet: saved.helmet ?? null }
+      : { armor: loadout.armor, ring: loadout.ring, necklace: loadout.necklace, helmet: loadout.helmet || null },
     // General-purpose item bag — distinct from `inventory` above (that's the
     // weapon hotbar). Picked-up items land in the first null slot here; see
     // addToInventory(). Fixed size, left-to-right/top-to-bottom like InvSlot1..16
     // in hud-layout.json.
     inventorySlots: new Array(INVENTORY_SIZE).fill(null),
+    // Master chest (2026-07-14) — the player's personal permanent-storage
+    // grid, same 16-slot shape/index convention as inventorySlots (left-to-
+    // right/top-to-bottom, matches ChestSlot1..16 in hud-layout.json). v1:
+    // always empty in memory, no load/save wiring yet (drag-in isn't built,
+    // so there's nothing to persist) — see master_chest_json column added to
+    // the accounts table earlier for when that's wired up.
+    masterChest: new Array(INVENTORY_SIZE).fill(null),
     kills: 0,
     lastHitById: null,
     attacking: false,
@@ -131,7 +203,12 @@ function addPlayer(id, name, players, zombies, accountType, accountId) {
     prevCf: -1,
     lvl: 1,
     exp: 0,
-    gold: 0,
+    // currencyBronze (2026-07-13) replaces the old flat `gold` field —
+    // total-bronze integer, see currency.js for the denomination math. A
+    // logged-in account's persisted balance (loadSavedCurrency() above)
+    // carries over on join, same as saved equipment; guests always start at
+    // 0 (accountId is null for them, matching `saved` above).
+    currencyBronze: accountId ? loadSavedCurrency(accountId) : 0,
     playerClass,
     cameraZoom: 1.0,
     viewW: 800,
@@ -320,8 +397,9 @@ function playerInfoObj(p) {
       helmet: p.equipment && p.equipment.helmet
     },
     inventorySlots: p.inventorySlots,
+    masterChest: p.masterChest,
     maxHealth: p.maxHealth, maxEnergy: p.maxEnergy, speed: p.speed, attackDmg: p.attackDmg, attackSpeed: p.attackSpeed,
-    turnSpeed: p.turnSpeed, defense: p.defense || 0, fortune: p.fortune || 0,
+    turnSpeed: p.turnSpeed, defense: p.defense || 0, fortune: p.fortune || 0, luck: p.luck || 0, healthRegen: p.healthRegen || 0,
     lvl: p.lvl || 1,
     playerClass: p.playerClass || 'knight',
     attackStyle: p.attackStyle || 'jab',
@@ -333,4 +411,4 @@ function playerInfoObj(p) {
 
 function resetColorIndex() { colorIndex = 0; }
 
-module.exports = { randomSpawn, recalcStats, addPlayer, respawnPlayer, playerInfoObj, resetColorIndex, setFullscreen, setCameraZoom, addToInventory, moveItem, BUILD_SCALING, BUILD_BASE };
+module.exports = { randomSpawn, recalcStats, addPlayer, respawnPlayer, playerInfoObj, resetColorIndex, setFullscreen, setCameraZoom, addToInventory, moveItem, getItemAtLocation, setItemAtLocation, BUILD_SCALING, BUILD_BASE };

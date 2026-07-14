@@ -1,7 +1,7 @@
 import { state } from './state.js';
 import { resetWavePopup } from './next-wave-popup.js';
 import { stopRender } from './render.js';
-import { ITEMS, ITEM_ICONS, BASE_STATS, ITEM_RARITIES, ITEM_ATTRIBUTES } from './game-data.js';
+import { ITEMS, ITEM_ICONS, BASE_STATS, ITEM_RARITIES, ITEM_ATTRIBUTES, formatCurrencyHtml } from './game-data.js';
 
 // Bag/equipment slots hold either a plain base-item-id string (starter gear,
 // never rolls attributes) or a full rolled instance object (anything from a
@@ -86,6 +86,8 @@ export const $ = {
   charStatsContent: document.getElementById('charStatsContent'),
   inventoryPanel: document.getElementById('inventoryPanel'),
   inventoryClose: document.getElementById('inventoryClose'),
+  masterChestPanel: document.getElementById('masterChestPanel'),
+  masterChestClose: document.getElementById('masterChestClose'),
   itemTooltip: document.getElementById('itemTooltip'),
   dropTooltip: document.getElementById('dropTooltip'),
 };
@@ -185,7 +187,7 @@ export function onAuth(data) {
   state.level = data.account.level;
   state.exp = data.account.exp;
   state.expToNext = data.account.expToNext;
-  state.gold = data.account.gold;
+  state.currencyBronze = data.account.currencyBronze || 0;
 
   $.usernameInput.value = '';
   $.passwordInput.value = '';
@@ -193,7 +195,9 @@ export function onAuth(data) {
   $.errorMsg.textContent = '';
 
   $.welcomeMsg.textContent = 'Welcome back, ' + data.account.displayName + '!';
-  $.accountStats.textContent = 'Level ' + data.account.level + ' | Exp ' + data.account.exp + '/' + data.account.expToNext + ' | Gold ' + data.account.gold;
+  // innerHTML (not textContent) — formatCurrencyHtml() wraps each
+  // denomination in a colored <span>, per Travis's color-coding request.
+  $.accountStats.innerHTML = 'Level ' + data.account.level + ' | Exp ' + data.account.exp + '/' + data.account.expToNext + ' | ' + formatCurrencyHtml(data.account.currencyBronze || 0);
 
   const isAdmin = data.account.isAdmin || data.account.accountType === 'admin';
   if (isAdmin) {
@@ -277,50 +281,239 @@ export function hideStatsPanel() {
   if (state._serverStatsTimer) { clearTimeout(state._serverStatsTimer); state._serverStatsTimer = null; }
 }
 
+// --- Dynamic layout for the three "primary" panels --------------------------
+// (inventory, master chest, char stats — 2026-07-14)
+//
+// Normally each of these three panels sits at its own fixed default
+// position/scale straight from hud-layout.json (staticPanelGeom below).
+// Special case per Travis: whenever Char Stats is open ALONGSIDE at least
+// one of the other two, all currently-open panels among these three shrink
+// and line up left-to-right — chest, Char Stats, inventory, skipping
+// whichever of chest/inventory is closed — so they all fit side-by-side
+// across the full screen width at once, Char Stats in the middle. Closing
+// Char Stats instantly reverts inventory/chest to their normal static
+// default sizes (the existing half-screen-each layout); Char Stats opened
+// alone (neither of the other two open) also just uses its own static
+// default, since nothing else is competing for room.
+//
+// Explicitly scoped to just these 3 panels for now, not a generic system for
+// every popup — Travis flagged that as future work ("I think we should
+// probably make all the windows that pop up do this... but for now, let's do
+// this and the functionality of the primary tabs").
+//
+// The shrink-to-fit width is solved from each open panel's own art aspect
+// ratio, not literal equal-width columns — Stats.png is a tall narrow
+// portrait rectangle while inventory.png/mctab.png are short and wide, so
+// equal columns would either squish Char Stats sideways or leave the other
+// two wastefully narrow. Instead we solve for ONE shared height H such that
+// the SUM of each open panel's natural width at that height exactly fills
+// the 1024-logical-unit layout space — every panel keeps its own native
+// proportions and just "shrinks down just enough" (Travis's words) for all
+// of them to fit together.
+const PRIMARY_PANEL_FRAMES = {
+  chest: 'mctab.png',
+  charStats: 'Stats.png',
+  inventory: 'inventory.png',
+};
+
+// A panel's default (un-shrunk) geometry, straight from its hud-layout.json
+// background entry, in screen-pixel space (already multiplied by
+// wrapperScale) — exactly what showInventory()/showMasterChest()/
+// showCharStats() used to compute inline before this feature existed. Also
+// serves as the FRACTION BASELINE every slot position gets remapped against
+// (see positionSlotEl below) so slots stay correctly aligned to the art at
+// ANY panel size, shrunk or not — a slot's offset as a fraction of the
+// panel's own width/height is scale-invariant as long as the panel's art is
+// always scaled uniformly (never stretched), which is true here.
+function staticPanelGeom(frameName) {
+  const fd = state.hudFrames?.[frameName];
+  const layout = (state.hudLayout || []).find(e => e.name === frameName);
+  if (!fd || !layout) return null;
+  const sss = fd.spriteSourceSize;
+  const wrapperScale = state.viewW / 1024;
+  const s = layout.scale * wrapperScale;
+  return {
+    dw: sss.w * s,
+    dh: sss.h * s,
+    panelLeft: (layout.x + sss.x * layout.scale) * wrapperScale,
+    panelTop: (layout.y + sss.y * layout.scale) * wrapperScale,
+  };
+}
+
+// Computes the geometry each of the 3 primary panels should render at RIGHT
+// NOW, given which of them are currently open — either each one's normal
+// static default (staticPanelGeom above), or the shared shrink-to-fit layout
+// described above. Returns { chest, charStats, inventory }, each either null
+// (panel closed) or {dw, dh, panelLeft, panelTop} in screen-pixel space.
+function computePanelLayouts() {
+  const chestOpen = !!($.masterChestPanel && !$.masterChestPanel.classList.contains('hidden'));
+  const invOpen = !!($.inventoryPanel && !$.inventoryPanel.classList.contains('hidden'));
+  const csOpen = !!($.charStatsPanel && !$.charStatsPanel.classList.contains('hidden'));
+
+  const result = { chest: null, charStats: null, inventory: null };
+  if (!csOpen) {
+    if (chestOpen) result.chest = staticPanelGeom(PRIMARY_PANEL_FRAMES.chest);
+    if (invOpen) result.inventory = staticPanelGeom(PRIMARY_PANEL_FRAMES.inventory);
+    return result;
+  }
+  if (!chestOpen && !invOpen) {
+    result.charStats = staticPanelGeom(PRIMARY_PANEL_FRAMES.charStats);
+    return result;
+  }
+
+  // Shrink-to-fit mode: chest, Char Stats, inventory left to right, skipping
+  // whichever of chest/inventory is closed.
+  const order = [];
+  if (chestOpen) order.push('chest');
+  order.push('charStats');
+  if (invOpen) order.push('inventory');
+
+  const wrapperScale = state.viewW / 1024;
+  let aspectSum = 0;
+  const sssByKey = {};
+  for (const key of order) {
+    const fd = state.hudFrames?.[PRIMARY_PANEL_FRAMES[key]];
+    if (!fd) return result; // art not loaded yet — bail, static defaults apply next call
+    sssByKey[key] = fd.spriteSourceSize;
+    aspectSum += sssByKey[key].w / sssByKey[key].h;
+  }
+  const H = 1024 / aspectSum; // logical units (pre-wrapperScale)
+  const panelTop = ((576 - H) / 2) * wrapperScale;
+
+  let cursorXLogical = 0;
+  for (const key of order) {
+    const sss = sssByKey[key];
+    const dwLogical = H * (sss.w / sss.h);
+    result[key] = {
+      dw: dwLogical * wrapperScale,
+      dh: H * wrapperScale,
+      panelLeft: cursorXLogical * wrapperScale,
+      panelTop,
+    };
+    cursorXLogical += dwLogical;
+  }
+  return result;
+}
+
+// Draws a panel's background art + positions its wrapper div at the given
+// geometry (either a staticPanelGeom() default or a shrink-to-fit entry from
+// computePanelLayouts() above) — shared by showInventory()/showMasterChest()/
+// renderCharStatsContent() so all three go through identical draw logic
+// regardless of which mode picked their geometry. Returns false (does
+// nothing) if the art isn't loaded yet or geom is null (panel not open).
+function drawPanelArt(frameName, panelEl, canvas, geom) {
+  const fd = state.hudFrames?.[frameName];
+  const sheet = state.hudSheet;
+  if (!fd || !sheet || !canvas || !panelEl || !geom) return false;
+  const { dw, dh, panelLeft, panelTop } = geom;
+  canvas.width = dw;
+  canvas.height = dh;
+  canvas.style.width = dw + 'px';
+  canvas.style.height = dh + 'px';
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, dw, dh);
+  const f = fd.frame;
+  ctx.drawImage(sheet, f.x, f.y, f.w, f.h, 0, 0, dw, dh);
+  panelEl.style.width = dw + 'px';
+  panelEl.style.height = dh + 'px';
+  panelEl.style.left = panelLeft + 'px';
+  panelEl.style.top = panelTop + 'px';
+  return true;
+}
+
+// Positions a single type:'slot' hud-layout entry within its panel at the
+// panel's CURRENT geometry (which may be its static default, or a
+// shrink-to-fit size from computePanelLayouts()) by converting the slot's
+// authored position/size into a FRACTION of the panel's STATIC default
+// bounds, then re-applying that same fraction to whatever geometry is
+// passed in — see the comment on staticPanelGeom above for why this stays
+// correct at any panel size. Returns the computed {left, top, width, height}
+// numbers (in px) so callers that need raw pixel sizes (e.g. to size an icon
+// canvas) don't have to re-parse them back out of el.style.
+function positionSlotEl(el, def, staticGeom, geom) {
+  const wrapperScale = state.viewW / 1024;
+  const w = def.w * (def.scale || 1);
+  const h = def.h * (def.scale || 1);
+  const fracX = (def.x * wrapperScale - staticGeom.panelLeft) / staticGeom.dw;
+  const fracY = (def.y * wrapperScale - staticGeom.panelTop) / staticGeom.dh;
+  const fracW = (w * wrapperScale) / staticGeom.dw;
+  const fracH = (h * wrapperScale) / staticGeom.dh;
+  const left = fracX * geom.dw;
+  const top = fracY * geom.dh;
+  const width = fracW * geom.dw;
+  const height = fracH * geom.dh;
+  el.style.left = left + 'px';
+  el.style.top = top + 'px';
+  el.style.width = width + 'px';
+  el.style.height = height + 'px';
+  return { left, top, width, height };
+}
+
+// Central re-layout for the three primary panels — called by every show*/
+// hide* below, since opening or closing ANY of the three can change how the
+// OTHERS need to be sized (see computePanelLayouts() for the rules). Draws/
+// positions whichever panels are currently open at their freshly-computed
+// geometry; panels that are closed are left alone (already hidden via CSS).
+function refreshPrimaryPanelLayout() {
+  const layouts = computePanelLayouts();
+
+  if (layouts.chest) {
+    const canvas = document.getElementById('masterChestCanvas');
+    if (drawPanelArt(PRIMARY_PANEL_FRAMES.chest, $.masterChestPanel, canvas, layouts.chest)) {
+      renderMasterChestSlots(layouts.chest);
+    }
+  }
+
+  if (layouts.inventory) {
+    const canvas = document.getElementById('inventoryCanvas');
+    if (drawPanelArt(PRIMARY_PANEL_FRAMES.inventory, $.inventoryPanel, canvas, layouts.inventory)) {
+      renderInventorySlots(layouts.inventory);
+    }
+  }
+
+  if (layouts.charStats) {
+    renderCharStatsContent(layouts.charStats);
+  }
+}
+
 export function showCharStats() {
   $.charStatsPanel.classList.remove('hidden');
+  refreshPrimaryPanelLayout();
+}
+
+// Builds the Char Stats panel's art + text content at the given geometry —
+// called from refreshPrimaryPanelLayout() above (normal open/close/reflow)
+// and also indirectly whenever the underlying stat data changes while the
+// panel's already open (net-events.js's playerInfo handler, the stat-point
+// spend click handler below both just call showCharStats() again, same
+// convention as before this refactor).
+function renderCharStatsContent(geom) {
   const me = state.players[state.myId];
   const el = $.charStatsContent;
-  const frame = state.hudFrames?.['Stats.png'];
-  const sheet = state.hudSheet;
-  const layout = (state.hudLayout || []).find(e => e.name === 'Stats.png');
   const canvas = document.getElementById('charStatsCanvas');
   if (!el || !canvas) return;
   if (!me) { el.innerHTML = '<div style="text-align:center;opacity:0.5">Not in game</div>'; return; }
-  if (frame && sheet && layout) {
-    const f = frame.frame;
-    const sss = frame.spriteSourceSize;
-    // No HUD legibility viewport-scale (vs) factor here on purpose: hud-position-tool.html
-    // draws everything raw (x/y/scale on a fixed 1024x576 canvas), so matching that means
-    // scale=1 at the default 1024x576 wrapper size. But #wrapper itself is resized to the
-    // real screen resolution on fullscreen (see game.js fullscreenchange), so without any
-    // correction this panel would stay pinned at its small windowed-mode pixel position —
-    // stuck in a tiny top-left corner of a much bigger box. wrapperScale grows/repositions
-    // it proportionally so it stays in the same relative spot at any wrapper size.
-    const wrapperScale = state.viewW / 1024;
-    const s = layout.scale * wrapperScale;
-    const dw = sss.w * s;
-    const dh = sss.h * s;
-    canvas.width = dw;
-    canvas.height = dh;
+
+  const staticGeom = staticPanelGeom(PRIMARY_PANEL_FRAMES.charStats);
+  if (drawPanelArt(PRIMARY_PANEL_FRAMES.charStats, $.charStatsPanel, canvas, geom)) {
+    // #charStatsCanvas and #charStatsContent are siblings (not nested inside
+    // a shared content wrapper like inventory's #inventoryContent), so the
+    // canvas needs explicit absolute positioning to sit behind the text
+    // layer instead of pushing it down in normal document flow.
     canvas.style.position = 'absolute';
     canvas.style.left = '0';
     canvas.style.top = '0';
-    const ctx = canvas.getContext('2d');
-    ctx.clearRect(0, 0, dw, dh);
-    // Canvas is already sized to the trimmed sprite (dw x dh) and the panel div is
-    // already positioned to account for the trim offset (sss.x/sss.y below) — drawing
-    // at that same offset again here pushes the art past the canvas edge and clips it.
-    ctx.drawImage(sheet, f.x, f.y, f.w, f.h, 0, 0, dw, dh);
-    $.charStatsPanel.style.width = dw + 'px';
-    $.charStatsPanel.style.height = dh + 'px';
-    $.charStatsPanel.style.left = ((layout.x + sss.x * layout.scale) * wrapperScale) + 'px';
-    $.charStatsPanel.style.top = ((layout.y + sss.y * layout.scale) * wrapperScale) + 'px';
   }
+
+  // Text scales with BOTH the usual viewport-legibility factor (ws) and how
+  // much smaller than its own static default this render is (shrinkFactor,
+  // 1.0 outside shrink-to-fit mode) — otherwise shrinking the panel's ART
+  // without also shrinking its TEXT would overflow the now-smaller box.
   const ws = state.viewW / 1024;
-  el.style.fontSize = Math.max(9, 13 * ws) + 'px';
-  el.style.lineHeight = (20 * ws) + 'px';
-  el.style.padding = `${8 * ws}px ${16 * ws}px`;
+  const shrinkFactor = staticGeom ? geom.dw / staticGeom.dw : 1;
+  el.style.fontSize = Math.max(7, 13 * ws * shrinkFactor) + 'px';
+  el.style.lineHeight = (20 * ws * shrinkFactor) + 'px';
+  el.style.padding = `${8 * ws * shrinkFactor}px ${16 * ws * shrinkFactor}px`;
   const pts = state.statPoints || 0;
   const build = (state.playerMeta[state.myId] && state.playerMeta[state.myId].playerBuild) || 'standard';
   const buildDisplay = { standard: 'Standard', glassCannon: 'Glass Cannon', tank: 'Tank' };
@@ -332,12 +525,12 @@ export function showCharStats() {
   html += '<div class="char-stat-row"><span class="char-stat-label">Level</span><span class="char-stat-value">' + (state.level || 1) + '</span></div>';
   html += '<div style="border-top:1px solid rgba(255,255,255,0.06);margin:6px 0"></div>';
   html += '<div class="char-stat-row"><span class="char-stat-label">EXP</span><span class="char-stat-value">' + state.exp + ' / ' + state.expToNext + '</span></div>';
-  html += '<div class="char-stat-row"><span class="char-stat-label">Gold</span><span class="char-stat-value">' + state.gold + '</span></div>';
+  html += '<div class="char-stat-row"><span class="char-stat-label">Currency</span><span class="char-stat-value">' + formatCurrencyHtml(state.currencyBronze || 0) + '</span></div>';
   html += '<div class="char-stat-row"><span class="char-stat-label">Kills</span><span class="char-stat-value">' + (me.kills || 0) + '</span></div>';
   html += '<div style="border-top:1px solid rgba(255,255,255,0.06);margin:6px 0"></div>';
   const spendable = ['maxHealth', 'maxEnergy', 'speed', 'attackDmg'];
   const labels = { maxHealth: 'Max HP', maxEnergy: 'Max Energy', speed: 'Speed', attackDmg: 'Attack Dmg' };
-  const fmt = { maxHealth: v => v, maxEnergy: v => v, speed: v => v, attackDmg: v => v };
+  const fmt = { maxHealth: v => roundStat(v), maxEnergy: v => roundStat(v), speed: v => roundStat(v), attackDmg: v => roundStat(v) };
   for (const s of spendable) {
     const val = me[s] || ((s === 'maxHealth' || s === 'maxEnergy') ? 100 : 0);
     html += '<div class="char-stat-row" style="cursor:pointer" data-stat="' + s + '">';
@@ -346,13 +539,17 @@ export function showCharStats() {
     html += '</div>';
   }
   html += '<div style="border-top:1px solid rgba(255,255,255,0.06);margin:6px 0"></div>';
-  // defense/fortune added 2026-07-11 so equipping rolled-attribute drops
-  // (armor/fortune attributes — see item-generation-system.md) has a visible
-  // effect somewhere; both default to 0 (no bonus) rather than a base-stat
-  // fallback since neither has a nonzero baseline like attackSpeed/turnSpeed.
-  const infoLabels = { attackSpeed: 'Attack Rate', turnSpeed: 'Turn Rate', defense: 'Armor', fortune: 'Fortune' };
-  const infoFmt = { attackSpeed: v => (600 / v).toFixed(2) + 'x', turnSpeed: v => (v / 12).toFixed(2) + 'x' };
-  for (const s of ['attackSpeed', 'turnSpeed', 'defense', 'fortune']) {
+  // defense/fortune added 2026-07-11, luck added 2026-07-12, healthRegen
+  // added 2026-07-12, so equipping rolled-attribute drops (armor/fortune/
+  // luck/healthRegen attributes — see item-generation-system.md) has a
+  // visible effect somewhere; all four default to 0 (no bonus) rather than
+  // a base-stat fallback since none has a nonzero baseline like
+  // attackSpeed/turnSpeed. (Speed itself isn't listed here — it's already
+  // shown above in the spendable-stats block, which reads me.speed
+  // directly and already reflects equipped speedFlat/speedScaling bonuses.)
+  const infoLabels = { attackSpeed: 'Attack Rate', turnSpeed: 'Turn Rate', defense: 'Armor', fortune: 'Fortune', luck: 'Luck', healthRegen: 'Health Regen' };
+  const infoFmt = { attackSpeed: v => (600 / v).toFixed(2) + 'x', turnSpeed: v => (v / 12).toFixed(2) + 'x', healthRegen: v => v.toFixed(1) + '/s', defense: v => roundStat(v), fortune: v => roundStat(v), luck: v => roundStat(v) };
+  for (const s of ['attackSpeed', 'turnSpeed', 'defense', 'fortune', 'luck', 'healthRegen']) {
     const val = me[s] || (s === 'turnSpeed' ? 12 : (s === 'attackSpeed' ? 600 : 0));
     html += '<div class="char-stat-row"><span class="char-stat-label">' + infoLabels[s] + '</span><span class="char-stat-value">' + (infoFmt[s] ? infoFmt[s](val) : val) + '</span></div>';
   }
@@ -382,47 +579,39 @@ export function showCharStats() {
 
 export function hideCharStats() {
   $.charStatsPanel.classList.add('hidden');
+  refreshPrimaryPanelLayout();
 }
 
 export function showInventory() {
   $.inventoryPanel.classList.remove('hidden');
-  const frame = state.hudFrames?.['inventory.png'];
-  const sheet = state.hudSheet;
-  const layout = (state.hudLayout || []).find(e => e.name === 'inventory.png');
-  let canvas = document.getElementById('inventoryCanvas');
-  if (!canvas || !frame || !sheet || !layout) return;
-  const f = frame.frame;
-  const sss = frame.spriteSourceSize;
-  // No vs factor, but scaled proportionally to the wrapper — see matching comment in
-  // showCharStats(). At the default 1024x576 wrapper this matches the hud-position-tool
-  // exactly (wrapperScale = 1); in fullscreen it grows/repositions with the wrapper
-  // instead of staying pinned at its small windowed-mode pixel position.
-  const wrapperScale = state.viewW / 1024;
-  const s = layout.scale * wrapperScale;
-  const dw = sss.w * s;
-  const dh = sss.h * s;
-  canvas.width = dw;
-  canvas.height = dh;
-  canvas.style.width = dw + 'px';
-  canvas.style.height = dh + 'px';
-  const ctx = canvas.getContext('2d');
-  ctx.clearRect(0, 0, dw, dh);
-  // Same fix as showCharStats(): don't re-apply the trim offset inside the canvas —
-  // the panel div's left/top below already accounts for it, so draw at (0,0) to fill
-  // the canvas exactly instead of pushing the art past its edge and clipping it.
-  ctx.drawImage(sheet, f.x, f.y, f.w, f.h, 0, 0, dw, dh);
-  const panelLeft = (layout.x + sss.x * layout.scale) * wrapperScale;
-  const panelTop = (layout.y + sss.y * layout.scale) * wrapperScale;
-  $.inventoryPanel.style.width = dw + 'px';
-  $.inventoryPanel.style.height = dh + 'px';
-  $.inventoryPanel.style.left = panelLeft + 'px';
-  $.inventoryPanel.style.top = panelTop + 'px';
-  renderInventorySlots(panelLeft, panelTop, wrapperScale);
+  refreshPrimaryPanelLayout();
 }
 
 export function hideInventory() {
   $.inventoryPanel.classList.add('hidden');
   hideItemTooltip();
+  hoveredSlotLoc = null;
+  refreshPrimaryPanelLayout();
+}
+
+// Master chest panel (2026-07-14) — same draw pattern as showInventory()
+// above (canvas positioned via the frame's spriteSourceSize trim offset,
+// scaled by wrapperScale), just using the mctab.png frame/layout entry and a
+// separate slot layer. v1: the 16 ChestSlot* rectangles are drawn empty and
+// non-interactive (see renderMasterChestSlots below) — no item data, no
+// drag-in yet, per Travis's "keep it real simple for now, we'll work on it
+// from there". Meant to be visible on screen AT THE SAME TIME as the
+// inventory panel (both toggle independently — see input.js/game.js), so
+// its default hud-layout.json position/scale is deliberately smaller and to
+// the left of inventory.png's, not on top of it.
+export function showMasterChest() {
+  $.masterChestPanel.classList.remove('hidden');
+  refreshPrimaryPanelLayout();
+}
+
+export function hideMasterChest() {
+  $.masterChestPanel.classList.add('hidden');
+  refreshPrimaryPanelLayout();
 }
 
 // Friendly labels for item stat keys shown in the hover tooltip. Anything not
@@ -431,8 +620,24 @@ export function hideInventory() {
 const STAT_LABELS = {
   attackDmg: 'Attack Dmg', attackSpeed: 'Attack Speed', speed: 'Speed',
   maxHealth: 'Max HP', maxEnergy: 'Max Energy', turnSpeed: 'Turn Speed', defense: 'Defense',
-  fortune: 'Fortune'
+  fortune: 'Fortune', luck: 'Luck', healthRegen: 'Health Regen'
 };
+
+// Caps any displayed stat number at 2 decimal places (2026-07-13, per
+// Travis — repeatedly summing small float increments, e.g. speed's
+// per-stat-point +0.03/+0.05, can drift into results like
+// 100.23570000000001 due to normal binary floating-point imprecision; that
+// exact/raw value is fine to keep internally, it's just never okay to SHOW
+// it). `Number(v.toFixed(2))` rounds to at most 2 decimals AND drops
+// trailing zeros by converting back to a number (100 stays "100", not
+// "100.00"; 13.09 stays "13.09", not "13.090000000000002"). Every place
+// that renders a raw player/item stat number — Char Stats' spendable rows,
+// its info rows (defense/fortune/luck), and this tooltip formatter — should
+// route through this rather than interpolating the number directly.
+function roundStat(v) {
+  if (typeof v !== 'number' || !Number.isFinite(v)) return v;
+  return Number(v.toFixed(2));
+}
 
 function formatStatValue(key, v) {
   if (key === 'attackSpeed') {
@@ -448,7 +653,8 @@ function formatStatValue(key, v) {
     const delta = Math.round(((600 / (base + v)) - (600 / base)) * 100) / 100;
     return (delta > 0 ? '+' : '') + delta.toFixed(2);
   }
-  return v > 0 ? '+' + v : String(v);
+  const rounded = roundStat(v);
+  return rounded > 0 ? '+' + rounded : String(rounded);
 }
 
 // Rolled-attribute display, e.g. "Attack Damage" / "+5" for a flat roll, or
@@ -467,7 +673,7 @@ function formatItemAttribute(attribute) {
   const scaling = attrDef.mode === 'scaling';
   const value = attrDef.stat === 'attackSpeed'
     ? formatStatValue('attackSpeed', attribute.value)
-    : (attribute.value > 0 ? '+' + attribute.value : String(attribute.value));
+    : (attribute.value > 0 ? '+' + roundStat(attribute.value) : String(roundStat(attribute.value)));
   const label = (scaling ? 'Scaling ' : '') + attrDef.displayName;
   return { label, value: scaling ? value + '/lvl' : value };
 }
@@ -486,7 +692,12 @@ function buildItemTooltipHtml(itemOrInstance, { includeIcon = false } = {}) {
   const rolled = isRolledInstance(itemOrInstance);
   const rarity = rolled ? getRarityDef(itemOrInstance.rarityId) : null;
   const nameStyle = rarity ? ' style="color:' + rarity.color + '"' : '';
-  const nameText = (rarity ? rarity.name + ' ' : '') + itemDef.name;
+  // Rolled instances at Rare+ carry a server-computed generatedName (e.g.
+  // "Basic Ring of Greater Attack Damage" — see item-generation-system.md's
+  // stacking section); Common/Uncommon instances and plain starter-gear
+  // strings fall back to the plain base item name.
+  const displayName = (rolled && itemOrInstance.generatedName) ? itemOrInstance.generatedName : itemDef.name;
+  const nameText = (rarity ? rarity.name + ' ' : '') + displayName;
   const header = includeIcon
     ? '<div class="tooltip-header"><div class="tooltip-icon-wrap"></div><div class="tooltip-name"' + nameStyle + '>' + nameText + '</div></div>'
     : '<div class="tooltip-name"' + nameStyle + '>' + nameText + '</div>';
@@ -539,6 +750,20 @@ function hideItemTooltip() {
 // already shows the icon).
 export function showDropTooltip(itemOrInstance, evt) {
   if (!$.dropTooltip) return;
+  // Gold coins (2026-07-13) aren't an ITEMS entry — buildItemTooltipHtml()
+  // would return null for them (no itemDef to look up) — so they get their
+  // own small, bespoke tooltip body instead: just an icon + amount, no name/
+  // rarity/stat rows since there's nothing like that to show.
+  if (itemOrInstance && itemOrInstance.kind === 'gold') {
+    const amount = itemOrInstance.amount || 0;
+    $.dropTooltip.innerHTML =
+      '<div class="tooltip-header"><div class="tooltip-icon-wrap"></div><div class="tooltip-name">' + formatCurrencyHtml(amount) + '</div></div>';
+    const iconWrap = $.dropTooltip.querySelector('.tooltip-icon-wrap');
+    if (iconWrap) drawGoldIcon(iconWrap, 32, 32);
+    $.dropTooltip.classList.remove('hidden');
+    positionDropTooltip(evt);
+    return;
+  }
   const html = buildItemTooltipHtml(itemOrInstance, { includeIcon: true });
   if (!html) return;
   $.dropTooltip.innerHTML = html;
@@ -546,6 +771,46 @@ export function showDropTooltip(itemOrInstance, evt) {
   if (iconWrap) drawItemIcon(iconWrap, itemOrInstance, 32, 32);
   $.dropTooltip.classList.remove('hidden');
   positionDropTooltip(evt);
+}
+
+// Master chest world-hover tooltip (2026-07-14) — same #dropTooltip element/
+// positioning as showDropTooltip above (works while the inventory/chest
+// panels are closed, follows the cursor via positionDropTooltip), just a
+// bespoke body instead of an item lookup: a title + flavor description,
+// same "bespoke body, no buildItemTooltipHtml()" pattern the gold-coin
+// branch above uses, since the chest isn't an ITEMS entry either. Called
+// from input.js's mousemove via hitTestMasterChest() — hover-only, not
+// range-gated by MASTER_CHEST_RANGE, since there's nothing here that needs
+// to stay hidden from a distance (unlike item drops, which don't reveal
+// their contents until you're close).
+export function showChestTooltip(evt) {
+  if (!$.dropTooltip) return;
+  $.dropTooltip.innerHTML =
+    '<div class="tooltip-header"><div class="tooltip-icon-wrap"></div><div class="tooltip-name" style="color:#FFD700">Master Chest</div></div>' +
+    '<div class="tooltip-desc">Deposit items here to keep them permanently on your account, across every future match.</div>';
+  const iconWrap = $.dropTooltip.querySelector('.tooltip-icon-wrap');
+  if (iconWrap) drawChestIcon(iconWrap, 32, 32);
+  $.dropTooltip.classList.remove('hidden');
+  positionDropTooltip(evt);
+}
+
+// Draws the master chest's own world sprite (MastreChest_resized.png, on
+// spritesheet.png/state.spriteSheet) into a tooltip icon slot — same
+// draw-into-a-sized-canvas approach as drawItemIcon/drawGoldIcon above, just
+// reading from the world spritesheet instead of an item sheet.
+function drawChestIcon(container, w, h) {
+  const sheet = state.spriteSheet;
+  const frame = state.spriteFrames?.['MastreChest_resized.png'];
+  if (!sheet || !frame || !sheet.complete) return false;
+  const canvas = document.createElement('canvas');
+  canvas.className = 'slot-item-icon';
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  const f = frame.frame;
+  ctx.drawImage(sheet, f.x, f.y, f.w, f.h, 0, 0, w, h);
+  container.appendChild(canvas);
+  return true;
 }
 
 export function positionDropTooltip(evt) {
@@ -569,6 +834,31 @@ function drawItemIcon(container, itemOrInstance, w, h) {
   const sheet = state[icon.sheet + 'Sheet'];
   const frames = state[icon.sheet + 'Frames'];
   const frame = frames && frames[icon.frame];
+  if (!sheet || !frame || !sheet.complete) return false;
+  const canvas = document.createElement('canvas');
+  canvas.className = 'slot-item-icon';
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  const f = frame.frame;
+  ctx.drawImage(sheet, f.x, f.y, f.w, f.h, 0, 0, w, h);
+  container.appendChild(canvas);
+  return true;
+}
+
+// Draws the gold-coin icon (goldcoin.png, on ItemSheet.png/state.itemSheet —
+// see assets.js) into a container. Separate from drawItemIcon() above
+// because gold isn't a bag item — it has no ITEMS/ITEM_ICONS entry to look
+// up (resolveBaseItemId()/ITEMS[baseId] would just return undefined for a
+// {kind:'gold', amount} drop). Returns true/false the same way, in case a
+// future caller wants the same text-label-fallback convention, though
+// nothing currently falls back for gold (a coin drop is unusable without
+// its art, so if this ever returns false the tooltip degrades to an icon-
+// less block — see showDropTooltip's gold branch below).
+function drawGoldIcon(container, w, h) {
+  const sheet = state.itemSheet;
+  const frames = state.itemFrames;
+  const frame = frames && frames['goldcoin.png'];
   if (!sheet || !frame || !sheet.complete) return false;
   const canvas = document.createElement('canvas');
   canvas.className = 'slot-item-icon';
@@ -611,6 +901,32 @@ function getItemAtLocationClient(me, loc) {
 let dragState = null; // { itemId, fromLoc, fromEl, ghost, w, h }
 let dragActive = false; // suppresses hover tooltips while dragging
 
+// Tracks whichever occupied bag/equip slot the mouse is currently over, so
+// input.js's 'x' keydown handler (dropHoveredItem below) knows what to drop
+// without needing its own copy of the hover-tracking logic. Set/cleared by
+// renderInventorySlots()'s mouseenter/mouseleave listeners below (empty
+// slots never set this — there's nothing to drop). Reset defensively on
+// every re-render and on hideInventory(): renderInventorySlots() rebuilds
+// the slot elements from scratch on every playerInfo update while the panel
+// is open, and a rebuild that happens without the mouse actually moving
+// wouldn't fire a fresh mouseenter/mouseleave pair on the new elements,
+// which could otherwise leave this pointing at a slot the mouse isn't
+// really over anymore.
+let hoveredSlotLoc = null;
+
+// Drops whatever's in the currently-hovered slot (bag or equip) onto the
+// ground at the player's position — same server-side path as dragging an
+// item off the inventory window (see onDragEnd below and room.js's
+// handleDropItem). No-ops if nothing is hovered/occupied.
+export function dropHoveredItem(socket) {
+  if (!hoveredSlotLoc || !socket) return false;
+  const loc = hoveredSlotLoc;
+  hoveredSlotLoc = null;
+  hideItemTooltip();
+  socket.emit('dropItem', { from: loc });
+  return true;
+}
+
 function createDragGhost(itemId, w, h) {
   const ghost = document.createElement('div');
   ghost.className = 'drag-ghost';
@@ -620,8 +936,9 @@ function createDragGhost(itemId, w, h) {
     const label = document.createElement('div');
     label.className = 'slot-item-label';
     const itemDef = ITEMS[resolveBaseItemId(itemId)];
-    label.textContent = itemDef ? itemDef.name : resolveBaseItemId(itemId);
-    if (isRolledInstance(itemId)) {
+    const rolled = isRolledInstance(itemId);
+    label.textContent = (rolled && itemId.generatedName) ? itemId.generatedName : (itemDef ? itemDef.name : resolveBaseItemId(itemId));
+    if (rolled) {
       const rarity = getRarityDef(itemId.rarityId);
       if (rarity) label.style.color = rarity.color;
     }
@@ -631,9 +948,19 @@ function createDragGhost(itemId, w, h) {
   return ghost;
 }
 
+// Offset from the raw cursor position, not centered on it — fixed
+// 2026-07-13, alongside .drag-ghost's new solid background in style.css.
+// Centering the ghost exactly under the OS mouse pointer let the pointer's
+// own icon (arrow/hand) sit right on top of it, which contributed to the
+// ghost feeling "invisible" while dragging. A small down-right offset keeps
+// it trailing clearly beside the cursor instead, same convention most
+// OS/desktop drag-and-drop UIs use.
+const DRAG_GHOST_OFFSET_X = 14;
+const DRAG_GHOST_OFFSET_Y = 14;
+
 function positionGhost(ghost, clientX, clientY, w, h) {
-  ghost.style.left = (clientX - w / 2) + 'px';
-  ghost.style.top = (clientY - h / 2) + 'px';
+  ghost.style.left = (clientX - w / 2 + DRAG_GHOST_OFFSET_X) + 'px';
+  ghost.style.top = (clientY - h / 2 + DRAG_GHOST_OFFSET_Y) + 'px';
 }
 
 function onDragMove(evt) {
@@ -650,9 +977,24 @@ function onDragEnd(evt) {
   fromEl.classList.remove('slot-dragging');
   dragActive = false;
   dragState = null;
-  const targetEl = document.elementFromPoint(evt.clientX, evt.clientY)?.closest('.inv-slot, .equip-slot');
+  const dropTarget = document.elementFromPoint(evt.clientX, evt.clientY);
+  const targetEl = dropTarget?.closest('.inv-slot, .equip-slot');
   if (targetEl && targetEl !== fromEl && targetEl._loc && window.socket) {
     window.socket.emit('moveItem', { from: fromLoc, to: targetEl._loc });
+    return;
+  }
+  // Missed every slot. If the release point is also outside the inventory
+  // panel entirely (not just landing in a gap between slots), treat it as
+  // "dragged the item off the inventory window" — drop it on the ground at
+  // the player's position, same server-side path as the 'x' hotkey (see
+  // dropHoveredItem above, room.js's handleDropItem). A miss that's still
+  // somewhere inside #inventoryPanel (including its slots layer/close
+  // button) is just a fumbled drag and snaps back as a no-op, same as
+  // before this feature existed — there's no optimistic client update, so
+  // nothing needs rolling back either way.
+  const insidePanel = dropTarget && dropTarget.closest('#inventoryPanel');
+  if (!insidePanel && window.socket) {
+    window.socket.emit('dropItem', { from: fromLoc });
   }
 }
 
@@ -683,22 +1025,37 @@ function startDrag(el, loc, itemId, evt) {
 // slot art is already baked into inventory.png. Every slot (empty or not) is
 // a valid drop *target* — see startDrag/onDragEnd above — but only occupied
 // slots can start a drag.
-function renderInventorySlots(panelLeft, panelTop, wrapperScale) {
+function renderInventorySlots(geom) {
   const layer = document.getElementById('inventorySlotsLayer');
   if (!layer) return;
   layer.innerHTML = '';
+  // Every slot element gets torn down and rebuilt below, which drops their
+  // event listeners without necessarily firing a mouseleave (the mouse
+  // hasn't moved, just the DOM under it changed) — reset so a stale loc
+  // can't survive a rebuild; the next real mouseenter sets it fresh.
+  hoveredSlotLoc = null;
   const me = state.players[state.myId];
-  const slotDefs = (state.hudLayout || []).filter(e => e.type === 'slot');
+  const staticGeom = staticPanelGeom(PRIMARY_PANEL_FRAMES.inventory);
+  if (!staticGeom) return;
+  // CurrencyDisplay (2026-07-13) is a type:"slot" entry so it's draggable/
+  // resizable in hud-position-tool.html with zero changes to that tool (same
+  // generic mechanism as every InvSlot/Equip* rectangle) — but it isn't a
+  // real bag/equip location, it's a plain text readout of the player's
+  // wallet. Excluded from the interactive-slot loop below (slotLocation()
+  // would produce garbage for a name that isn't InvSlotN/EquipX) and handled
+  // separately right after it, using the exact same panel-relative position
+  // math. ChestSlot* entries are also excluded — they're type:"slot" too
+  // (same hud-layout.json array), but belong to the master chest panel, not
+  // this one (found 2026-07-14 while adding the dynamic-layout fraction
+  // math below: this filter previously let them slip through, so this panel
+  // was quietly also building 16 harmless-but-pointless empty slot elements
+  // for locations that belong to a different panel entirely).
+  const slotDefs = (state.hudLayout || []).filter(e => e.type === 'slot' && e.name !== 'CurrencyDisplay' && !e.name.startsWith('ChestSlot'));
   for (const def of slotDefs) {
     const el = document.createElement('div');
     const isEquip = def.name.startsWith('Equip');
     el.className = (isEquip ? 'equip-slot' : 'inv-slot') + (state.showHudDebug ? ' slot-debug' : '');
-    const w = def.w * (def.scale || 1) * wrapperScale;
-    const h = def.h * (def.scale || 1) * wrapperScale;
-    el.style.left = (def.x * wrapperScale - panelLeft) + 'px';
-    el.style.top = (def.y * wrapperScale - panelTop) + 'px';
-    el.style.width = w + 'px';
-    el.style.height = h + 'px';
+    const { width: w, height: h } = positionSlotEl(el, def, staticGeom, geom);
 
     const loc = slotLocation(def);
     el._loc = loc;
@@ -713,16 +1070,17 @@ function renderInventorySlots(panelLeft, panelTop, wrapperScale) {
         const label = document.createElement('div');
         label.className = 'slot-item-label';
         const itemDef = ITEMS[resolveBaseItemId(itemId)];
-        label.textContent = itemDef ? itemDef.name : resolveBaseItemId(itemId);
-        if (isRolledInstance(itemId)) {
+        const rolledSlot = isRolledInstance(itemId);
+        label.textContent = (rolledSlot && itemId.generatedName) ? itemId.generatedName : (itemDef ? itemDef.name : resolveBaseItemId(itemId));
+        if (rolledSlot) {
           const rarity = getRarityDef(itemId.rarityId);
           if (rarity) label.style.color = rarity.color;
         }
         el.appendChild(label);
       }
-      el.addEventListener('mouseenter', (evt) => { if (!dragActive) showItemTooltip(itemId, evt); });
+      el.addEventListener('mouseenter', (evt) => { hoveredSlotLoc = loc; if (!dragActive) showItemTooltip(itemId, evt); });
       el.addEventListener('mousemove', (evt) => { if (!dragActive) positionItemTooltip(evt); });
-      el.addEventListener('mouseleave', hideItemTooltip);
+      el.addEventListener('mouseleave', () => { if (hoveredSlotLoc === loc) hoveredSlotLoc = null; hideItemTooltip(); });
       el.addEventListener('mousedown', (evt) => startDrag(el, loc, itemId, evt));
     } else if (loc.kind === 'equip' && loc.slot === 'weapon') {
       // Empty weapon slot on a knight means the unarmed fist state — label it
@@ -732,6 +1090,47 @@ function renderInventorySlots(panelLeft, panelTop, wrapperScale) {
       label.textContent = 'Unarmed';
       el.appendChild(label);
     }
+    layer.appendChild(el);
+  }
+
+  // Currency readout — lives inside the inventory panel per Travis ("I
+  // already put a gold slot in the inventory area on the visuals"), same
+  // panel-relative positioning as the bag slots above, positioned/resized
+  // via hud-position-tool.html like everything else on this panel. Plain
+  // text, not interactive (no drag/drop, no tooltip) — just shows the
+  // current wallet total, refreshed on every inventory re-render (which
+  // already fires on every playerInfo/accountUpdate while the panel's open).
+  const currencyDef = (state.hudLayout || []).find(e => e.name === 'CurrencyDisplay');
+  if (currencyDef) {
+    const el = document.createElement('div');
+    el.className = 'currency-display';
+    positionSlotEl(el, currencyDef, staticGeom, geom);
+    el.innerHTML = formatCurrencyHtml(state.currencyBronze || 0);
+    layer.appendChild(el);
+  }
+}
+
+// Draws the 16 master chest slots on top of mctab.png. Deliberately much
+// simpler than renderInventorySlots above — v1 of the master chest is always
+// empty (server's p.masterChest is a fresh 16-null array with no load/save
+// wiring yet), so there's no item lookup, icon, tooltip, or drag-start to
+// wire up here. Reuses the plain .inv-slot styling (no border/background by
+// default, matching the bag slots) so an empty chest slot looks like an
+// empty bag slot. When drag-in/auto-sort gets built, this should start
+// reading state.players[state.myId].masterChest[i] the same way
+// renderInventorySlots reads inventorySlots — left as a clean extension
+// point rather than entangling that work with this first pass.
+function renderMasterChestSlots(geom) {
+  const layer = document.getElementById('masterChestSlotsLayer');
+  if (!layer) return;
+  layer.innerHTML = '';
+  const staticGeom = staticPanelGeom(PRIMARY_PANEL_FRAMES.chest);
+  if (!staticGeom) return;
+  const slotDefs = (state.hudLayout || []).filter(e => e.type === 'slot' && e.name.startsWith('ChestSlot'));
+  for (const def of slotDefs) {
+    const el = document.createElement('div');
+    el.className = 'inv-slot' + (state.showHudDebug ? ' slot-debug' : '');
+    positionSlotEl(el, def, staticGeom, geom);
     layer.appendChild(el);
   }
 }

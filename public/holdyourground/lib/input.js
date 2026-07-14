@@ -1,25 +1,35 @@
 import { state } from './state.js';
 import { startIdleTransition } from './anims.js';
 import { getCamera } from './camera.js';
-import { showDropTooltip, positionDropTooltip, hideDropTooltip } from './ui.js';
-import { ITEM_DROP_ICON_H, ITEM_PICKUP_RANGE } from './game-data.js';
+import { showDropTooltip, positionDropTooltip, hideDropTooltip, dropHoveredItem, $, showMasterChest, hideMasterChest, showChestTooltip } from './ui.js';
+import { ITEM_DROP_ICON_H, ITEM_DROP_ICON_MIN_SCREEN_PX, ITEM_PICKUP_RANGE, GOLD_COIN_ICON_H, MASTER_CHEST_RANGE, MASTER_CHEST_ICON_H } from './game-data.js';
 
-// Tight rectangle hit test matching the drawn loot icon exactly (same
-// ITEM_DROP_ICON_H + sprite aspect ratio render.js uses, no padding) — drops
-// can land close together, so this needs to be precise rather than a
-// generous click radius that could grab the wrong one. Also requires the
-// local player to actually be within ITEM_PICKUP_RANGE of the drop — without
-// this, a zoomed-out camera could hover/reveal (tooltip) or click-pickup
-// loot from across the map. Same range the server enforces for the actual
-// pickup, so nothing shown/clickable here would get silently rejected.
+// Hit test against a rectangle centered on the drop. The rectangle's size
+// is intentionally NOT always identical to the drawn icon (see render.js —
+// it draws at a plain, constant ITEM_DROP_ICON_H, deliberately not floored,
+// per Travis: "I want the bags to stay the same size all the time"). This
+// hit-test area, on the other hand, DOES apply a minimum-screen-pixels floor
+// (ITEM_DROP_ICON_MIN_SCREEN_PX / zoom) so the invisible hoverable/clickable
+// region around a tiny, zoomed-out icon stays comfortably sized even though
+// the icon you actually see does not grow — fixes "can't hover items when
+// zoomed out" (2026-07-13) without the visual side-effect Travis didn't
+// want. At high zoom this floor is a no-op (natural size already exceeds
+// it), so close up this behaves exactly like a tight, icon-matching
+// rectangle same as before. Gold-coin drops (also 2026-07-13) use their own,
+// much smaller GOLD_COIN_ICON_H base size instead of the loot.png bag's —
+// same floor logic applies per-drop so tiny coins stay comfortably hoverable
+// at low zoom too.
 function hitTestItemDrop() {
   const lootFrame = state.spriteFrames?.['loot.png']?.frame;
-  if (!lootFrame) return null;
+  const goldFrame = state.itemFrames?.['goldcoin.png']?.frame;
+  if (!lootFrame && !goldFrame) return null;
   const me = state.players[state.myId];
   if (!me) return null;
-  const dh = ITEM_DROP_ICON_H, dw = dh * (lootFrame.w / lootFrame.h);
-  const halfW = dw / 2, halfH = dh / 2;
   const zoom = state.cameraZoom || 1;
+  const lootDh = lootFrame ? Math.max(ITEM_DROP_ICON_H, ITEM_DROP_ICON_MIN_SCREEN_PX / zoom) : 0;
+  const lootDw = lootFrame ? lootDh * (lootFrame.w / lootFrame.h) : 0;
+  const goldDh = goldFrame ? Math.max(GOLD_COIN_ICON_H, ITEM_DROP_ICON_MIN_SCREEN_PX / zoom) : 0;
+  const goldDw = goldFrame ? goldDh * (goldFrame.w / goldFrame.h) : 0;
   const cam = getCamera();
   const wx = state.mouseX / zoom + cam.x;
   const wy = state.mouseY / zoom + cam.y;
@@ -27,6 +37,9 @@ function hitTestItemDrop() {
   let closestD2 = Infinity;
   for (const id in state.itemDrops) {
     const d = state.itemDrops[id];
+    const isGold = d.item && d.item.kind === 'gold';
+    if (isGold ? !goldFrame : !lootFrame) continue;
+    const halfW = (isGold ? goldDw : lootDw) / 2, halfH = (isGold ? goldDh : lootDh) / 2;
     const pdx = me.x - d.x, pdy = me.y - d.y;
     if (pdx * pdx + pdy * pdy > ITEM_PICKUP_RANGE * ITEM_PICKUP_RANGE) continue;
     const dx = wx - d.x, dy = wy - d.y;
@@ -35,6 +48,30 @@ function hitTestItemDrop() {
     if (d2 < closestD2) { closestD2 = d2; closestId = id; }
   }
   return closestId;
+}
+
+// Hit test against the master chest's world sprite, same rectangle math
+// hitTestItemDrop() above uses for drops — mouse position converted to world
+// coords via the camera/zoom, tested against half-width/half-height around
+// the chest's fixed center point. Applies the same ITEM_DROP_ICON_MIN_SCREEN_PX
+// hover-floor as item drops (2026-07-14) so the hover area stays comfortably
+// sized when zoomed out, even though the drawn sprite itself (MASTER_CHEST_ICON_H,
+// see render.js) does not grow — same decoupled render/hit-test convention
+// documented on hitTestItemDrop above. Not gated by MASTER_CHEST_RANGE — unlike
+// an item drop's contents, there's nothing here that needs to stay hidden
+// until the player is close, it's just a landmark label.
+function hitTestMasterChest() {
+  if (!state.worldW) return false;
+  const chestFrame = state.spriteFrames?.['MastreChest_resized.png']?.frame;
+  if (!chestFrame) return false;
+  const zoom = state.cameraZoom || 1;
+  const dh = Math.max(MASTER_CHEST_ICON_H, ITEM_DROP_ICON_MIN_SCREEN_PX / zoom);
+  const dw = dh * (chestFrame.w / chestFrame.h);
+  const cam = getCamera();
+  const wx = state.mouseX / zoom + cam.x;
+  const wy = state.mouseY / zoom + cam.y;
+  const cx = state.worldW / 2, cy = state.worldH / 2;
+  return Math.abs(wx - cx) <= dw / 2 && Math.abs(wy - cy) <= dh / 2;
 }
 
 const keys = {};
@@ -76,6 +113,32 @@ export function resetKeys() {
 }
 
 export function setupInput(socket, canvas) {
+  // Suppress the browser's native right-click context menu everywhere on
+  // the page (2026-07-12) — without this, right-clicking during play (e.g.
+  // while aiming) pops up Chrome/Firefox/Edge/Safari's own "Save Image /
+  // Copy Image / Inspect" menu on top of the game, which is standard
+  // `contextmenu` event behavior on any page with an <img>/<canvas>, not a
+  // Chrome-specific quirk — preventDefault() on 'contextmenu' is the
+  // universal, cross-browser fix (no per-browser handling needed).
+  // Document-level (not just the canvas) so it also covers right-clicking
+  // any other part of the game UI (HUD buttons, panels, etc.).
+  document.addEventListener('contextmenu', (e) => e.preventDefault());
+
+  // Tracks which item drop's tooltip is currently showing (set/cleared by
+  // the mousemove handler below via hitTestItemDrop()). Declared up here,
+  // ahead of the keydown handler, so 'E' (below) can read it — closures
+  // over this `let` work regardless of textual order since setupInput()
+  // runs fully, synchronously, before any event can fire, but keeping the
+  // declaration above its first use reads more sensibly than relying on
+  // that.
+  let hoveredDropId = null;
+  // Tracks whether the cursor is currently over the master chest's world
+  // sprite (set/cleared by mousemove via hitTestMasterChest() below) — drives
+  // the chest's hover tooltip the same way hoveredDropId drives the item-drop
+  // tooltip. Deliberately boolean, not an id, since there's only ever one
+  // chest.
+  let hoveredChest = false;
+
   document.addEventListener('keydown', (e) => {
     if ((state.isSpectator || state.isDeadSpectating) && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
       const ids = Object.keys(state.players).filter(id => state.players[id].alive);
@@ -115,10 +178,64 @@ export function setupInput(socket, canvas) {
     }
     if (e.key === ' ') {
       e.preventDefault();
+      // Mirrors the server's isMidCombo() guard (combat-system.js,
+      // 2026-07-12) — the server now silently ignores 'toggleAttackStyle'
+      // while a combo's in progress (mid-swing style changes used to corrupt
+      // the spin and abort it back to a basic attack), so flipping
+      // state.attackStyle locally here too would just desync the client from
+      // what the server actually did. `me.attacking` covers an active hit;
+      // `me.comboChainWindow && comboStep > 0` covers the gap BETWEEN hits in
+      // a combo, where attacking is momentarily false but the combo is still
+      // very much in progress.
+      const me = state.players[state.myId];
+      const midCombo = me && (me.attacking || (me.comboChainWindow && (me.comboStep || 0) > 0));
+      if (midCombo) return;
       const newStyle = state.attackStyle === 'jab' ? 'swing' : 'jab';
       startIdleTransition(newStyle);
       socket.emit('toggleAttackStyle');
       state.attackStyle = newStyle;
+    }
+    if (e.key === 'x' || e.key === 'X') {
+      // No-ops if nothing's currently hovered (dropHoveredItem tracks that
+      // itself via ui.js's renderInventorySlots() mouseenter/mouseleave
+      // listeners) — safe to fire unconditionally on every 'x' press rather
+      // than gating on state.screen here too, same convention as the 1-9
+      // equip-slot handler above.
+      dropHoveredItem(socket);
+    }
+    if (e.key === 'e' || e.key === 'E') {
+      // Picks up EXCLUSIVELY the drop whose tooltip is currently showing
+      // (2026-07-12, per Travis — was previously "nearest drop to the
+      // player" regardless of what was on screen, which could pick up a
+      // completely different item than the one whose stats the player was
+      // just looking at). `hoveredDropId` is set by the mousemove handler
+      // below via hitTestItemDrop() — the same tight cursor-over-icon +
+      // in-range test that drives the tooltip itself, so "the item the
+      // banner is showing" and "the item E picks up" are now guaranteed to
+      // be the same one, by construction. No fallback to anything else —
+      // if nothing's hovered (no tooltip visible), E is a no-op.
+      if (state.screen === 'playing' && hoveredDropId) {
+        socket.emit('pickupItem', { id: hoveredDropId });
+      } else if (state.screen === 'playing') {
+        // Master chest (2026-07-14) — proximity-gated, unlike the hover-gated
+        // pickup branch above. Only checked when no item drop is hovered, so
+        // standing right next to the chest while also hovering a nearby drop
+        // still picks up the drop first (same "closest intent wins" idea as
+        // everywhere else E is used). MASTER_CHEST_RANGE mirrors
+        // ITEM_PICKUP_RANGE's role but is purely a client-side gate for now —
+        // there's nothing server-authoritative to protect yet since the
+        // chest is always empty (no drag-in built) and toggling the panel
+        // open/closed has no server-side effect, same as 'i' for the
+        // inventory panel.
+        const me = state.players[state.myId];
+        if (me) {
+          const cx = state.worldW / 2, cy = state.worldH / 2;
+          if (Math.hypot(me.x - cx, me.y - cy) <= MASTER_CHEST_RANGE) {
+            if ($.masterChestPanel.classList.contains('hidden')) showMasterChest();
+            else hideMasterChest();
+          }
+        }
+      }
     }
   });
 
@@ -163,16 +280,14 @@ export function setupInput(socket, canvas) {
 
   canvas.addEventListener('mousedown', (e) => {
     if (e.button === 0 && state.screen === 'playing') {
-      const dropId = hitTestItemDrop();
-      if (dropId) {
-        socket.emit('pickupItem', { id: dropId });
-        return;
-      }
+      // Left click no longer picks up items (2026-07-12, per Travis — 'E' is
+      // now the ONLY pickup method) — always attacks, even when hovering a
+      // drop. hitTestItemDrop() is still used below in mousemove purely for
+      // the hover tooltip; it's just no longer consulted here.
       socket.emit('attack', { facingAngle: state.players[state.myId]?.realAngle || state.players[state.myId]?.facingAngle || 0 });
     }
   });
 
-  let hoveredDropId = null;
   canvas.addEventListener('mousemove', (e) => {
     const rect = canvas.getBoundingClientRect();
     state.mouseX = (e.clientX - rect.left) * (canvas.width / rect.width);
@@ -183,18 +298,36 @@ export function setupInput(socket, canvas) {
       if (dropId !== hoveredDropId) {
         hoveredDropId = dropId;
         if (dropId) showDropTooltip(state.itemDrops[dropId]?.item, e);
-        else hideDropTooltip();
+        else if (!hoveredChest) hideDropTooltip();
       } else if (dropId) {
         positionDropTooltip(e);
       }
-    } else if (hoveredDropId) {
+      // Master chest hover tooltip (2026-07-14) — only checked when no item
+      // drop is hovered, same "closest intent wins" priority as the E-key
+      // handler above, so a drop sitting right next to the chest still gets
+      // its own tooltip rather than being shadowed by the chest's.
+      if (!dropId) {
+        const overChest = hitTestMasterChest();
+        if (overChest !== hoveredChest) {
+          hoveredChest = overChest;
+          if (overChest) showChestTooltip(e);
+          else hideDropTooltip();
+        } else if (overChest) {
+          positionDropTooltip(e);
+        }
+      } else if (hoveredChest) {
+        hoveredChest = false;
+      }
+    } else {
+      if (hoveredDropId || hoveredChest) hideDropTooltip();
       hoveredDropId = null;
-      hideDropTooltip();
+      hoveredChest = false;
     }
   });
 
   canvas.addEventListener('mouseleave', () => {
     hoveredDropId = null;
+    hoveredChest = false;
     hideDropTooltip();
   });
 }

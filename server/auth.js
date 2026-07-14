@@ -15,7 +15,10 @@ function formatAccount(row) {
     level: result.level,
     exp: result.exp,
     expToNext,
-    gold: row.gold || 0,
+    // currencyBronze (2026-07-13) replaces the old flat `gold` field as the
+    // account's real currency — see currency.js/db.js's migration comment.
+    // The legacy `gold` column is left untouched/unused going forward.
+    currencyBronze: row.currency_bronze || 0,
     accountType: row.account_type || 'basic',
     isAdmin: row.is_admin || 0
   };

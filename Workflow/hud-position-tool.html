@@ -74,6 +74,12 @@ button.secondary:hover { background: rgba(78,205,196,0.1); }
       <button class="secondary" id="resetBtn" style="margin-left:auto;padding:4px 10px;font-size:0.75rem">Reset</button>
     </div>
 
+    <div class="ctrl-row" style="gap:6px">
+      <button class="secondary" id="isolateAllBtn" style="flex:1;padding:5px;font-size:0.72rem">Show All</button>
+      <button class="secondary" id="isolateInvBtn" style="flex:1;padding:5px;font-size:0.72rem">Inventory Only</button>
+      <button class="secondary" id="isolateChestBtn" style="flex:1;padding:5px;font-size:0.72rem">Chest Only</button>
+    </div>
+
     <div class="layer-list" id="layerList"></div>
 
     <div id="controls">
@@ -899,6 +905,34 @@ document.getElementById('copyBtn').addEventListener('click', () => {
   document.getElementById('copyBtn').textContent = 'Copied!';
   setTimeout(() => { document.getElementById('copyBtn').textContent = 'Copy Layout JSON'; }, 2000);
 });
+
+// === Isolate view (2026-07-14) ===
+// Inventory and master chest share the same 1024x576 layout space, so every
+// element (both panels' backgrounds, all 21 inventory-side slots, all 16
+// chest slots, health bars, attack icons, etc.) draws on top of each other
+// here by default — fine for the elements that were already dialed in, but
+// a wall of clutter when trying to precisely drag 16 new ChestSlot markers
+// onto mctab.png's baked-in grid. These three buttons are a pure visibility
+// bulk-toggle (they only flip each item's existing `.visible` flag, the same
+// one the per-row eye button already uses) so Travis can isolate just the
+// panel he's currently lining up, then flip back to "Show All" when done —
+// nothing about the saved layout JSON changes from clicking these.
+const INVENTORY_GROUP = ['inventory.png', 'EquipWeapon', 'EquipArmor', 'EquipRing', 'EquipNecklace', 'EquipHelmet', 'CurrencyDisplay',
+  ...Array.from({ length: 16 }, (_, i) => 'InvSlot' + (i + 1))];
+const CHEST_GROUP = ['mctab.png', ...Array.from({ length: 16 }, (_, i) => 'ChestSlot' + (i + 1))];
+
+function isolateGroup(names) {
+  for (const item of items) {
+    item.visible = names === null ? true : names.includes(item.name);
+  }
+  const vis = items.filter(i => i.visible !== false);
+  selectedIdx = vis.length > 0 ? items.indexOf(vis[0]) : -1;
+  render();
+}
+
+document.getElementById('isolateAllBtn').addEventListener('click', () => isolateGroup(null));
+document.getElementById('isolateInvBtn').addEventListener('click', () => isolateGroup(INVENTORY_GROUP));
+document.getElementById('isolateChestBtn').addEventListener('click', () => isolateGroup(CHEST_GROUP));
 
 document.getElementById('refreshOutput').addEventListener('click', render);
 document.getElementById('resetBtn').addEventListener('click', () => {

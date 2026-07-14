@@ -7,7 +7,13 @@ export const BASE_STATS = {
   health: 100,
   maxHealth: 100,
   defense: 0,
-  fortune: 0
+  fortune: 0,
+  luck: 0,
+  // HP restored per second — 0 baseline, only equipped healthRegenFlat/
+  // healthRegenScaling attributes grant any (2026-07-12). Applied every
+  // server tick in room.js's gameTick(), capped at maxHealth — see
+  // item-generation-system.md.
+  healthRegen: 0
 };
 
 // Equipment slots every character has. 'weapon' stays hotbar-swappable via
@@ -40,6 +46,19 @@ export const INVENTORY_SIZE = 16;
 // rejected there), but the client needs the exact same number too so it
 // doesn't show a tooltip/allow a click that the server would just reject.
 export const ITEM_PICKUP_RANGE = 200;
+
+// Master chest (2026-07-14) — fixed world landmark at the map center
+// (state.worldW/2, state.worldH/2; matches server/config.js's MASTER_CHEST_X/
+// Y independently rather than over a socket event, since the point never
+// moves). RANGE mirrors ITEM_PICKUP_RANGE's role — gates the E-key open/
+// close in input.js — just a bigger radius since the chest is a large fixed
+// structure, not a small ground item. ICON_H is the chest sprite's drawn
+// world-space height in render.js, same "plain world-space size, not zoom-
+// inflated" convention as ITEM_DROP_ICON_H above.
+export const MASTER_CHEST_RANGE = 150;
+// 2026-07-14: was 140, way too big in-world per Travis ("needs to be almost
+// a third of that size") — 45 is ~1/3 of the original.
+export const MASTER_CHEST_ICON_H = 45;
 
 export const SWORD_IMG_SIZE = 1254;
 export const BLADE_W = 6;
@@ -104,15 +123,18 @@ export const ITEM_TIERS = {
 // (99.5 here), so the table doesn't need to add up to 100 and there's no
 // synthetic fallback rarity soaking up the leftover 0.5. `attributeCount` is
 // how many rolled attributes an item of that rarity gets. `color` drives the
-// rarity-colored item name in tooltips (ui.js).
+// rarity-colored item name in tooltips (ui.js). `luckBoosted` marks which
+// rarities the killer's Luck stat scales up — see
+// server/item-generator.js's getLuckAdjustedRarities(). Common/Uncommon are
+// the ones that shrink to compensate, not boosted themselves.
 export const ITEM_RARITIES = [
-  { id: 'common', name: 'Common', color: '#ffffff', weight: 50, attributeCount: 1 },
-  { id: 'uncommon', name: 'Uncommon', color: '#22c55e', weight: 30, attributeCount: 2 },
-  { id: 'rare', name: 'Rare', color: '#3b82f6', weight: 10, attributeCount: 3 },
-  { id: 'epic', name: 'Epic', color: '#a855f7', weight: 5, attributeCount: 4 },
-  { id: 'legendary', name: 'Legendary', color: '#f97316', weight: 3, attributeCount: 5 },
-  { id: 'mythic', name: 'Mythic', color: '#ef4444', weight: 1, attributeCount: 6 },
-  { id: 'ungodly', name: 'Ungodly', color: '#ffd700', weight: 0.5, attributeCount: 7 }
+  { id: 'common', name: 'Common', color: '#ffffff', weight: 50, attributeCount: 1, luckBoosted: false },
+  { id: 'uncommon', name: 'Uncommon', color: '#22c55e', weight: 30, attributeCount: 2, luckBoosted: false },
+  { id: 'rare', name: 'Rare', color: '#3b82f6', weight: 10, attributeCount: 3, luckBoosted: true },
+  { id: 'epic', name: 'Epic', color: '#a855f7', weight: 5, attributeCount: 4, luckBoosted: true },
+  { id: 'legendary', name: 'Legendary', color: '#f97316', weight: 3, attributeCount: 5, luckBoosted: true },
+  { id: 'mythic', name: 'Mythic', color: '#ef4444', weight: 1, attributeCount: 6, luckBoosted: true },
+  { id: 'ungodly', name: 'Ungodly', color: '#ffd700', weight: 0.5, attributeCount: 7, luckBoosted: true }
 ];
 
 // Full pool of rollable item attributes (Tier 1). Every flat stat has a
@@ -130,8 +152,12 @@ export const ITEM_RARITIES = [
 //                 attribute is unrestricted today)
 //   ranges      - { [tier]: { min, max, precision } } — rolled value's range
 //                 and decimal rounding for that tier
-//   displayName - shown in tooltips; scaling attributes get " per Player
-//                 Level" appended automatically (see formatItemAttribute())
+//   displayName - shown in tooltips; scaling attributes get a dynamic
+//                 "Scaling " prefix and "/lvl" suffix at display time (see
+//                 formatItemAttribute()) rather than baking it into this field
+//   itemNameText - used ONLY for generated item names, e.g. "Basic Ring of
+//                 Greater Attack Damage" (see item-generation-system.md's
+//                 stacking section) — deliberately separate from displayName
 // attackSpeed attributes use the same raw-ms-delta convention as
 // ITEMS[x].stats.attackSpeed elsewhere in this codebase (negative = faster);
 // the tooltip converts it to the familiar 600/cooldownMs rate multiplier,
@@ -139,20 +165,44 @@ export const ITEM_RARITIES = [
 // First-pass placeholder ranges — expect to rebalance by hand-editing this
 // object (and its mirror in public/shared/data.js) after playtesting.
 export const ITEM_ATTRIBUTES = {
-  attackDamageFlat: { id: 'attackDamageFlat', displayName: 'Attack Damage', stat: 'attackDmg', mode: 'flat', tiers: [1], categories: null, ranges: { 1: { min: 1, max: 4, precision: 0 } } },
-  attackDamageScaling: { id: 'attackDamageScaling', displayName: 'Attack Damage', stat: 'attackDmg', mode: 'scaling', tiers: [1], categories: null, ranges: { 1: { min: 0.1, max: 0.5, precision: 2 } } },
-  attackSpeedFlat: { id: 'attackSpeedFlat', displayName: 'Attack Speed', stat: 'attackSpeed', mode: 'flat', tiers: [1], categories: null, ranges: { 1: { min: -60, max: -10, precision: 0 } } },
-  attackSpeedScaling: { id: 'attackSpeedScaling', displayName: 'Attack Speed', stat: 'attackSpeed', mode: 'scaling', tiers: [1], categories: null, ranges: { 1: { min: -3, max: -0.5, precision: 2 } } },
-  armorFlat: { id: 'armorFlat', displayName: 'Armor', stat: 'defense', mode: 'flat', tiers: [1], categories: null, ranges: { 1: { min: 1, max: 4, precision: 0 } } },
-  armorScaling: { id: 'armorScaling', displayName: 'Armor', stat: 'defense', mode: 'scaling', tiers: [1], categories: null, ranges: { 1: { min: 0.1, max: 0.4, precision: 2 } } },
-  turnRateFlat: { id: 'turnRateFlat', displayName: 'Turn Rate', stat: 'turnSpeed', mode: 'flat', tiers: [1], categories: null, ranges: { 1: { min: 1, max: 3, precision: 0 } } },
-  turnRateScaling: { id: 'turnRateScaling', displayName: 'Turn Rate', stat: 'turnSpeed', mode: 'scaling', tiers: [1], categories: null, ranges: { 1: { min: 0.05, max: 0.2, precision: 2 } } },
-  maxEnergyFlat: { id: 'maxEnergyFlat', displayName: 'Max Energy', stat: 'maxEnergy', mode: 'flat', tiers: [1], categories: null, ranges: { 1: { min: 5, max: 20, precision: 0 } } },
-  maxEnergyScaling: { id: 'maxEnergyScaling', displayName: 'Max Energy', stat: 'maxEnergy', mode: 'scaling', tiers: [1], categories: null, ranges: { 1: { min: 0.5, max: 2, precision: 2 } } },
-  maxHealthFlat: { id: 'maxHealthFlat', displayName: 'Max Health', stat: 'maxHealth', mode: 'flat', tiers: [1], categories: null, ranges: { 1: { min: 5, max: 20, precision: 0 } } },
-  maxHealthScaling: { id: 'maxHealthScaling', displayName: 'Max Health', stat: 'maxHealth', mode: 'scaling', tiers: [1], categories: null, ranges: { 1: { min: 0.5, max: 2.5, precision: 2 } } },
-  fortuneFlat: { id: 'fortuneFlat', displayName: 'Fortune', stat: 'fortune', mode: 'flat', tiers: [1], categories: null, ranges: { 1: { min: 1, max: 3, precision: 0 } } },
-  fortuneScaling: { id: 'fortuneScaling', displayName: 'Fortune', stat: 'fortune', mode: 'scaling', tiers: [1], categories: null, ranges: { 1: { min: 0.05, max: 0.25, precision: 2 } } }
+  attackDamageFlat: { id: 'attackDamageFlat', displayName: 'Attack Damage', itemNameText: 'Attack Damage', stat: 'attackDmg', mode: 'flat', tiers: [1], categories: null, ranges: { 1: { min: 1, max: 4, precision: 0 } } },
+  attackDamageScaling: { id: 'attackDamageScaling', displayName: 'Attack Damage', itemNameText: 'Scaling Attack Damage', stat: 'attackDmg', mode: 'scaling', tiers: [1], categories: null, ranges: { 1: { min: 0.1, max: 0.5, precision: 2 } } },
+  attackSpeedFlat: { id: 'attackSpeedFlat', displayName: 'Attack Speed', itemNameText: 'Attack Speed', stat: 'attackSpeed', mode: 'flat', tiers: [1], categories: null, ranges: { 1: { min: -60, max: -10, precision: 0 } } },
+  attackSpeedScaling: { id: 'attackSpeedScaling', displayName: 'Attack Speed', itemNameText: 'Scaling Attack Speed', stat: 'attackSpeed', mode: 'scaling', tiers: [1], categories: null, ranges: { 1: { min: -3, max: -0.5, precision: 2 } } },
+  armorFlat: { id: 'armorFlat', displayName: 'Armor', itemNameText: 'Armor', stat: 'defense', mode: 'flat', tiers: [1], categories: null, ranges: { 1: { min: 1, max: 4, precision: 0 } } },
+  armorScaling: { id: 'armorScaling', displayName: 'Armor', itemNameText: 'Scaling Armor', stat: 'defense', mode: 'scaling', tiers: [1], categories: null, ranges: { 1: { min: 0.1, max: 0.4, precision: 2 } } },
+  turnRateFlat: { id: 'turnRateFlat', displayName: 'Turn Rate', itemNameText: 'Turn Rate', stat: 'turnSpeed', mode: 'flat', tiers: [1], categories: null, ranges: { 1: { min: 1, max: 3, precision: 0 } } },
+  turnRateScaling: { id: 'turnRateScaling', displayName: 'Turn Rate', itemNameText: 'Scaling Turn Rate', stat: 'turnSpeed', mode: 'scaling', tiers: [1], categories: null, ranges: { 1: { min: 0.05, max: 0.2, precision: 2 } } },
+  maxEnergyFlat: { id: 'maxEnergyFlat', displayName: 'Max Energy', itemNameText: 'Max Energy', stat: 'maxEnergy', mode: 'flat', tiers: [1], categories: null, ranges: { 1: { min: 5, max: 20, precision: 0 } } },
+  maxEnergyScaling: { id: 'maxEnergyScaling', displayName: 'Max Energy', itemNameText: 'Scaling Max Energy', stat: 'maxEnergy', mode: 'scaling', tiers: [1], categories: null, ranges: { 1: { min: 0.5, max: 2, precision: 2 } } },
+  maxHealthFlat: { id: 'maxHealthFlat', displayName: 'Max Health', itemNameText: 'Max Health', stat: 'maxHealth', mode: 'flat', tiers: [1], categories: null, ranges: { 1: { min: 5, max: 20, precision: 0 } } },
+  maxHealthScaling: { id: 'maxHealthScaling', displayName: 'Max Health', itemNameText: 'Scaling Max Health', stat: 'maxHealth', mode: 'scaling', tiers: [1], categories: null, ranges: { 1: { min: 0.5, max: 2.5, precision: 2 } } },
+  fortuneFlat: { id: 'fortuneFlat', displayName: 'Fortune', itemNameText: 'Fortune', stat: 'fortune', mode: 'flat', tiers: [1], categories: null, ranges: { 1: { min: 1, max: 3, precision: 0 } } },
+  fortuneScaling: { id: 'fortuneScaling', displayName: 'Fortune', itemNameText: 'Scaling Fortune', stat: 'fortune', mode: 'scaling', tiers: [1], categories: null, ranges: { 1: { min: 0.05, max: 0.25, precision: 2 } } },
+  // Fortune and Luck are deliberately separate stats (2026-07-12, per
+  // Travis): Fortune is reserved for a future gold-drop % multiplier (not
+  // built yet — there's no gold-drop mechanic to multiply until that
+  // feature exists, see item-generation-system.md), Luck raises the odds of
+  // rolling a higher item rarity (built now — see getLuckAdjustedRarities()
+  // in server/item-generator.js).
+  luckFlat: { id: 'luckFlat', displayName: 'Luck', itemNameText: 'Luck', stat: 'luck', mode: 'flat', tiers: [1], categories: null, ranges: { 1: { min: 1, max: 3, precision: 0 } } },
+  luckScaling: { id: 'luckScaling', displayName: 'Luck', itemNameText: 'Scaling Luck', stat: 'luck', mode: 'scaling', tiers: [1], categories: null, ranges: { 1: { min: 0.05, max: 0.25, precision: 2 } } },
+  // Health Regen (2026-07-12) — HP restored per second, applied every
+  // server tick in room.js's gameTick() (always on, not gated to out-of-
+  // combat — simplest-first, see item-generation-system.md). Ranges match
+  // Fortune/Luck's family (both minor "utility" stats with a 0 baseline).
+  healthRegenFlat: { id: 'healthRegenFlat', displayName: 'Health Regen', itemNameText: 'Health Regen', stat: 'healthRegen', mode: 'flat', tiers: [1], categories: null, ranges: { 1: { min: 1, max: 3, precision: 0 } } },
+  healthRegenScaling: { id: 'healthRegenScaling', displayName: 'Health Regen', itemNameText: 'Scaling Health Regen', stat: 'healthRegen', mode: 'scaling', tiers: [1], categories: null, ranges: { 1: { min: 0.05, max: 0.25, precision: 2 } } },
+  // Speed (2026-07-12) — movement speed, NOT attackSpeed. `speed` already
+  // exists as a real, fully-applied stat (BASE_SPEED, physics movement,
+  // spendable stat points), so this needed no new server wiring at all —
+  // equippedStatTotal('speed') was already summed into p.speed in
+  // recalcStats(); adding these two pool entries is the entire feature.
+  // Ranges mirror turnRateFlat/Scaling (same "movement" stat family,
+  // both effectively capped downstream — turnSpeed has no hard cap but
+  // speed's total is clamped to each build's speedCap in recalcStats).
+  speedFlat: { id: 'speedFlat', displayName: 'Speed', itemNameText: 'Speed', stat: 'speed', mode: 'flat', tiers: [1], categories: null, ranges: { 1: { min: 1, max: 3, precision: 0 } } },
+  speedScaling: { id: 'speedScaling', displayName: 'Speed', itemNameText: 'Scaling Speed', stat: 'speed', mode: 'scaling', tiers: [1], categories: null, ranges: { 1: { min: 0.05, max: 0.2, precision: 2 } } }
 };
 
 // Drawn height (world/canvas units) of the generic loot.png ground icon —
@@ -162,6 +212,82 @@ export const ITEM_ATTRIBUTES = {
 // (no padding), since drops can land close together and need tight,
 // unambiguous click/hover targets.
 export const ITEM_DROP_ICON_H = 28;
+
+// Minimum ON-SCREEN pixel size of the loot icon's HOVER/CLICK HITBOX (input.js's
+// hitTestItemDrop()) as the camera zooms out — NOT the drawn icon's size.
+// Originally (2026-07-13) this floored both the drawn icon AND the hitbox
+// together, since at the game's minimum zoom (~0.32, a 3200x2400 world in a
+// 1024x576 viewport) a pure ITEM_DROP_ICON_H * zoom hitbox is under 9px
+// tall — nearly impossible to hover precisely, worse the further you zoom
+// out. But flooring the DRAWN size too made the bag visibly grow larger
+// than its real size when zoomed out, which Travis didn't want ("I want
+// the bags to stay the same size all the time as they initially were").
+// Same day: render.js reverted to drawing at a plain, never-inflated
+// ITEM_DROP_ICON_H, while input.js kept `Math.max(ITEM_DROP_ICON_H,
+// ITEM_DROP_ICON_MIN_SCREEN_PX / zoom)` for the hit-test rectangle only —
+// the invisible hoverable area stays generous at low zoom, the visible
+// icon does not grow. These two are now DELIBERATELY DECOUPLED — do not
+// "fix" them back into using the same formula.
+export const ITEM_DROP_ICON_MIN_SCREEN_PX = 26;
+
+// Currency (2026-07-13) — total-bronze integer is the only real number
+// (server's p.currencyBronze / account's currency_bronze column); gold/
+// silver are purely a DISPLAY split derived from it here. Mirrors
+// server/currency.js's toDenominations() — the ratio only needs to be
+// defined once client-side since the server never actually needs to show
+// denominations, just add to and persist the raw total. Keep the two in
+// sync by convention if this ever changes (same convention as every other
+// client/server constant pair in this file).
+export const BRONZE_PER_SILVER = 100;
+export const SILVER_PER_GOLD = 100;
+const BRONZE_PER_GOLD = BRONZE_PER_SILVER * SILVER_PER_GOLD;
+
+export function toDenominations(totalBronze) {
+  const total = Number.isFinite(totalBronze) && totalBronze > 0 ? Math.floor(totalBronze) : 0;
+  const gold = Math.floor(total / BRONZE_PER_GOLD);
+  const silver = Math.floor((total % BRONZE_PER_GOLD) / BRONZE_PER_SILVER);
+  const bronze = total % BRONZE_PER_SILVER;
+  return { gold, silver, bronze };
+}
+
+// Short "Ng Ns Nb" readout, omitting denominations that are zero (except
+// bronze, which always shows so a totally empty wallet still reads "0b"
+// instead of a blank string). Used everywhere currency is displayed —
+// welcome panel, Char Stats, the in-inventory CurrencyDisplay readout.
+export function formatCurrency(totalBronze) {
+  const { gold, silver, bronze } = toDenominations(totalBronze);
+  const parts = [];
+  if (gold > 0) parts.push(gold + 'g');
+  if (silver > 0 || gold > 0) parts.push(silver + 's');
+  parts.push(bronze + 'b');
+  return parts.join(' ');
+}
+
+// Same as formatCurrency() but wraps each denomination in a colored span
+// (2026-07-13, per Travis: "a nice vibrant bronze color... a nice shiny
+// silver... a nice gold" — every place currency is shown, not just one) —
+// `.currency-gold`/`.currency-silver`/`.currency-bronze` in style.css own
+// the actual colors. Every currency display site should use THIS, not the
+// plain-text formatCurrency() above, and must set it via `.innerHTML`
+// (never `.textContent`, which would print the raw `<span>` tags as text
+// instead of rendering them).
+export function formatCurrencyHtml(totalBronze) {
+  const { gold, silver, bronze } = toDenominations(totalBronze);
+  const parts = [];
+  if (gold > 0) parts.push('<span class="currency-gold">' + gold + 'g</span>');
+  if (silver > 0 || gold > 0) parts.push('<span class="currency-silver">' + silver + 's</span>');
+  parts.push('<span class="currency-bronze">' + bronze + 'b</span>');
+  return parts.join(' ');
+}
+
+// Drawn height (world/canvas units) of the gold-coin ground icon — its own
+// distinct, much smaller size than the generic loot.png bag (ITEM_DROP_ICON_H
+// above), since Travis wants the coin instantly recognizable on the ground
+// rather than hidden behind the generic "mystery bag" treatment equipment
+// drops get. Roughly half the on-screen size of a knight's hand — starting
+// point only, trivially tunable (a single constant) once Travis sees it
+// in-game and wants it bigger/smaller.
+export const GOLD_COIN_ICON_H = 12;
 
 export const ITEM_VISUALS = {
   wooden_sword: {

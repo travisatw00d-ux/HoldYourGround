@@ -37,6 +37,19 @@ const INTERMISSION_MS = 10000;
 const END_GAME_MS = 30000;
 const CHAIN_DELAY_TICKS = 9;
 
+// Master chest (2026-07-14) — a single fixed world landmark at the exact
+// center of the map, holding each player's personal permanent-storage grid
+// (separate from p.inventorySlots, the run-scoped bag). Position is just
+// WORLD_W/2, WORLD_H/2 — not a moving/spawned entity, so there's nothing to
+// track per-room, and the client derives the same point independently from
+// state.worldW/worldH (sent once via 'init') instead of over a dedicated
+// socket event. MASTER_CHEST_RANGE mirrors ITEM_PICKUP_RANGE's role (used by
+// the client to gate the E-key open/close), just a larger radius since the
+// chest is a big fixed structure, not a small ground item.
+const MASTER_CHEST_X = WORLD_W / 2;
+const MASTER_CHEST_Y = WORLD_H / 2;
+const MASTER_CHEST_RANGE = 150;
+
 const COLORS = [
   '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7',
   '#DDA0DD', '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E9'
@@ -52,5 +65,5 @@ module.exports = {
   ITEMS, ITEM_SLOTS, CLASS_LOADOUTS, INVENTORY_SIZE, ITEM_PICKUP_RANGE, ITEM_TIERS, ITEM_RARITIES, ITEM_ATTRIBUTES, ANIMATIONS, ZOMBIE_ANIMATIONS, BLADE_W, BLADE_TIP_X, BLADE_TIP_Y, BLADE_HILT_X, BLADE_HILT_Y,
   KNIGHT_ANIMATIONS, KNIGHT_VISUALS, KNIGHT_BLADE_TIP_X, KNIGHT_BLADE_TIP_Y, KNIGHT_BLADE_HILT_X, KNIGHT_BLADE_HILT_Y,
   END_GAME_MS, CHAIN_DELAY_TICKS, ZOMBIE_ATTACK_RANGE, ZOMBIE_ATTACK_DURATION, ZOMBIE_ATTACK_STRIKE, ZOMBIE_ATTACK_COOLDOWN,
-  BASE_TURN_SPEED
+  BASE_TURN_SPEED, MASTER_CHEST_X, MASTER_CHEST_Y, MASTER_CHEST_RANGE
 };

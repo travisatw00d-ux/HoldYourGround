@@ -6,7 +6,8 @@ import { getBladeSegment, handleAnimNaturalEnd } from './anims.js';
 import { drawStatHUD, drawServerLevel, drawSpectatingUI, drawDeadSpectatingUI, drawDmgNumbers, drawBuildWatermark, drawHitFlash } from './render-ui.js';
 import { drawHUD } from './hud.js';
 import { drawDiag } from './diag.js';
-import { ZOMBIE_ANIMATIONS, KNIGHT_VISUALS, BLADE_W, ITEM_DROP_ICON_H } from './game-data.js';
+import { ZOMBIE_ANIMATIONS, KNIGHT_VISUALS, BLADE_W, ITEM_DROP_ICON_H, GOLD_COIN_ICON_H, MASTER_CHEST_ICON_H, MASTER_CHEST_RANGE } from './game-data.js';
+import { hideMasterChest, $ } from './ui.js';
 
 function shortAngleDist(a, b) {
   let diff = b - a;
@@ -96,6 +97,25 @@ function render() {
     }
   }
 
+  // Auto-close the master chest panel the instant the player walks out of
+  // interaction range while it's open (2026-07-14, per Travis: "if you walk
+  // away from the master chest, it needs to pull the inventory away... you
+  // can't interact with it if you're too far away, just like you can't
+  // click it if you're too far away") — checked every render frame rather
+  // than only on the E-key press or the next server tick, so it closes the
+  // moment you step outside MASTER_CHEST_RANGE, same distance gate the
+  // E-key open/close in input.js already uses. hideMasterChest() already
+  // calls refreshPrimaryPanelLayout() (see ui.js), so the inventory panel
+  // (or Char Stats, if either is open alongside the chest) automatically
+  // reflows back to its normal layout the same frame — that's the "pull the
+  // inventory away" part, no separate logic needed here.
+  if (me && state.worldW && $.masterChestPanel && !$.masterChestPanel.classList.contains('hidden')) {
+    const ccx = state.worldW / 2, ccy = state.worldH / 2;
+    if (Math.hypot(me.x - ccx, me.y - ccy) > MASTER_CHEST_RANGE) {
+      hideMasterChest();
+    }
+  }
+
   if (state.localAnim) {
     const elapsed = performance.now() - state.localAnim.startTime;
     const duration = (state.localAnim.totalFrames / 60) * 1000 / 2;
@@ -127,27 +147,83 @@ function render() {
     ctx.drawImage(bg, cam.x, cam.y, eW, eH, 0, 0, eW, eH);
   }
 
+  // Master chest (2026-07-14) — fixed world landmark at the exact map
+  // center, holding each player's personal permanent-storage grid (see
+  // server/player.js's p.masterChest). Position is derived independently
+  // here from state.worldW/worldH rather than synced over a socket event —
+  // it's a constant (WORLD_W/2, WORLD_H/2 server-side too), not a moving/
+  // spawned entity, so there's nothing to keep in sync. Drawn right after
+  // the background, before item drops/zombies/players, so anyone standing
+  // at/near it renders on top, same z-order idea as the loot-icon comment
+  // right below.
+  const chestFrame = state.spriteFrames?.['MastreChest_resized.png']?.frame;
+  if (chestFrame && state.worldW) {
+    const chdh = MASTER_CHEST_ICON_H;
+    const chdw = chdh * (chestFrame.w / chestFrame.h);
+    const ccx = state.worldW / 2 - cam.x;
+    const ccy = state.worldH / 2 - cam.y;
+    if (ccx > -chdw && ccx < eW + chdw && ccy > -chdh && ccy < eH + chdh) {
+      ctx.drawImage(getSpriteFromSheet(state.spriteSheet, chdw, chdh, chestFrame), ccx - chdw / 2, ccy - chdh / 2, chdw, chdh);
+    }
+  }
+
   // World item-drop icons (loot from zombie kills) — just the generic
   // "loot.png" marker (added to spritesheet.png/.json) for every drop,
   // regardless of what's actually inside; no background/glow behind it by
   // design (Travis: "I want just the bag to be visible") — hovering reveals
   // the real item (icon/name/stats via ui.js's showDropTooltip, triggered
-  // from input.js's mousemove). Size comes from ITEM_DROP_ICON_H
-  // (game-data.js) — input.js's hitTestItemDrop() uses the exact same value
-  // to build a tight click/hover rectangle matching the visible icon with no
-  // padding, since drops can land close together and need precise targets.
-  // Click/hover hit-testing anchors on the same world-space point (d.x, d.y)
-  // with no offset, so don't add a y-offset here without updating that too.
+  // from input.js's mousemove). Drawn size always comes from the plain
+  // ITEM_DROP_ICON_H (game-data.js), never inflated by zoom — see the
+  // comment right below. input.js's hitTestItemDrop() anchors its hit
+  // rectangle on this same world-space point (d.x, d.y) with no offset, so
+  // don't add a y-offset here without updating that too, but its RECTANGLE
+  // SIZE is intentionally no longer identical to this drawn size at low
+  // zoom (see that function's comment) — don't assume they match.
   // Drawn right after the background (2026-07-11) so zombies/players always
   // render on top of drops lying on the ground, not the other way around.
   const lootFrame = state.spriteFrames?.['loot.png']?.frame;
-  if (lootFrame) {
-    const dh = ITEM_DROP_ICON_H, dw = dh * (lootFrame.w / lootFrame.h);
+  // Gold coins (2026-07-13) render as their OWN small, instantly-recognizable
+  // icon instead of the generic mystery bag above — Travis wants coins
+  // visible for what they are on the ground, unlike equipment drops which
+  // are deliberately anonymous until hovered. Also gets a slowly wavering
+  // glow: the world is drawn entirely on <canvas> (not DOM), so a literal
+  // CSS animation can't reach these pixels — this simulates the same
+  // "wavering glow" effect via canvas shadowBlur oscillating over time
+  // instead, same visual idea, different mechanism.
+  const goldFrame = state.itemFrames?.['goldcoin.png']?.frame;
+  if (lootFrame || goldFrame) {
+    // Always the plain world-space size (ITEM_DROP_ICON_H) — no zoom-based
+    // inflation. A 2026-07-13 attempt at fixing low-zoom hover precision
+    // briefly floored THIS (the drawn size) to a minimum screen-pixel size,
+    // which fixed hovering but made the bag visibly grow larger than its
+    // real size the further out you zoomed — Travis didn't want that ("I
+    // want the bags to stay the same size all the time as they initially
+    // were"). Reverted same day: the visual size is back to pure
+    // ITEM_DROP_ICON_H * zoom, shrinking naturally like everything else in
+    // the world. The hover-precision fix now lives ONLY in input.js's
+    // hitTestItemDrop() — the clickable/hoverable AREA around the icon
+    // stays generous at low zoom even though the icon you see does not; see
+    // that function's comment.
+    const dh = ITEM_DROP_ICON_H, dw = lootFrame ? dh * (lootFrame.w / lootFrame.h) : dh;
+    const gdh = GOLD_COIN_ICON_H, gdw = goldFrame ? gdh * (goldFrame.w / goldFrame.h) : gdh;
+    // Slow sine wave, ~3s period, oscillating the glow's blur radius between
+    // a dim base and a brighter peak — "wavers off and on slowly" per Travis.
+    const glowPhase = (performance.now() / 3000) % (Math.PI * 2);
+    const glowBlur = 6 + 5 * (0.5 + 0.5 * Math.sin(glowPhase));
     for (const id in state.itemDrops) {
       const d = state.itemDrops[id];
       const sx = d.x - cam.x, sy = d.y - cam.y;
       if (sx < -40 || sx > eW + 40 || sy < -40 || sy > eH + 40) continue;
-      ctx.drawImage(getSpriteFromSheet(state.spriteSheet, dw, dh, lootFrame), sx - dw / 2, sy - dh / 2, dw, dh);
+      if (d.item && d.item.kind === 'gold') {
+        if (!goldFrame) continue;
+        ctx.save();
+        ctx.shadowColor = 'rgba(255, 210, 80, 0.9)';
+        ctx.shadowBlur = glowBlur;
+        ctx.drawImage(getSpriteFromSheet(state.itemSheet, gdw, gdh, goldFrame), sx - gdw / 2, sy - gdh / 2, gdw, gdh);
+        ctx.restore();
+      } else if (lootFrame) {
+        ctx.drawImage(getSpriteFromSheet(state.spriteSheet, dw, dh, lootFrame), sx - dw / 2, sy - dh / 2, dw, dh);
+      }
     }
   }
 

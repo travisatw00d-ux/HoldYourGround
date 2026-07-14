@@ -1,5 +1,6 @@
 const { MAX_PLAYERS } = require('./config');
 const playerMod = require('./player');
+const expMod = require('./exp');
 
 function getActivePlayerCount(room) {
   let count = 0;
@@ -34,9 +35,23 @@ function handleDirectJoin(room, id) {
     return;
   }
   p.isSpectator = false;
-  p.lvl = 1; p.exp = 0; p.gold = 0; p.statPoints = 0;
+  // p.currencyBronze is deliberately NOT reset here — unlike lvl/exp (a
+  // per-match roguelike climb that's meant to restart every round while
+  // permanently accumulating into the account's cumulative_exp in the
+  // background), currency carries forward across match restarts within a
+  // session, same as equipment. See the _persistedCurrency comment in
+  // room.js's constructor.
+  p.lvl = 1; p.exp = 0; p.statPoints = 0;
   p.investedPoints = {};
   room._persistedExp.delete(p.id);
+  // p.currencyBronze wasn't touched above (see comment) but the client's own
+  // local state DOES reset its currency display to 0 on this same 'joined
+  // Game' event (net-events.js — same convention as its lvl/exp reset,
+  // which IS accurate here). Without this, a returning player with a real
+  // saved balance would see "0b" until their next kill/pickup fired an
+  // accountUpdate. Send the true value immediately so the display is never
+  // wrong, even for a split second.
+  room.io.to(id).emit('accountUpdate', { exp: 0, level: 1, expToNext: expMod.getExpToNext(1), currencyBronze: p.currencyBronze || 0, statPoints: p.statPoints || 0 });
   const qIdx = room._joinQueue.indexOf(id);
   if (qIdx >= 0) room._joinQueue.splice(qIdx, 1);
 
@@ -82,10 +97,14 @@ function _promoteFromQueue(room) {
     const qp = room.players[qid];
     if (!qp || !qp.isSpectator) { continue; }
     qp.isSpectator = false;
-    qp.lvl = 1; qp.exp = 0; qp.gold = 0; qp.statPoints = 0;
+    // See the matching comment in handleDirectJoin() above — currency isn't
+    // reset alongside lvl/exp.
+    qp.lvl = 1; qp.exp = 0; qp.statPoints = 0;
     qp.investedPoints = {};
     room._persistedExp.delete(qp.id);
     playerMod.recalcStats(qp);
+    // See the matching comment in handleDirectJoin() above.
+    room.io.to(qid).emit('accountUpdate', { exp: 0, level: 1, expToNext: expMod.getExpToNext(1), currencyBronze: qp.currencyBronze || 0, statPoints: qp.statPoints || 0 });
 
     if (room.matchPhase === 'daytime') {
       playerMod.respawnPlayer(qid, room.players, room.zombies);

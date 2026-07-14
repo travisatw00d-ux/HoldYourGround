@@ -8,7 +8,13 @@
     health: 100,
     maxHealth: 100,
     defense: 0,
-    fortune: 0
+    fortune: 0,
+    luck: 0,
+    // HP restored per second — 0 baseline, only equipped healthRegenFlat/
+    // healthRegenScaling attributes grant any (2026-07-12). Applied every
+    // server tick in room.js's gameTick(), capped at maxHealth — see
+    // item-generation-system.md.
+    healthRegen: 0
   };
 
   // Equipment slots every character has. 'weapon' stays hotbar-swappable via
@@ -93,35 +99,67 @@
   // the matching comment in game-data.js. `weight` is relative (normalized
   // at roll time by the sum of all weights), `attributeCount` is how many
   // rolled attributes that rarity gets, `color` drives the tooltip name color.
+  // `luckBoosted` marks which rarities the killer's Luck stat scales up —
+  // see server/item-generator.js's getLuckAdjustedRarities(). Common/
+  // Uncommon are the ones that shrink to compensate, not boosted themselves.
   const ITEM_RARITIES = [
-    { id: 'common', name: 'Common', color: '#ffffff', weight: 50, attributeCount: 1 },
-    { id: 'uncommon', name: 'Uncommon', color: '#22c55e', weight: 30, attributeCount: 2 },
-    { id: 'rare', name: 'Rare', color: '#3b82f6', weight: 10, attributeCount: 3 },
-    { id: 'epic', name: 'Epic', color: '#a855f7', weight: 5, attributeCount: 4 },
-    { id: 'legendary', name: 'Legendary', color: '#f97316', weight: 3, attributeCount: 5 },
-    { id: 'mythic', name: 'Mythic', color: '#ef4444', weight: 1, attributeCount: 6 },
-    { id: 'ungodly', name: 'Ungodly', color: '#ffd700', weight: 0.5, attributeCount: 7 }
+    { id: 'common', name: 'Common', color: '#ffffff', weight: 50, attributeCount: 1, luckBoosted: false },
+    { id: 'uncommon', name: 'Uncommon', color: '#22c55e', weight: 30, attributeCount: 2, luckBoosted: false },
+    { id: 'rare', name: 'Rare', color: '#3b82f6', weight: 10, attributeCount: 3, luckBoosted: true },
+    { id: 'epic', name: 'Epic', color: '#a855f7', weight: 5, attributeCount: 4, luckBoosted: true },
+    { id: 'legendary', name: 'Legendary', color: '#f97316', weight: 3, attributeCount: 5, luckBoosted: true },
+    { id: 'mythic', name: 'Mythic', color: '#ef4444', weight: 1, attributeCount: 6, luckBoosted: true },
+    { id: 'ungodly', name: 'Ungodly', color: '#ffd700', weight: 0.5, attributeCount: 7, luckBoosted: true }
   ];
 
   // Full pool of rollable item attributes (Tier 1) — see the matching
   // comment in game-data.js for the full field-by-field explanation. Keep
   // this in sync with game-data.js exactly; server/item-generator.js is the
-  // authority that actually rolls against these ranges.
+  // authority that actually rolls against these ranges. `itemNameText` is
+  // used ONLY for generated item names (e.g. "Basic Ring of Greater Attack
+  // Damage" — see item-generation-system.md's stacking section); it's
+  // deliberately separate from `displayName` (used for tooltip attribute
+  // rows) since `displayName` stays the bare stat name and gets a dynamic
+  // "Scaling " prefix at display time instead of having it baked in.
   const ITEM_ATTRIBUTES = {
-    attackDamageFlat: { id: 'attackDamageFlat', displayName: 'Attack Damage', stat: 'attackDmg', mode: 'flat', tiers: [1], categories: null, ranges: { 1: { min: 1, max: 4, precision: 0 } } },
-    attackDamageScaling: { id: 'attackDamageScaling', displayName: 'Attack Damage', stat: 'attackDmg', mode: 'scaling', tiers: [1], categories: null, ranges: { 1: { min: 0.1, max: 0.5, precision: 2 } } },
-    attackSpeedFlat: { id: 'attackSpeedFlat', displayName: 'Attack Speed', stat: 'attackSpeed', mode: 'flat', tiers: [1], categories: null, ranges: { 1: { min: -60, max: -10, precision: 0 } } },
-    attackSpeedScaling: { id: 'attackSpeedScaling', displayName: 'Attack Speed', stat: 'attackSpeed', mode: 'scaling', tiers: [1], categories: null, ranges: { 1: { min: -3, max: -0.5, precision: 2 } } },
-    armorFlat: { id: 'armorFlat', displayName: 'Armor', stat: 'defense', mode: 'flat', tiers: [1], categories: null, ranges: { 1: { min: 1, max: 4, precision: 0 } } },
-    armorScaling: { id: 'armorScaling', displayName: 'Armor', stat: 'defense', mode: 'scaling', tiers: [1], categories: null, ranges: { 1: { min: 0.1, max: 0.4, precision: 2 } } },
-    turnRateFlat: { id: 'turnRateFlat', displayName: 'Turn Rate', stat: 'turnSpeed', mode: 'flat', tiers: [1], categories: null, ranges: { 1: { min: 1, max: 3, precision: 0 } } },
-    turnRateScaling: { id: 'turnRateScaling', displayName: 'Turn Rate', stat: 'turnSpeed', mode: 'scaling', tiers: [1], categories: null, ranges: { 1: { min: 0.05, max: 0.2, precision: 2 } } },
-    maxEnergyFlat: { id: 'maxEnergyFlat', displayName: 'Max Energy', stat: 'maxEnergy', mode: 'flat', tiers: [1], categories: null, ranges: { 1: { min: 5, max: 20, precision: 0 } } },
-    maxEnergyScaling: { id: 'maxEnergyScaling', displayName: 'Max Energy', stat: 'maxEnergy', mode: 'scaling', tiers: [1], categories: null, ranges: { 1: { min: 0.5, max: 2, precision: 2 } } },
-    maxHealthFlat: { id: 'maxHealthFlat', displayName: 'Max Health', stat: 'maxHealth', mode: 'flat', tiers: [1], categories: null, ranges: { 1: { min: 5, max: 20, precision: 0 } } },
-    maxHealthScaling: { id: 'maxHealthScaling', displayName: 'Max Health', stat: 'maxHealth', mode: 'scaling', tiers: [1], categories: null, ranges: { 1: { min: 0.5, max: 2.5, precision: 2 } } },
-    fortuneFlat: { id: 'fortuneFlat', displayName: 'Fortune', stat: 'fortune', mode: 'flat', tiers: [1], categories: null, ranges: { 1: { min: 1, max: 3, precision: 0 } } },
-    fortuneScaling: { id: 'fortuneScaling', displayName: 'Fortune', stat: 'fortune', mode: 'scaling', tiers: [1], categories: null, ranges: { 1: { min: 0.05, max: 0.25, precision: 2 } } }
+    attackDamageFlat: { id: 'attackDamageFlat', displayName: 'Attack Damage', itemNameText: 'Attack Damage', stat: 'attackDmg', mode: 'flat', tiers: [1], categories: null, ranges: { 1: { min: 1, max: 4, precision: 0 } } },
+    attackDamageScaling: { id: 'attackDamageScaling', displayName: 'Attack Damage', itemNameText: 'Scaling Attack Damage', stat: 'attackDmg', mode: 'scaling', tiers: [1], categories: null, ranges: { 1: { min: 0.1, max: 0.5, precision: 2 } } },
+    attackSpeedFlat: { id: 'attackSpeedFlat', displayName: 'Attack Speed', itemNameText: 'Attack Speed', stat: 'attackSpeed', mode: 'flat', tiers: [1], categories: null, ranges: { 1: { min: -60, max: -10, precision: 0 } } },
+    attackSpeedScaling: { id: 'attackSpeedScaling', displayName: 'Attack Speed', itemNameText: 'Scaling Attack Speed', stat: 'attackSpeed', mode: 'scaling', tiers: [1], categories: null, ranges: { 1: { min: -3, max: -0.5, precision: 2 } } },
+    armorFlat: { id: 'armorFlat', displayName: 'Armor', itemNameText: 'Armor', stat: 'defense', mode: 'flat', tiers: [1], categories: null, ranges: { 1: { min: 1, max: 4, precision: 0 } } },
+    armorScaling: { id: 'armorScaling', displayName: 'Armor', itemNameText: 'Scaling Armor', stat: 'defense', mode: 'scaling', tiers: [1], categories: null, ranges: { 1: { min: 0.1, max: 0.4, precision: 2 } } },
+    turnRateFlat: { id: 'turnRateFlat', displayName: 'Turn Rate', itemNameText: 'Turn Rate', stat: 'turnSpeed', mode: 'flat', tiers: [1], categories: null, ranges: { 1: { min: 1, max: 3, precision: 0 } } },
+    turnRateScaling: { id: 'turnRateScaling', displayName: 'Turn Rate', itemNameText: 'Scaling Turn Rate', stat: 'turnSpeed', mode: 'scaling', tiers: [1], categories: null, ranges: { 1: { min: 0.05, max: 0.2, precision: 2 } } },
+    maxEnergyFlat: { id: 'maxEnergyFlat', displayName: 'Max Energy', itemNameText: 'Max Energy', stat: 'maxEnergy', mode: 'flat', tiers: [1], categories: null, ranges: { 1: { min: 5, max: 20, precision: 0 } } },
+    maxEnergyScaling: { id: 'maxEnergyScaling', displayName: 'Max Energy', itemNameText: 'Scaling Max Energy', stat: 'maxEnergy', mode: 'scaling', tiers: [1], categories: null, ranges: { 1: { min: 0.5, max: 2, precision: 2 } } },
+    maxHealthFlat: { id: 'maxHealthFlat', displayName: 'Max Health', itemNameText: 'Max Health', stat: 'maxHealth', mode: 'flat', tiers: [1], categories: null, ranges: { 1: { min: 5, max: 20, precision: 0 } } },
+    maxHealthScaling: { id: 'maxHealthScaling', displayName: 'Max Health', itemNameText: 'Scaling Max Health', stat: 'maxHealth', mode: 'scaling', tiers: [1], categories: null, ranges: { 1: { min: 0.5, max: 2.5, precision: 2 } } },
+    fortuneFlat: { id: 'fortuneFlat', displayName: 'Fortune', itemNameText: 'Fortune', stat: 'fortune', mode: 'flat', tiers: [1], categories: null, ranges: { 1: { min: 1, max: 3, precision: 0 } } },
+    fortuneScaling: { id: 'fortuneScaling', displayName: 'Fortune', itemNameText: 'Scaling Fortune', stat: 'fortune', mode: 'scaling', tiers: [1], categories: null, ranges: { 1: { min: 0.05, max: 0.25, precision: 2 } } },
+    // Fortune and Luck are deliberately separate stats (2026-07-12, per
+    // Travis): Fortune is reserved for a future gold-drop % multiplier (not
+    // built yet — there's no gold-drop mechanic to multiply until that
+    // feature exists, see item-generation-system.md), Luck raises the odds
+    // of rolling a higher item rarity (built now — see
+    // getLuckAdjustedRarities() in server/item-generator.js).
+    luckFlat: { id: 'luckFlat', displayName: 'Luck', itemNameText: 'Luck', stat: 'luck', mode: 'flat', tiers: [1], categories: null, ranges: { 1: { min: 1, max: 3, precision: 0 } } },
+    luckScaling: { id: 'luckScaling', displayName: 'Luck', itemNameText: 'Scaling Luck', stat: 'luck', mode: 'scaling', tiers: [1], categories: null, ranges: { 1: { min: 0.05, max: 0.25, precision: 2 } } },
+    // Health Regen (2026-07-12) — HP restored per second, applied every
+    // server tick in room.js's gameTick() (always on, not gated to out-of-
+    // combat — simplest-first, see item-generation-system.md). Ranges match
+    // Fortune/Luck's family (both minor "utility" stats with a 0 baseline).
+    healthRegenFlat: { id: 'healthRegenFlat', displayName: 'Health Regen', itemNameText: 'Health Regen', stat: 'healthRegen', mode: 'flat', tiers: [1], categories: null, ranges: { 1: { min: 1, max: 3, precision: 0 } } },
+    healthRegenScaling: { id: 'healthRegenScaling', displayName: 'Health Regen', itemNameText: 'Scaling Health Regen', stat: 'healthRegen', mode: 'scaling', tiers: [1], categories: null, ranges: { 1: { min: 0.05, max: 0.25, precision: 2 } } },
+    // Speed (2026-07-12) — movement speed, NOT attackSpeed. `speed` already
+    // exists as a real, fully-applied stat (BASE_SPEED, physics movement,
+    // spendable stat points), so this needed no new server wiring at all —
+    // equippedStatTotal('speed') was already summed into p.speed in
+    // recalcStats(); adding these two pool entries is the entire feature.
+    // Ranges mirror turnRateFlat/Scaling (same "movement" stat family,
+    // both effectively capped downstream — turnSpeed has no hard cap but
+    // speed's total is clamped to each build's speedCap in recalcStats).
+    speedFlat: { id: 'speedFlat', displayName: 'Speed', itemNameText: 'Speed', stat: 'speed', mode: 'flat', tiers: [1], categories: null, ranges: { 1: { min: 1, max: 3, precision: 0 } } },
+    speedScaling: { id: 'speedScaling', displayName: 'Speed', itemNameText: 'Scaling Speed', stat: 'speed', mode: 'scaling', tiers: [1], categories: null, ranges: { 1: { min: 0.05, max: 0.2, precision: 2 } } }
   };
 
   const ITEM_VISUALS = {

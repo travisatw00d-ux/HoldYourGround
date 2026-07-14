@@ -259,6 +259,14 @@
       <div id="inventorySlotsLayer"></div>
       <button id="inventoryClose" class="inventory-close">&times;</button>
     </div>
+    <!-- Master chest panel (2026-07-14) — reuses .inventory-panel/.inventory-close
+         since it's the exact same dimensions/behavior as inventoryPanel above, just
+         a different background frame (mctab.png) and slot set (ChestSlot1..16). -->
+    <div id="masterChestPanel" class="inventory-panel hidden">
+      <div id="masterChestContent"><canvas id="masterChestCanvas"></canvas></div>
+      <div id="masterChestSlotsLayer"></div>
+      <button id="masterChestClose" class="inventory-close">&times;</button>
+    </div>
 
     <!-- Next Wave Popup -->
     <div id="nwpOverlay" class="nwp-overlay"></div>

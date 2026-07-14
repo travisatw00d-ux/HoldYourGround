@@ -1,9 +1,29 @@
 {
   "frames": {
+    "zombiehead.png": {
+      "frame": {
+        "x": 155,
+        "y": 0,
+        "w": 128,
+        "h": 138
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 128,
+        "h": 138
+      },
+      "sourceSize": {
+        "w": 128,
+        "h": 138
+      }
+    },
     "zombielefthand.png": {
       "frame": {
-        "x": 196,
-        "y": 102,
+        "x": 0,
+        "y": 248,
         "w": 64,
         "h": 78
       },
@@ -22,50 +42,10 @@
     },
     "zombierighthand.png": {
       "frame": {
-        "x": 196,
-        "y": 182,
-        "w": 64,
-        "h": 78
-      },
-      "rotated": false,
-      "trimmed": false,
-      "spriteSourceSize": {
-        "x": 0,
-        "y": 0,
-        "w": 64,
-        "h": 78
-      },
-      "sourceSize": {
-        "w": 64,
-        "h": 78
-      }
-    },
-    "T2zombiehead.png": {
-      "frame": {
-        "x": 0,
+        "x": 217,
         "y": 140,
-        "w": 128,
-        "h": 118
-      },
-      "rotated": false,
-      "trimmed": false,
-      "spriteSourceSize": {
-        "x": 0,
-        "y": 0,
-        "w": 128,
-        "h": 118
-      },
-      "sourceSize": {
-        "w": 128,
-        "h": 118
-      }
-    },
-    "T2zombielefthand.png": {
-      "frame": {
-        "x": 130,
-        "y": 102,
         "w": 64,
-        "h": 80
+        "h": 78
       },
       "rotated": false,
       "trimmed": false,
@@ -73,57 +53,37 @@
         "x": 0,
         "y": 0,
         "w": 64,
-        "h": 80
+        "h": 78
       },
       "sourceSize": {
         "w": 64,
-        "h": 80
+        "h": 78
       }
     },
-    "T2zombierighthand.png": {
-      "frame": {
-        "x": 130,
-        "y": 184,
-        "w": 64,
-        "h": 80
-      },
-      "rotated": false,
-      "trimmed": false,
-      "spriteSourceSize": {
-        "x": 0,
-        "y": 0,
-        "w": 64,
-        "h": 80
-      },
-      "sourceSize": {
-        "w": 64,
-        "h": 80
-      }
-    },
-    "zombiehead.png": {
+    "MastreChest_resized.png": {
       "frame": {
         "x": 0,
         "y": 0,
-        "w": 128,
-        "h": 138
+        "w": 153,
+        "h": 126
       },
       "rotated": false,
-      "trimmed": false,
+      "trimmed": true,
       "spriteSourceSize": {
-        "x": 0,
-        "y": 0,
-        "w": 128,
-        "h": 138
+        "x": 24,
+        "y": 35,
+        "w": 153,
+        "h": 126
       },
       "sourceSize": {
-        "w": 128,
-        "h": 138
+        "w": 200,
+        "h": 200
       }
     },
     "loot.png": {
       "frame": {
         "x": 130,
-        "y": 0,
+        "y": 140,
         "w": 85,
         "h": 100
       },
@@ -139,6 +99,66 @@
         "w": 128,
         "h": 128
       }
+    },
+    "trollhead.png": {
+      "frame": {
+        "x": 0,
+        "y": 128,
+        "w": 128,
+        "h": 118
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 128,
+        "h": 118
+      },
+      "sourceSize": {
+        "w": 128,
+        "h": 118
+      }
+    },
+    "trolllefthand.png": {
+      "frame": {
+        "x": 130,
+        "y": 242,
+        "w": 64,
+        "h": 80
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 64,
+        "h": 80
+      },
+      "sourceSize": {
+        "w": 64,
+        "h": 80
+      }
+    },
+    "trollrighthand.png": {
+      "frame": {
+        "x": 196,
+        "y": 242,
+        "w": 64,
+        "h": 80
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 64,
+        "h": 80
+      },
+      "sourceSize": {
+        "w": 64,
+        "h": 80
+      }
     }
   },
   "meta": {
@@ -147,8 +167,8 @@
     "image": "spritesheet.png",
     "format": "RGBA8888",
     "size": {
-      "w": 260,
-      "h": 264
+      "w": 283,
+      "h": 326
     },
     "scale": "1"
   }

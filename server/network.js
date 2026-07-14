@@ -81,3 +81,49 @@ server.listen(PORT, () => {
 });
 
 roomManager.initGameLoop(io);
+
+// Graceful shutdown (2026-07-12) — a routine deploy/restart on Fly.io sends
+// SIGTERM (with a grace period) before hard-killing the process. Without
+// this, every currently-connected player's equipment/exp changes since
+// their last save would be silently lost: equipment only saves when a
+// player LEAVES a room (room.js's removePlayer -> _saveEquipment) and exp/
+// gold only saves at match end (_endMatch -> _saveRound), so anything still
+// in-progress at the exact moment the process died would otherwise never
+// reach the database. Best-effort save of every connected account across
+// every room, then exit. Does NOT protect against a true hard crash/OOM-
+// kill/power-loss — there's no signal to catch in that case — but that
+// failure mode is non-destructive either way: the account's last
+// successfully saved state is untouched, never corrupted, just not as
+// fresh as it could be (same class of gap exp/gold already had before this
+// feature existed; not something a signal handler can fully close, only
+// shrink — a deliberate scope decision, see Workflow/editing-server.md).
+let shuttingDown = false;
+
+function saveAllConnectedPlayers() {
+  let savedCount = 0;
+  for (const room of roomManager.rooms.values()) {
+    for (const id in room.players) {
+      const p = room.players[id];
+      if (p && p.accountId) { room._saveEquipment(p); savedCount++; }
+    }
+    try { room._saveRound(); } catch (e) { console.error(`[shutdown] _saveRound failed for room ${room.id}:`, e); }
+  }
+  return savedCount;
+}
+
+function gracefulShutdown(signal) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`[shutdown] ${signal} received — saving connected players before exit...`);
+  let savedCount = 0;
+  try { savedCount = saveAllConnectedPlayers(); } catch (e) { console.error('[shutdown] save pass failed:', e); }
+  console.log(`[shutdown] saved ${savedCount} player(s), exiting`);
+  server.close(() => process.exit(0));
+  // Safety net in case server.close() hangs on lingering keep-alive sockets
+  // — the saves above already completed synchronously (better-sqlite3 is
+  // sync), so it's safe to force-exit shortly after regardless.
+  setTimeout(() => process.exit(0), 3000).unref();
+}
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
