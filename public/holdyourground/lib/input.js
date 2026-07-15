@@ -222,11 +222,14 @@ export function setupInput(socket, canvas) {
         // standing right next to the chest while also hovering a nearby drop
         // still picks up the drop first (same "closest intent wins" idea as
         // everywhere else E is used). MASTER_CHEST_RANGE mirrors
-        // ITEM_PICKUP_RANGE's role but is purely a client-side gate for now —
-        // there's nothing server-authoritative to protect yet since the
-        // chest is always empty (no drag-in built) and toggling the panel
-        // open/closed has no server-side effect, same as 'i' for the
-        // inventory panel.
+        // ITEM_PICKUP_RANGE's role but is purely a client-side gate here —
+        // toggling the panel open/closed has no server-side effect itself,
+        // same as 'i' for the inventory panel (the real gate, now that
+        // drag-in/persistence are both live, is room.js's server-side
+        // _nearMasterChest() check on every actual moveItem/dropItem).
+        // showMasterChest()/hideMasterChest() also open/close the inventory
+        // panel alongside the chest (see their pairing in ui.js) — there's
+        // no purpose to the chest being open without the bag to drag into.
         const me = state.players[state.myId];
         if (me) {
           const cx = state.worldW / 2, cy = state.worldH / 2;

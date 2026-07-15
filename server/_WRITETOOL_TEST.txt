@@ -1,0 +1,3 @@
+write-tool-test-line-1
+write-tool-test-line-2
+write-tool-test-line-3

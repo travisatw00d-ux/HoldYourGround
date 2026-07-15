@@ -146,7 +146,14 @@ export function registerEvents(socket) {
           // payload). This whole `p` object replaces state.players[id] on every
           // snapshot (~18x/sec), so these must be re-applied here every time or
           // they vanish the moment the next snapshot arrives after a drag/equip.
-          equipment: meta.equipment, inventorySlots: meta.inventorySlots,
+          // masterChest (2026-07-14) was missed here when drag-in was added —
+          // it was harmless while the chest was always empty, but the moment it
+          // could hold real items this became the exact same bug the gotcha
+          // below describes: a move landed correctly via playerInfo, then got
+          // wiped ~55ms later by the next binary snapshot rebuilding this
+          // object without it, so the item "vanished" the next time the panel
+          // re-rendered (e.g. closing and reopening the chest).
+          equipment: meta.equipment, inventorySlots: meta.inventorySlots, masterChest: meta.masterChest,
           defense: meta.defense != null ? meta.defense : 0,
           fortune: meta.fortune != null ? meta.fortune : 0,
           luck: meta.luck != null ? meta.luck : 0,
@@ -257,9 +264,10 @@ export function registerEvents(socket) {
       if (info.id === state.myId && $.charStatsPanel && !$.charStatsPanel.classList.contains('hidden')) {
         showCharStats();
       }
-      // Master chest (2026-07-14) — same live-refresh idea, kept ready for
-      // when it actually holds items; currently always empty so this is a
-      // no-op re-render of 16 blank slots.
+      // Master chest (2026-07-14, drag-in wired 2026-07-14) — same
+      // live-refresh idea as inventory above: a moveItem/dropItem into or out
+      // of the chest shows up immediately while the panel's open instead of
+      // waiting for the next open.
       if (info.id === state.myId && $.masterChestPanel && !$.masterChestPanel.classList.contains('hidden')) {
         showMasterChest();
       }
@@ -477,7 +485,7 @@ export function registerEvents(socket) {
     state.waveComposition = data;
     state._wavePopupTriggered = false;
     if (state.screen !== 'playing') return;
-    const sl = data.serverLevel || '\u2014';
+    const sl = data.serverLevel || '—';
     document.getElementById('nwpSL').textContent = sl;
     document.getElementById('dSL').textContent = sl;
     document.getElementById('nwpWave').textContent = data.wave;

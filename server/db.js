@@ -41,10 +41,18 @@ try { db.exec('ALTER TABLE accounts ADD COLUMN cumulative_exp INTEGER DEFAULT 0'
 // (p.inventorySlots) is deliberately NOT persisted here or anywhere — per
 // design, only equip-slot items survive across matches.
 try { db.exec('ALTER TABLE accounts ADD COLUMN equipment_json TEXT DEFAULT NULL'); } catch (e) {}
-// Reserved for the future "master chest" storage feature (not built yet —
-// waiting on art). Column exists now so adding the chest later is a pure
-// code change with no further schema migration needed. Unused/always NULL
-// until that feature is implemented — don't read or write it before then.
+// Master chest storage (2026-07-14, persistence wired same day as drag-in) —
+// JSON array of 16 slots (plain base-item-id strings or rolled instance
+// objects, same shapes p.inventorySlots/p.equipment already use), same
+// index convention as ChestSlot1..16 in hud-layout.json. Written by
+// room.js's _saveMasterChest() — called immediately after every successful
+// chest-involving moveItem/dropItem (not just on leave, unlike equipment —
+// Travis was explicit that chest contents must NEVER be lost, so there's no
+// window where an in-memory-only change could vanish to a disconnect/crash),
+// plus redundantly at removePlayer()/_saveRound()/graceful shutdown as
+// defense-in-depth. Read by player.js's loadSavedMasterChest() on join.
+// Guests (no account row) never read or write this — their chest is
+// in-memory only for the session, same as guests never persisting equipment.
 try { db.exec('ALTER TABLE accounts ADD COLUMN master_chest_json TEXT DEFAULT NULL'); } catch (e) {}
 // New currency system (2026-07-13) — total-bronze integer, see currency.js
 // for the bronze/silver/gold denomination math. Replaces the old flat `gold`

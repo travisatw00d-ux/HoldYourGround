@@ -104,11 +104,12 @@ function render() {
   // click it if you're too far away") — checked every render frame rather
   // than only on the E-key press or the next server tick, so it closes the
   // moment you step outside MASTER_CHEST_RANGE, same distance gate the
-  // E-key open/close in input.js already uses. hideMasterChest() already
-  // calls refreshPrimaryPanelLayout() (see ui.js), so the inventory panel
-  // (or Char Stats, if either is open alongside the chest) automatically
-  // reflows back to its normal layout the same frame — that's the "pull the
-  // inventory away" part, no separate logic needed here.
+  // E-key open/close in input.js already uses. hideMasterChest() now closes
+  // the inventory panel right along with the chest (see their pairing in
+  // ui.js, added same day the chest got drag-in) — that literally is "pull
+  // the inventory away" now, not just a layout reflow; Char Stats, if open
+  // alongside either, still just reflows back to its normal static size via
+  // the same refreshPrimaryPanelLayout() call.
   if (me && state.worldW && $.masterChestPanel && !$.masterChestPanel.classList.contains('hidden')) {
     const ccx = state.worldW / 2, ccy = state.worldH / 2;
     if (Math.hypot(me.x - ccx, me.y - ccy) > MASTER_CHEST_RANGE) {

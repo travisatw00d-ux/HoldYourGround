@@ -290,8 +290,55 @@ function processCombatTick(room) {
     if (p.attackCooldown > 0) continue;
     if (p.comboChainWindow) {
       p.comboChainWindow = false;
-      p.attackCooldown = Math.round(1000 / TICK_MS);
-      if (p._chainTickTarget <= 0) room.io.to(id).emit('comboWindowEnd');
+      // 2026-07-14 fix — this branch used to unconditionally impose
+      // `Math.round(1000 / TICK_MS)` (exactly 1 full second) of attackCooldown
+      // here, completely unexplained/undocumented and applied REGARDLESS of
+      // whether the player had actually clicked to continue the combo.
+      // Confirmed via simulation: a player who swings once (or twice, three
+      // times...) and simply doesn't click again in time to continue got
+      // hard-locked for a FULL EXTRA SECOND after their own window naturally
+      // closed — during that second EVERY click, including a brand new
+      // unrelated attack, was silently swallowed (handleAttack's final
+      // `else` branch returns early on `attackCooldown > 0`). That's almost
+      // certainly what Travis kept describing as "stuck, can't do the final
+      // combo, forced back to idle" — missing the (narrow) window to
+      // continue into swing's step 4 didn't just end the combo, it froze ALL
+      // input for a full extra second afterward. It also explains "swing
+      // step 1 doesn't deal damage" as a separate-looking symptom of the
+      // exact same bug: rapid re-clicks during that frozen second do
+      // nothing at all server-side (no attack ever starts, no hit-test ever
+      // runs), which looks identical to "I swung and it whiffed" from the
+      // player's side, when really no swing happened at all.
+      //
+      // Fixed by branching on whether a continuation was actually scheduled
+      // (`_chainTickTarget > 0`, set by a click that landed inside the
+      // window): if nothing was scheduled, reset immediately (below) instead
+      // of waiting out a mystery penalty first. If a continuation WAS
+      // scheduled, bridge attackCooldown forward to land 1 tick past
+      // `_chainTickTarget` (not exactly on it) so this same loop — which
+      // runs BEFORE the chain-trigger loop further down in the same tick —
+      // doesn't zero out `_chainTickTarget` itself before that loop gets a
+      // chance to fire the continuation; the `+1` also keeps attackCooldown
+      // positive across that whole gap, which is what blocks a fresh click
+      // from hijacking/resetting the already-scheduled continuation via
+      // handleAttack's `if (p.attackCooldown > 0) return;` guard (verified
+      // both directions — tight-timing continuation still fires correctly,
+      // and a mid-gap click attempt is still correctly rejected — via
+      // simulation before this was applied).
+      if (p._chainTickTarget > 0) {
+        p.attackCooldown = Math.max(1, p._chainTickTarget - room.tickNum + 1);
+      } else {
+        p.comboStep = 0;
+        p._started = false;
+        p.attackCooldown = 0;
+        p._queuedChain = null;
+        p._chainPendingAngle = null;
+        p._chainTickTarget = 0;
+        p._spinRemaining = 0;
+        p._lungeRemaining = 0;
+        room.io.to(id).emit('comboWindowEnd');
+        room.io.to(id).emit('comboReady');
+      }
     } else {
       p.comboStep = 0;
       p._started = false;
@@ -318,6 +365,29 @@ function processCombatTick(room) {
     // special-case check elsewhere (spin, lunge, mirror) stays naturally
     // false for it.
     const step = isUnarmedChain && rawStep > 2 ? 1 : rawStep;
+    // Hard cap, independent of whatever scheduled this continuation
+    // (2026-07-14 fix) — jab maxes at 3, swing at 4. Without this, a chain
+    // continuation scheduled while comboStep was already AT the cap (see
+    // sword.js's matching fix for why that scheduling could happen at all —
+    // comboChainWindow spuriously reopening at the start of every new step,
+    // including the swing's spin) would execute a step past the style's real
+    // maximum, with nothing to stop it from climbing indefinitely on
+    // sustained clicking (5, 6, 7...66+, confirmed via simulation). This is
+    // the authoritative choke point: every path that can set
+    // _chainTickTarget (handleAttack's early-window schedule, loop1's
+    // queued-chain consumption, the combo-finished branch's queued-chain
+    // consumption) funnels through here to actually execute, so guarding
+    // here alone closes the loophole regardless of which path mis-scheduled
+    // it. Silently drops the stale continuation, same "rejected = no-op"
+    // convention as every other blocked combat input in this file.
+    if (!isUnarmedChain) {
+      const maxComboChain = p.attackStyle === 'jab' ? 3 : 4;
+      if (step > maxComboChain) {
+        p._chainTickTarget = 0;
+        p._chainPendingAngle = null;
+        continue;
+      }
+    }
     p.comboStep = step;
     p._chainTickTarget = 0;
     p.attackCooldown = 0;

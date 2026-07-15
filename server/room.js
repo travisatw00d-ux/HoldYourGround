@@ -3,7 +3,8 @@ const fs = require('fs');
 const {
   WORLD_W, WORLD_H, VIEW_W, VIEW_H, VIEW_MARGIN,
   MAX_PLAYERS, ROOM_EMPTY_TIMEOUT_MS,
-  TICK_MS, BROADCAST_MS
+  TICK_MS, BROADCAST_MS,
+  MASTER_CHEST_X, MASTER_CHEST_Y, MASTER_CHEST_RANGE
 } = require('./config');
 const SpatialGrid = require('./spatial-grid');
 const playerMod = require('./player');
@@ -177,10 +178,31 @@ class Room {
     }
   }
 
+  // Persists p's full 16-slot master chest to their account row (2026-07-14).
+  // Unlike _saveEquipment above, this isn't only called from removePlayer —
+  // it's also called immediately after every successful chest-involving
+  // moveItem/dropItem (see handleMoveItem/handleDropItem below), per
+  // Travis's explicit requirement that chest contents must never be lost,
+  // even to a disconnect or crash between saves. The removePlayer/_saveRound/
+  // graceful-shutdown call sites below are redundant with that immediate
+  // save in the common case — kept anyway as defense-in-depth (e.g. against
+  // a transient DB error at the moment of the immediate save silently
+  // swallowing, same as _saveEquipment's failure mode). Guests (no
+  // accountId) no-op, same as every other persistence function here.
+  _saveMasterChest(p) {
+    if (!p || !p.accountId) return;
+    try {
+      db.prepare('UPDATE accounts SET master_chest_json = ? WHERE id = ?').run(JSON.stringify(p.masterChest || []), p.accountId);
+    } catch (e) {
+      console.error(`[masterChest] save failed for account ${p.accountId}:`, e);
+    }
+  }
+
   removePlayer(id) {
     const p = this.players[id];
     if (!p) return;
     this._saveEquipment(p);
+    this._saveMasterChest(p);
     const wasActive = !p.isSpectator;
     this._diag(id, 'removePlayer', { wasActive, willPromote: wasActive });
     delete this.players[id];
@@ -241,10 +263,24 @@ class Room {
   _executeAttack(id, step, pendingAngle) { combatSystem._executeAttack(this, id, step, pendingAngle); }
   handleEquip(id, slot) { combatSystem.handleEquip(this, id, slot); }
 
-  // Drag-and-drop between bag/equipment slots (see moveItem in player.js for
-  // the location format + type/class validation rules). No-ops silently on an
-  // invalid move (occupied destination, wrong item type, wrong class) — the
-  // client never got an optimistic update, so nothing needs to roll back.
+  // True if `p` is standing within MASTER_CHEST_RANGE of the fixed world-center
+  // chest landmark — same range check the client uses locally (purely for its
+  // own open/close/auto-close UX, see editing-client.md) but re-validated here
+  // server-side since that's the authoritative gate: without this, a player
+  // could open the chest from a distance client-side (or just fire moveItem/
+  // dropItem events directly, bypassing the client UI entirely) and stash/pull
+  // items from across the map. Mirrors the "rejected = silent no-op"
+  // convention every other blocked drag/drop uses.
+  _nearMasterChest(p) {
+    const dx = p.x - MASTER_CHEST_X, dy = p.y - MASTER_CHEST_Y;
+    return (dx * dx + dy * dy) <= MASTER_CHEST_RANGE * MASTER_CHEST_RANGE;
+  }
+
+  // Drag-and-drop between bag/equipment/chest slots (see moveItem in player.js
+  // for the location format + type/class validation rules). No-ops silently on
+  // an invalid move (occupied destination, wrong item type, wrong class, too
+  // far from the chest) — the client never got an optimistic update, so
+  // nothing needs to roll back.
   handleMoveItem(id, from, to) {
     const p = this.players[id];
     if (!p || !p.alive) return;
@@ -255,9 +291,16 @@ class Room {
     // live, recomputed every tick. No-ops silently, same convention as every
     // other rejected move (occupied destination, wrong type/class).
     if (combatSystem.isMidCombo(p) && ((from.kind === 'equip' && from.slot === 'weapon') || (to.kind === 'equip' && to.slot === 'weapon'))) return;
+    // Chest-involving moves (either side) require standing next to the
+    // master chest — see _nearMasterChest above.
+    if ((from.kind === 'chest' || to.kind === 'chest') && !this._nearMasterChest(p)) return;
     const moved = playerMod.moveItem(p, from, to);
     if (moved) {
       playerMod.recalcStats(p);
+      // Immediate save (not just at leave/match-end) — see _saveMasterChest's
+      // comment above for why. Only fires when the chest's own contents
+      // actually changed (either side of the move was a chest slot).
+      if (from.kind === 'chest' || to.kind === 'chest') this._saveMasterChest(p);
       this.io.to('room:' + this.id).emit('playerInfo', playerMod.playerInfoObj(p));
     }
   }
@@ -278,10 +321,16 @@ class Room {
     // the currently-equipped weapon mid-combo would flip isUnarmed live and
     // corrupt the in-progress attack, same as toggling attack style would.
     if (combatSystem.isMidCombo(p) && loc.kind === 'equip' && loc.slot === 'weapon') return;
+    // Same proximity gate as handleMoveItem above — can't pull an item out of
+    // the chest (to discard it on the ground) from across the map either.
+    if (loc.kind === 'chest' && !this._nearMasterChest(p)) return;
     const item = playerMod.getItemAtLocation(p, loc);
     if (!item) return;
     playerMod.setItemAtLocation(p, loc, null);
     playerMod.recalcStats(p);
+    // Immediate save — discarding out of the chest changes its persisted
+    // contents just as much as a move does, see _saveMasterChest's comment.
+    if (loc.kind === 'chest') this._saveMasterChest(p);
     this._spawnItemDrop(item, p.x, p.y, true);
     // Broadcast room-wide, not just to `id` — dropping an equipped weapon/
     // armor/etc changes what other players see rendered on this player
@@ -498,6 +547,11 @@ class Room {
           this._persistedCurrency.set(p.id, p.currencyBronze);
         }
       }
+      // Master chest checkpoint (2026-07-14) — redundant with the immediate
+      // per-mutation save in handleMoveItem/handleDropItem, but this fires at
+      // every match end regardless, as an extra safety net per Travis's "it
+      // should never be lost" requirement.
+      this._saveMasterChest(p);
     }
   }
 

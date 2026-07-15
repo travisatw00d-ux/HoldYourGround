@@ -521,7 +521,7 @@ function renderCharStatsContent(geom) {
   html += '<div class="char-stat-row" style="color:var(--accent);font-weight:700"><span>Points to Spend</span><span>' + pts + '</span></div>';
   html += '<div class="char-stat-row" style="opacity:0.5"><span>Build</span><span>' + (buildDisplay[build] || build) + '</span></div>';
   html += '<div style="border-top:1px solid rgba(255,255,255,0.06);margin:6px 0"></div>';
-  html += '<div class="char-stat-row"><span class="char-stat-label">Player</span><span class="char-stat-value">' + (me.name || '\u2014') + '</span></div>';
+  html += '<div class="char-stat-row"><span class="char-stat-label">Player</span><span class="char-stat-value">' + (me.name || '—') + '</span></div>';
   html += '<div class="char-stat-row"><span class="char-stat-label">Level</span><span class="char-stat-value">' + (state.level || 1) + '</span></div>';
   html += '<div style="border-top:1px solid rgba(255,255,255,0.06);margin:6px 0"></div>';
   html += '<div class="char-stat-row"><span class="char-stat-label">EXP</span><span class="char-stat-value">' + state.exp + ' / ' + state.expToNext + '</span></div>';
@@ -597,20 +597,39 @@ export function hideInventory() {
 // Master chest panel (2026-07-14) — same draw pattern as showInventory()
 // above (canvas positioned via the frame's spriteSourceSize trim offset,
 // scaled by wrapperScale), just using the mctab.png frame/layout entry and a
-// separate slot layer. v1: the 16 ChestSlot* rectangles are drawn empty and
-// non-interactive (see renderMasterChestSlots below) — no item data, no
-// drag-in yet, per Travis's "keep it real simple for now, we'll work on it
-// from there". Meant to be visible on screen AT THE SAME TIME as the
-// inventory panel (both toggle independently — see input.js/game.js), so
-// its default hud-layout.json position/scale is deliberately smaller and to
-// the left of inventory.png's, not on top of it.
+// separate slot layer. Its default hud-layout.json position/scale is
+// deliberately smaller and to the left of inventory.png's, not on top of it,
+// since (2026-07-14, drag-in day) the two are meant to always be open
+// together — see the show/hide pairing below.
+//
+// Paired with the inventory panel (2026-07-14, per Travis: "there's
+// essentially no purpose to the master chest unless you're moving things in
+// and out of it into your inventory") — opening the chest always opens the
+// bag alongside it, and closing the chest (by ANY route: the E-key toggle in
+// input.js, the walk-away auto-close in render.js, Escape in game.js, or
+// clicking the chest's own close button) always closes the bag too. This is
+// deliberately one-directional: closing/opening the inventory on its own
+// (the 'i' key, or its own close button) does NOT touch the chest — only
+// the chest side drives the pairing, since the inventory is still useful on
+// its own (equipping gear, viewing the bag) without the chest ever being
+// relevant.
 export function showMasterChest() {
   $.masterChestPanel.classList.remove('hidden');
+  $.inventoryPanel.classList.remove('hidden');
   refreshPrimaryPanelLayout();
 }
 
 export function hideMasterChest() {
   $.masterChestPanel.classList.add('hidden');
+  $.inventoryPanel.classList.add('hidden');
+  // Same reset hideInventory() does — the chest's own slots can now hold
+  // items and drive the shared hoveredSlotLoc/tooltip (2026-07-14), so
+  // closing it (including the auto-close-on-walk-away in render.js) needs to
+  // clear both, not just leave them pointing at slot elements about to be
+  // torn down. Covers the inventory panel too since it's now always closed
+  // in lockstep with the chest.
+  hideItemTooltip();
+  hoveredSlotLoc = null;
   refreshPrimaryPanelLayout();
 }
 
@@ -874,10 +893,12 @@ function drawGoldIcon(container, w, h) {
 // Converts a hud-layout.json slot def's name into the location shape the
 // server understands (see moveItem in server/player.js) — 'weapon' is
 // special-cased to currentItem there too, everything else in ITEM_SLOTS lives
-// on p.equipment, and InvSlotN maps to bag index N-1.
+// on p.equipment, InvSlotN maps to bag index N-1, and ChestSlotN (2026-07-14)
+// maps to master chest index N-1.
 function slotLocation(def) {
   if (def.name === 'EquipWeapon') return { kind: 'equip', slot: 'weapon' };
   if (def.name.startsWith('Equip')) return { kind: 'equip', slot: def.name.replace('Equip', '').toLowerCase() };
+  if (def.name.startsWith('ChestSlot')) return { kind: 'chest', index: parseInt(def.name.replace('ChestSlot', ''), 10) - 1 };
   return { kind: 'bag', index: parseInt(def.name.replace('InvSlot', ''), 10) - 1 };
 }
 
@@ -887,6 +908,7 @@ function getItemAtLocationClient(me, loc) {
     if (loc.slot === 'weapon') return me.currentItem || null;
     return (me.equipment && me.equipment[loc.slot]) || null;
   }
+  if (loc.kind === 'chest') return (me.masterChest && me.masterChest[loc.index]) || null;
   return (me.inventorySlots && me.inventorySlots[loc.index]) || null;
 }
 
@@ -983,16 +1005,18 @@ function onDragEnd(evt) {
     window.socket.emit('moveItem', { from: fromLoc, to: targetEl._loc });
     return;
   }
-  // Missed every slot. If the release point is also outside the inventory
-  // panel entirely (not just landing in a gap between slots), treat it as
-  // "dragged the item off the inventory window" — drop it on the ground at
-  // the player's position, same server-side path as the 'x' hotkey (see
-  // dropHoveredItem above, room.js's handleDropItem). A miss that's still
-  // somewhere inside #inventoryPanel (including its slots layer/close
-  // button) is just a fumbled drag and snaps back as a no-op, same as
-  // before this feature existed — there's no optimistic client update, so
-  // nothing needs rolling back either way.
-  const insidePanel = dropTarget && dropTarget.closest('#inventoryPanel');
+  // Missed every slot. If the release point is also outside BOTH the
+  // inventory panel and the master chest panel entirely (not just landing in
+  // a gap between slots), treat it as "dragged the item off the window" —
+  // drop it on the ground at the player's position, same server-side path as
+  // the 'x' hotkey (see dropHoveredItem above, room.js's handleDropItem — if
+  // fromLoc is a chest slot, that call is proximity-gated same as any other
+  // chest move). A miss that's still somewhere inside #inventoryPanel or
+  // #masterChestPanel (including their slots layers/close buttons) is just a
+  // fumbled drag and snaps back as a no-op, same as before this feature
+  // existed — there's no optimistic client update, so nothing needs rolling
+  // back either way.
+  const insidePanel = dropTarget && (dropTarget.closest('#inventoryPanel') || dropTarget.closest('#masterChestPanel'));
   if (!insidePanel && window.socket) {
     window.socket.emit('dropItem', { from: fromLoc });
   }
@@ -1110,27 +1134,58 @@ function renderInventorySlots(geom) {
   }
 }
 
-// Draws the 16 master chest slots on top of mctab.png. Deliberately much
-// simpler than renderInventorySlots above — v1 of the master chest is always
-// empty (server's p.masterChest is a fresh 16-null array with no load/save
-// wiring yet), so there's no item lookup, icon, tooltip, or drag-start to
-// wire up here. Reuses the plain .inv-slot styling (no border/background by
-// default, matching the bag slots) so an empty chest slot looks like an
-// empty bag slot. When drag-in/auto-sort gets built, this should start
-// reading state.players[state.myId].masterChest[i] the same way
-// renderInventorySlots reads inventorySlots — left as a clean extension
-// point rather than entangling that work with this first pass.
+// Draws the 16 master chest slots on top of mctab.png. Mirrors
+// renderInventorySlots above almost exactly (icon lookup, hover tooltip,
+// drag-start) now that drag-in is wired up (2026-07-14) — the only real
+// difference is the location kind (chest vs bag) and reading from
+// me.masterChest instead of me.inventorySlots. There's no "Unarmed" special
+// case here since the chest has no equip slots. Every slot (empty or not) is
+// a valid drop *target* (see startDrag/onDragEnd below), same as the bag;
+// only occupied slots can start a drag. Server-side, moving into/out of a
+// chest slot is proximity-gated (see room.js's _nearMasterChest) — the
+// client doesn't duplicate that check here, an out-of-range move just comes
+// back as an unchanged playerInfo and the dragged item silently snaps back,
+// same "no optimistic update" convention as every other drag.
 function renderMasterChestSlots(geom) {
   const layer = document.getElementById('masterChestSlotsLayer');
   if (!layer) return;
   layer.innerHTML = '';
+  // Same defensive reset renderInventorySlots does — slot elements are torn
+  // down/rebuilt on every re-render, which can leave hoveredSlotLoc stale if
+  // the mouse didn't actually move across the rebuild.
+  hoveredSlotLoc = null;
+  const me = state.players[state.myId];
   const staticGeom = staticPanelGeom(PRIMARY_PANEL_FRAMES.chest);
   if (!staticGeom) return;
   const slotDefs = (state.hudLayout || []).filter(e => e.type === 'slot' && e.name.startsWith('ChestSlot'));
   for (const def of slotDefs) {
     const el = document.createElement('div');
     el.className = 'inv-slot' + (state.showHudDebug ? ' slot-debug' : '');
-    positionSlotEl(el, def, staticGeom, geom);
+    const { width: w, height: h } = positionSlotEl(el, def, staticGeom, geom);
+
+    const loc = slotLocation(def);
+    el._loc = loc;
+    const itemId = getItemAtLocationClient(me, loc);
+    if (itemId) {
+      el.classList.add('slot-occupied');
+      const drewIcon = drawItemIcon(el, itemId, w, h);
+      if (!drewIcon) {
+        const label = document.createElement('div');
+        label.className = 'slot-item-label';
+        const itemDef = ITEMS[resolveBaseItemId(itemId)];
+        const rolledSlot = isRolledInstance(itemId);
+        label.textContent = (rolledSlot && itemId.generatedName) ? itemId.generatedName : (itemDef ? itemDef.name : resolveBaseItemId(itemId));
+        if (rolledSlot) {
+          const rarity = getRarityDef(itemId.rarityId);
+          if (rarity) label.style.color = rarity.color;
+        }
+        el.appendChild(label);
+      }
+      el.addEventListener('mouseenter', (evt) => { hoveredSlotLoc = loc; if (!dragActive) showItemTooltip(itemId, evt); });
+      el.addEventListener('mousemove', (evt) => { if (!dragActive) positionItemTooltip(evt); });
+      el.addEventListener('mouseleave', () => { if (hoveredSlotLoc === loc) hoveredSlotLoc = null; hideItemTooltip(); });
+      el.addEventListener('mousedown', (evt) => startDrag(el, loc, itemId, evt));
+    }
     layer.appendChild(el);
   }
 }

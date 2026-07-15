@@ -42,7 +42,6 @@ function checkSwordHit(p, zombies, players, grid) {
   const totalTicks = Math.ceil(totalFrames / (2 * ATTACK_SPEED_MULT));
   const currentCf = Math.min(Math.floor((p.attackFrame / totalTicks) * totalFrames), totalFrames - 1);
   const bladeW = BLADE_W;
-  const angle = (p.attacking && p.attackLockedAngle != null) ? p.attackLockedAngle : (p.facingAngle || 0);
 
   // Only deal damage on forward motion: sum segments up to the midpoint keyframe
   const segs = p.attackAnim.segments;
@@ -61,6 +60,43 @@ function checkSwordHit(p, zombies, players, grid) {
   const isJabFinal = p.comboStep === 3 && p.attackStyle === 'jab';
   const isSwingThird = p.comboStep === 3 && isSwing;
   if (isJabFinal) halfFrames = totalFrames; // process all frames for triple jab
+
+  // Triple-jab live-tracking correction (2026-07-14, widened same day):
+  // jab_combo3's whole 3-poke flourish locks its aim ONCE, at the instant the
+  // flourish begins, and holds it perfectly frozen for the entire ~260ms
+  // animation — `p.facingAngle` itself doesn't update from the mouse while
+  // `p.attacking` is true (see room.js's handleInput), and
+  // `p.attackLockedAngle` is just a snapshot of `p.facingAngle` taken once in
+  // `_executeAttack`. First fix attempt used a small (~20 degree) clamped
+  // nudge toward the player's live `_lastMouseAngle` per poke, re-based fresh
+  // at the start of each poke — this resolved a STATIONARY-target mismatch
+  // (the original bug report) but Travis then found it still failed whenever
+  // he actively rotated ("twisted") while attacking: simulation confirmed
+  // that even a modest, realistic twist rate (as low as 30 degrees/second —
+  // a full turn over 12 seconds) already broke poke 2/3 under the clamped
+  // version, because the clamp capped how far the hitbox could follow a
+  // target the player WAS accurately tracking with their mouse the whole
+  // time. Since jab is a fast, low-commitment poke (not a big committed
+  // swing — see the swing spin's own separate, deliberately small clamp on
+  // ITS lunge direction, which stays clamped since a full-circle spin is a
+  // much bigger commitment), there's no real "mid-attack re-aim exploit"
+  // concern here worth trading off against actually tracking the target.
+  // Fixed by dropping the clamp/re-basing entirely: `p.attackLockedAngle`
+  // (and therefore the hit-test's `angle` below, AND the client's rendered
+  // blade direction, which reads the same broadcast field) now simply
+  // follows the player's live `_lastMouseAngle` directly, every tick, for as
+  // long as isJabFinal is true. Verified via simulation across twist rates
+  // up to 360 degrees/second against a target the mouse is accurately
+  // tracking — every poke connects at every tested rate.
+  if (isJabFinal && typeof p._lastMouseAngle === 'number') {
+    p.attackLockedAngle = p._lastMouseAngle;
+  }
+  // angle is read AFTER the correction block above (moved down from where it
+  // used to sit, right at the top of this function) so that a jab_combo3
+  // correction actually takes effect for this tick's hit-test — every other
+  // attack still just reads p.attackLockedAngle completely unmodified.
+  const angle = (p.attacking && p.attackLockedAngle != null) ? p.attackLockedAngle : (p.facingAngle || 0);
+
   // Swing deals damage across the ENTIRE motion of every hit (steps 1-3, not
   // just the final double-swing) — fixed 2026-07-12, was previously cut off
   // at `halfFrames + 4` for steps 1/2 (only the forward half of that single
@@ -81,11 +117,65 @@ function checkSwordHit(p, zombies, players, grid) {
   // unarmed — it stays false (set at attack start in _executeAttack) until
   // processCombatTick's attackFrame>=totalTicks check opens it once the
   // whole animation has actually played out.
+  // maxCombo mirrors combat-system.js's own cap (jab=3, swing=4) — once
+  // comboStep is already AT the style's cap, there is no next step to chain
+  // into, so the chain window must never reopen for it. Previously this
+  // recomputed comboChainWindow purely from currentCf every tick with no
+  // awareness of comboStep/maxCombo at all: since currentCf resets near 0 at
+  // the start of EVERY new step's animation (including the swing's spin,
+  // comboStep 4, whose attackFrame gets pinned at a small constant value for
+  // the whole spin — see combat-system.js's spin-continuation branch), the
+  // window would spuriously reopen even during the combo's FINAL step,
+  // letting a still-queued click get consumed by processCombatTick's loop1
+  // into an uncapped comboStep+1 execution with no ceiling at all (2026-07-14
+  // — confirmed via simulation: comboStep climbing past 4 to 5, 6, 7...
+  // indefinitely under sustained clicking, which is exactly what "stuck
+  // unable to do the real step 4" / "swing not dealing damage" / "jab
+  // occasionally spins" all trace back to — each runaway "step" only gets a
+  // handful of ticks before being aborted into the next erroneous one,
+  // truncating the blade's motion before it can reliably reach a target at
+  // most angles). Fixed by refusing to reopen the window once already at
+  // cap — paired with the matching hard cap in combat-system.js's chain-
+  // trigger loop (the actual execution choke point).
+  const maxCombo = isUnarmed ? Infinity : (isSwing ? 4 : 3);
   if (!isUnarmed) {
-    p.comboChainWindow = currentCf < halfFrames + (isSwing ? 4 : 1);
-    if (isJabFinal && currentCf % 20 >= 10) p.comboChainWindow = false;
+    if ((p.comboStep || 0) >= maxCombo) {
+      p.comboChainWindow = false;
+    } else {
+      p.comboChainWindow = currentCf < halfFrames + (isSwing ? 4 : 1);
+      if (isJabFinal && currentCf % 20 >= 10) p.comboChainWindow = false;
+    }
   }
   const cfs = [];
+  // 2026-07-14 (reverted same day): jab_combo3 previously got a special
+  // single-sample-only path here (testing ONLY currentCf, matching the
+  // yellow debug overlay's single instantaneous capsule 1:1) to fix a
+  // "hitbox feels way too big" complaint. That reasoning was wrong in
+  // practice — jab_combo3 packs 3 forward/backward thrust cycles into a
+  // 60-frame animation that only gets `totalTicks = ceil(60/8) = 8` real
+  // ticks (ATTACK_SPEED_MULT=4), i.e. ~7.5 animation frames elapse PER TICK.
+  // Each individual thrust's forward segment is only 10 of those 60 frames,
+  // so a single per-tick sample very often lands either before the blade has
+  // extended at all, or already past the peak into the return segment
+  // (which gets filtered out entirely by the forward-only check below) —
+  // there is frequently no single tick whose lone sampled frame catches the
+  // blade near full extension. Confirmed via simulation: with single-sample
+  // testing, thrust 2 of the triple jab landed ZERO hits at every tested
+  // distance (20-90 world units) against a stationary target directly in
+  // front — not occasional, structurally guaranteed to whiff. Restoring the
+  // same sub-frame sweep every other attack uses (the `else if` branch right
+  // below) fixes this: it interpolates every position the blade actually
+  // passed through between the previous and current tick, so a fast-moving
+  // thrust can't skip past its own peak-extension moment just because that
+  // moment didn't land exactly on a tick boundary. The forward-only filter
+  // just below already strips out any swept sample that falls in a backward
+  // (return) segment, so this doesn't reopen a "hits on the way back" bug —
+  // it only widens WHEN within the forward window a hit can register, not
+  // WHETHER backward motion can hit at all. Yes, this means the true hit
+  // region for one tick can span most of a thrust's forward travel rather
+  // than exactly matching the debug overlay's single-frame box — that's an
+  // intentional, necessary tradeoff given only 8 ticks to represent 3 full
+  // thrust cycles, not a bug to "fix" back to single-sampling again.
   if (p.prevCf >= 0 && p.prevCf !== currentCf) {
     const span = currentCf - p.prevCf;
     const steps = Math.min(isSwing ? 16 : 8, Math.ceil(span));
@@ -235,10 +325,35 @@ function checkSwordHit(p, zombies, players, grid) {
         // equipped again) and never get the swing damage multiplier.
         const dmg = isUnarmed ? 2 : Math.round(p.attackDmg * (p.attackStyle === 'swing' ? 0.7 : 1.0));
         z.health -= dmg;
-        const kzx = z.x - p.x, kzy = z.y - p.y;
-        const kzd = Math.sqrt(kzx * kzx + kzy * kzy) || 1;
-        z.x += (kzx / kzd) * ATTACK_KNOCKBACK * 3;
-        z.y += (kzy / kzd) * ATTACK_KNOCKBACK * 3;
+        // Triple-jab pokes 1 & 2 skip knockback entirely — this is the real
+        // root cause of "thrust 3 never lands a hit" (2026-07-14, found after
+        // the live-aim-tracking fix above didn't resolve it — Travis
+        // confirmed the sword visibly passes over the target on the 3rd poke
+        // with no damage, ruling out a client rendering issue and pointing
+        // back at server hit-test/positioning). Knockback pushes the target
+        // AWAY FROM THE PLAYER (radially), not along the fixed attack
+        // direction — for a target that isn't dead-center to begin with
+        // (extremely common: zombies surround the player from all angles,
+        // and jab_combo3's whole 260ms flourish locks onto whichever
+        // direction was aimed at the START), a radial push moves it BOTH
+        // farther away AND further off to the side of the narrow (~26-unit)
+        // capsule the next poke tests along. Two knockbacks compounding
+        // (poke 1 then poke 2, 18 units of radial displacement each) was
+        // enough to reliably eject an off-center target from poke 3's reach
+        // even with the earlier angle-tracking fix in place — confirmed via
+        // an exhaustive simulation sweep (distance 30-130, angle offset
+        // ±60°, lunge on/off — 4182 configurations): with knockback firing
+        // on every poke, hundreds of configurations landed pokes 1 & 2 but
+        // missed poke 3; suppressing knockback on pokes 1 & 2 (this fix)
+        // brought that number to zero across the entire sweep. Poke 3 still
+        // knocks back normally — it's the flourish's actual finishing blow,
+        // there's nothing after it left to whiff.
+        if (!(isJabFinal && p._jabHitCleared < 2)) {
+          const kzx = z.x - p.x, kzy = z.y - p.y;
+          const kzd = Math.sqrt(kzx * kzx + kzy * kzy) || 1;
+          z.x += (kzx / kzd) * ATTACK_KNOCKBACK * 3;
+          z.y += (kzy / kzd) * ATTACK_KNOCKBACK * 3;
+        }
         p.attackHitIds.push(z.id);
         if (process.env.DEBUG_COMBAT) p._diagHits = (p._diagHits || 0) + 1;
         if (z.health <= 0) {

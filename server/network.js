@@ -97,6 +97,11 @@ roomManager.initGameLoop(io);
 // fresh as it could be (same class of gap exp/gold already had before this
 // feature existed; not something a signal handler can fully close, only
 // shrink — a deliberate scope decision, see Workflow/editing-server.md).
+// Master chest (2026-07-14) is the one exception to "just shrinks the gap" —
+// room.js's _saveMasterChest() fires immediately after every chest mutation
+// (not just at leave/match-end), per Travis's requirement that chest
+// contents must never be lost, so this shutdown path is redundant defense
+// for it rather than its only safety net the way it is for equipment/exp.
 let shuttingDown = false;
 
 function saveAllConnectedPlayers() {
@@ -104,7 +109,7 @@ function saveAllConnectedPlayers() {
   for (const room of roomManager.rooms.values()) {
     for (const id in room.players) {
       const p = room.players[id];
-      if (p && p.accountId) { room._saveEquipment(p); savedCount++; }
+      if (p && p.accountId) { room._saveEquipment(p); room._saveMasterChest(p); savedCount++; }
     }
     try { room._saveRound(); } catch (e) { console.error(`[shutdown] _saveRound failed for room ${room.id}:`, e); }
   }

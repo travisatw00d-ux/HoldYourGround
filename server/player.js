@@ -51,6 +51,33 @@ function loadSavedCurrency(accountId) {
   }
 }
 
+// Loads a logged-in player's persisted master chest contents (2026-07-14 —
+// see db.js's master_chest_json column comment and room.js's
+// _saveMasterChest() for the write side). Same defensive shape as
+// loadSavedEquipment/loadSavedCurrency above: any failure (no row, no data,
+// malformed JSON, wrong shape) degrades to null, which addPlayer() below
+// treats as "start with an empty chest" — never blocks joining. Returns an
+// array normalized to exactly INVENTORY_SIZE slots (padding with null or
+// truncating) rather than trusting the stored length verbatim, so a future
+// INVENTORY_SIZE change or a corrupted/truncated blob can never hand
+// getItemAtLocation/setItemAtLocation an out-of-bounds array. Never called
+// for guests (accountId is null for them) — they get a fresh empty in-memory
+// chest every session, same as guests never getting persisted equipment.
+function loadSavedMasterChest(accountId) {
+  try {
+    const row = db.prepare('SELECT master_chest_json FROM accounts WHERE id = ?').get(accountId);
+    if (!row || !row.master_chest_json) return null;
+    const parsed = JSON.parse(row.master_chest_json);
+    if (!Array.isArray(parsed)) return null;
+    const normalized = new Array(INVENTORY_SIZE).fill(null);
+    for (let i = 0; i < Math.min(INVENTORY_SIZE, parsed.length); i++) normalized[i] = parsed[i] ?? null;
+    return normalized;
+  } catch (e) {
+    console.error(`[masterChest] load failed for account ${accountId}:`, e);
+    return null;
+  }
+}
+
 function randomSpawn(zombies, minDist) {
   const margin = PLAYER_RADIUS * 4;
   for (let attempt = 0; attempt < 50; attempt++) {
@@ -185,13 +212,16 @@ function addPlayer(id, name, players, zombies, accountType, accountId) {
     // addToInventory(). Fixed size, left-to-right/top-to-bottom like InvSlot1..16
     // in hud-layout.json.
     inventorySlots: new Array(INVENTORY_SIZE).fill(null),
-    // Master chest (2026-07-14) — the player's personal permanent-storage
-    // grid, same 16-slot shape/index convention as inventorySlots (left-to-
-    // right/top-to-bottom, matches ChestSlot1..16 in hud-layout.json). v1:
-    // always empty in memory, no load/save wiring yet (drag-in isn't built,
-    // so there's nothing to persist) — see master_chest_json column added to
-    // the accounts table earlier for when that's wired up.
-    masterChest: new Array(INVENTORY_SIZE).fill(null),
+    // Master chest (2026-07-14, drag-in + persistence wired same day) — the
+    // player's personal storage grid, same 16-slot shape/index convention as
+    // inventorySlots (left-to-right/top-to-bottom, matches ChestSlot1..16 in
+    // hud-layout.json). Unlike inventorySlots (never persisted, by design),
+    // a logged-in account's chest survives every disconnect/leave/match —
+    // see loadSavedMasterChest() above and room.js's _saveMasterChest() for
+    // the write side, which fires on every chest mutation, not just on
+    // leave. Guests always start with a fresh empty chest (accountId is
+    // null for them, matching `saved`/equipment above).
+    masterChest: accountId ? (loadSavedMasterChest(accountId) || new Array(INVENTORY_SIZE).fill(null)) : new Array(INVENTORY_SIZE).fill(null),
     kills: 0,
     lastHitById: null,
     attacking: false,
@@ -268,18 +298,27 @@ function addToInventory(p, itemOrInstance) {
   return idx;
 }
 
-// Drag-and-drop item locations. Two shapes, matching the client's slot defs
+// Drag-and-drop item locations. Three shapes, matching the client's slot defs
 // (InvSlot1..16 -> bag index 0..15, EquipWeapon/Armor/Ring/Necklace/Helmet ->
-// equip slot names in ITEM_SLOTS):
+// equip slot names in ITEM_SLOTS, ChestSlot1..16 -> chest index 0..15):
 //   { kind: 'bag', index: 0..INVENTORY_SIZE-1 }
 //   { kind: 'equip', slot: 'weapon'|'armor'|'ring'|'necklace'|'helmet' }
+//   { kind: 'chest', index: 0..INVENTORY_SIZE-1 }
 // 'weapon' is special-cased to p.currentItem (the existing hotbar-swappable
 // source of truth) rather than living in p.equipment like the other four.
+// 'chest' (2026-07-14) is the master chest's 16-slot grid, p.masterChest —
+// same plain-array-of-slots shape as the bag, no restrictions on what can go
+// in it (see canPlaceItem below), just gated by proximity to the chest at the
+// room.js call site (handleMoveItem/handleDropItem) rather than here.
 function getItemAtLocation(p, loc) {
   if (!p || !loc) return null;
   if (loc.kind === 'bag') {
     if (!p.inventorySlots || loc.index < 0 || loc.index >= p.inventorySlots.length) return null;
     return p.inventorySlots[loc.index] || null;
+  }
+  if (loc.kind === 'chest') {
+    if (!p.masterChest || loc.index < 0 || loc.index >= p.masterChest.length) return null;
+    return p.masterChest[loc.index] || null;
   }
   if (loc.kind === 'equip') {
     if (loc.slot === 'weapon') return p.currentItem || null;
@@ -291,6 +330,8 @@ function getItemAtLocation(p, loc) {
 function setItemAtLocation(p, loc, itemId) {
   if (loc.kind === 'bag') {
     p.inventorySlots[loc.index] = itemId;
+  } else if (loc.kind === 'chest') {
+    p.masterChest[loc.index] = itemId;
   } else if (loc.kind === 'equip') {
     if (loc.slot === 'weapon') p.currentItem = itemId;
     else p.equipment[loc.slot] = itemId;
@@ -303,29 +344,33 @@ function setItemAtLocation(p, loc, itemId) {
 const CLASS_RESTRICTED_SLOTS = new Set(['weapon', 'armor', 'helmet']);
 
 function canPlaceItem(itemDef, loc, playerClass) {
-  if (loc.kind === 'bag') return true; // bag slots take any item
+  if (loc.kind === 'bag' || loc.kind === 'chest') return true; // bag/chest slots take any item
   if (!itemDef) return false;
   if (itemDef.type !== loc.slot) return false;
   if (CLASS_RESTRICTED_SLOTS.has(loc.slot) && itemDef.class !== playerClass) return false;
   return true;
 }
 
-// Moves an item between any two locations (bag<->bag, bag<->equip), and, for
-// equip slots, only if the item's type/class match — see canPlaceItem. If
-// the destination is already occupied, this SWAPS instead of no-oping (added
-// 2026-07-12 specifically so dragging a new ring/necklace onto an already-
-// equipped one replaces it and the displaced item lands in the exact bag
-// slot the new one came from) — the swap only goes through if the displaced
-// item is also valid to land in `from` (always true when `from` is a bag
-// slot, since canPlaceItem lets bag slots take anything; for an equip<->equip
-// drag both items' types would need to match the other slot too, which in
-// practice means only same-slot swaps are possible there). Returns true if
-// the move/swap happened (caller should recalcStats + broadcast playerInfo).
+// Moves an item between any two locations (bag<->bag, bag<->equip,
+// bag<->chest, chest<->chest, equip<->chest), and, for equip slots, only if
+// the item's type/class match — see canPlaceItem. If the destination is
+// already occupied, this SWAPS instead of no-oping (added 2026-07-12
+// specifically so dragging a new ring/necklace onto an already-equipped one
+// replaces it and the displaced item lands in the exact bag slot the new one
+// came from) — the swap only goes through if the displaced item is also
+// valid to land in `from` (always true when `from` is a bag or chest slot,
+// since canPlaceItem lets those take anything; for an equip<->equip drag both
+// items' types would need to match the other slot too, which in practice
+// means only same-slot swaps are possible there). Returns true if the
+// move/swap happened (caller should recalcStats + broadcast playerInfo).
+// Chest-involving moves are proximity-gated by the caller (room.js's
+// handleMoveItem), not here — this function only knows about slot shapes.
 function moveItem(p, from, to) {
   if (!p || !from || !to) return false;
   if (to.kind === 'bag' && (!p.inventorySlots || to.index < 0 || to.index >= p.inventorySlots.length)) return false;
+  if (to.kind === 'chest' && (!p.masterChest || to.index < 0 || to.index >= p.masterChest.length)) return false;
   if (to.kind === 'equip' && !ITEM_SLOTS.includes(to.slot)) return false;
-  if (from.kind === to.kind && from.kind === 'bag' && from.index === to.index) return false;
+  if (from.kind === to.kind && (from.kind === 'bag' || from.kind === 'chest') && from.index === to.index) return false;
   if (from.kind === to.kind && from.kind === 'equip' && from.slot === to.slot) return false;
   const itemAtFrom = getItemAtLocation(p, from);
   if (!itemAtFrom) return false;
