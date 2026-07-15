@@ -253,6 +253,7 @@ function addPlayer(id, name, players, zombies, accountType, accountId) {
     _chainDelayTicks: 5,
     _started: false,
     _queuedChain: null,
+    _comboReturnSent: false,
     comboChainWindow: false,
     sprint: false,
     sprintEndCooldown: 0,
@@ -413,6 +414,7 @@ function respawnPlayer(id, players, zombies) {
   p._chainDelayTicks = 5;
   p._started = false;
   p._queuedChain = null;
+  p._comboReturnSent = false;
   p.comboChainWindow = false;
   p.godMode = false;
   p.isSpectator = false;

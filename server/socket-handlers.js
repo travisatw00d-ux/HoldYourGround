@@ -177,16 +177,27 @@ module.exports = function registerSocket(socket, { io, broadcastRoomList, broadc
     if (!room) return;
     const p = room.players[socket.id];
     if (!p) return;
-    // Switching jab<->swing mid-combo would change maxCombo/comboKey out from
-    // under an in-progress attack — see isMidCombo's comment in
+    // Switching jab<->swing during an in-flight combo would change maxCombo/
+    // comboKey out from under the active attack — see isMidCombo's comment in
     // combat-system.js. This is the exact bug reported 2026-07-12: spacebar
     // pressed mid-swing (e.g. an accidental/muscle-memory press while
     // spamming attack) used to flip p.attackStyle instantly, which broke the
     // spin's continuation check on the very next tick and aborted the combo
-    // back to a fresh, basic attack. Silently ignored while mid-combo, same
-    // "rejected = no-op" convention as every other blocked input — player
-    // can toggle again once the combo (and its recovery cooldown) finishes.
-    if (combatSystem.isMidCombo(p)) return;
+    // back to a fresh, basic attack.
+    //
+    // Recovery cooldown is different: no attack animation/chain is still
+    // live, so swapping stance while waiting for comboReady is allowed. That
+    // keeps Space feeling responsive during the "green light is still off"
+    // downtime without reopening the mid-combo corruption bug.
+    // Re-sync the client when this gets rejected: there is a tiny race where
+    // Space can be pressed after attackStart but before the next binary state
+    // snapshot says "mid-combo". Without this, the old optimistic local style
+    // flip could make the client show swing while the server stayed on jab,
+    // capping the combo at 3 and making hitboxes look wrong.
+    if (combatSystem.isAttackStyleLocked(p)) {
+      socket.emit('attackStyleChanged', { attackStyle: p.attackStyle });
+      return;
+    }
     p.attackStyle = p.attackStyle === 'jab' ? 'swing' : 'jab';
     socket.emit('attackStyleChanged', { attackStyle: p.attackStyle });
     const info = playerMod.playerInfoObj(p);

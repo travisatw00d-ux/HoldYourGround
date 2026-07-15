@@ -1,5 +1,4 @@
 import { state } from './state.js';
-import { startIdleTransition } from './anims.js';
 import { getCamera } from './camera.js';
 import { showDropTooltip, positionDropTooltip, hideDropTooltip, dropHoveredItem, $, showMasterChest, hideMasterChest, showChestTooltip } from './ui.js';
 import { ITEM_DROP_ICON_H, ITEM_DROP_ICON_MIN_SCREEN_PX, ITEM_PICKUP_RANGE, GOLD_COIN_ICON_H, MASTER_CHEST_RANGE, MASTER_CHEST_ICON_H } from './game-data.js';
@@ -178,22 +177,10 @@ export function setupInput(socket, canvas) {
     }
     if (e.key === ' ') {
       e.preventDefault();
-      // Mirrors the server's isMidCombo() guard (combat-system.js,
-      // 2026-07-12) — the server now silently ignores 'toggleAttackStyle'
-      // while a combo's in progress (mid-swing style changes used to corrupt
-      // the spin and abort it back to a basic attack), so flipping
-      // state.attackStyle locally here too would just desync the client from
-      // what the server actually did. `me.attacking` covers an active hit;
-      // `me.comboChainWindow && comboStep > 0` covers the gap BETWEEN hits in
-      // a combo, where attacking is momentarily false but the combo is still
-      // very much in progress.
-      const me = state.players[state.myId];
-      const midCombo = me && (me.attacking || (me.comboChainWindow && (me.comboStep || 0) > 0));
-      if (midCombo) return;
-      const newStyle = state.attackStyle === 'jab' ? 'swing' : 'jab';
-      startIdleTransition(newStyle);
+      // Server-authoritative: active attacks/chain windows are rejected and
+      // echoed back unchanged, while post-attack recovery accepts the toggle
+      // so players can swap stance before comboReady lights up.
       socket.emit('toggleAttackStyle');
-      state.attackStyle = newStyle;
     }
     if (e.key === 'x' || e.key === 'X') {
       // No-ops if nothing's currently hovered (dropHoveredItem tracks that

@@ -333,6 +333,9 @@ export function registerEvents(socket) {
   });
 
   socket.on('attackStyleChanged', ({ attackStyle }) => {
+    if (attackStyle && attackStyle !== state.attackStyle) {
+      startIdleTransition(attackStyle);
+    }
     state.attackStyle = attackStyle;
   });
 

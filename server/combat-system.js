@@ -1,6 +1,17 @@
 const { KNIGHT_ANIMATIONS, ANIMATIONS, ATTACK_SPEED_MULT, TICK_MS, BLADE_W, ZOMBIE_RADIUS } = require('./config');
 const sword = require('./sword');
 
+const ATTACK_SPEED_BASELINE_MS = 600;
+const JAB_RECOVERY_BASE_TICKS = 20;
+const SWING_RECOVERY_BASE_TICKS = 28;
+
+function comboRecoveryCooldownTicks(p, step) {
+  const comboStep = Math.max(1, step || 1);
+  const styleBaseTicks = (p.attackStyle === 'swing' ? SWING_RECOVERY_BASE_TICKS : JAB_RECOVERY_BASE_TICKS) + (comboStep - 1) * 8;
+  const speedMs = Number.isFinite(p.attackSpeed) ? Math.max(100, p.attackSpeed) : ATTACK_SPEED_BASELINE_MS;
+  return Math.max(1, Math.round(styleBaseTicks * (speedMs / ATTACK_SPEED_BASELINE_MS)));
+}
+
 // DEBUG_COMBAT diagnostics (2026-07-13) — set env var DEBUG_COMBAT=1 before
 // starting the server (`$env:DEBUG_COMBAT=1; node server.js` in PowerShell)
 // to get one console line per swing/jab, printed the instant that attack
@@ -53,6 +64,10 @@ function logCombatDiag(room, id, p) {
 // halts everything without needing this flag.
 function isMidCombo(p) {
   return !!(p && p._started);
+}
+
+function isAttackStyleLocked(p) {
+  return !!(p && (p.attacking || p.comboChainWindow || p._chainTickTarget > 0 || ((p.comboStep || 0) > 0 && p._started)));
 }
 
 function handleAttack(room, id, facingAngle) {
@@ -145,6 +160,7 @@ function _executeAttack(room, id, step, pendingAngle) {
   p.attackStartTime = Date.now();
   p.prevCf = -1;
   p._started = true;
+  p._comboReturnSent = false;
   p._spinRemaining = step >= 4 && p.attackStyle === 'swing' ? 15 : 0;
   // Unarmed punches stay planted — no forward lunge like armed jab/swing hits get.
   // Steps 1-3 lunge distances cut from 30/30/50 to 8/8/12 (2026-07-13) — root
@@ -239,9 +255,9 @@ function processCombatTick(room) {
         p.prevCf = -1;
         if (p.comboStep >= maxCombo) {
           p.comboChainWindow = false;
-          p.attackCooldown = (!isUnarmed && p.attackStyle === 'swing' ? 16 : 20) + (p.comboStep - 1) * 8;
+          p.attackCooldown = comboRecoveryCooldownTicks(p, p.comboStep);
           p.comboStep = 0;
-          p._started = false;
+          p._started = true;
           p._chainTickTarget = 0;
           p._queuedChain = null;
           p._spinRemaining = 0;
@@ -273,11 +289,12 @@ function processCombatTick(room) {
         p.attackHitIds = [];
         p.prevCf = -1;
         p.comboChainWindow = false;
-        p.attackCooldown = (p.attackStyle === 'swing' ? 16 : 20) + (p.comboStep - 1) * 8;
+        p.attackCooldown = comboRecoveryCooldownTicks(p, p.comboStep);
         p.comboStep = 0;
-        p._started = false;
+        p._started = true;
         p._chainTickTarget = 0;
         p._queuedChain = null;
+        p._comboReturnSent = true;
         room.io.to(id).emit('comboWindowEnd');
       }
     }
@@ -312,9 +329,10 @@ function processCombatTick(room) {
       //
       // Fixed by branching on whether a continuation was actually scheduled
       // (`_chainTickTarget > 0`, set by a click that landed inside the
-      // window): if nothing was scheduled, reset immediately (below) instead
-      // of waiting out a mystery penalty first. If a continuation WAS
-      // scheduled, bridge attackCooldown forward to land 1 tick past
+      // window): if nothing was scheduled, fall into normal style/step
+      // recovery scaled by p.attackSpeed instead of waiting out a mystery
+      // penalty first. If a continuation WAS scheduled, bridge
+      // attackCooldown forward to land 1 tick past
       // `_chainTickTarget` (not exactly on it) so this same loop — which
       // runs BEFORE the chain-trigger loop further down in the same tick —
       // doesn't zero out `_chainTickTarget` itself before that loop gets a
@@ -328,16 +346,17 @@ function processCombatTick(room) {
       if (p._chainTickTarget > 0) {
         p.attackCooldown = Math.max(1, p._chainTickTarget - room.tickNum + 1);
       } else {
+        const recoveryCooldown = comboRecoveryCooldownTicks(p, p.comboStep);
         p.comboStep = 0;
-        p._started = false;
-        p.attackCooldown = 0;
+        p._started = true;
+        p.attackCooldown = recoveryCooldown;
         p._queuedChain = null;
         p._chainPendingAngle = null;
         p._chainTickTarget = 0;
         p._spinRemaining = 0;
         p._lungeRemaining = 0;
+        p._comboReturnSent = true;
         room.io.to(id).emit('comboWindowEnd');
-        room.io.to(id).emit('comboReady');
       }
     } else {
       p.comboStep = 0;
@@ -348,7 +367,8 @@ function processCombatTick(room) {
       p._chainTickTarget = 0;
       p._spinRemaining = 0;
       p._lungeRemaining = 0;
-      room.io.to(id).emit('comboWindowEnd');
+      if (!p._comboReturnSent) room.io.to(id).emit('comboWindowEnd');
+      p._comboReturnSent = false;
       room.io.to(id).emit('comboReady');
     }
   }
@@ -398,4 +418,4 @@ function processCombatTick(room) {
   }
 }
 
-module.exports = { handleAttack, _executeAttack, handleEquip, processCombatTick, isMidCombo };
+module.exports = { handleAttack, _executeAttack, handleEquip, processCombatTick, isMidCombo, isAttackStyleLocked };

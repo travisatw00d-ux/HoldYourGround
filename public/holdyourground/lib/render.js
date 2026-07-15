@@ -45,6 +45,102 @@ export function generateBackground(w, h, color) {
   return bc;
 }
 
+const EDGE_FOG_DEPTH = 420;
+const EDGE_FOG_SPACING = 190;
+
+function drawFogPuff(ctx, x, y, radiusX, radiusY, opacity = 1) {
+  ctx.save();
+  ctx.globalAlpha = opacity;
+  ctx.translate(x, y);
+  ctx.scale(radiusX, radiusY);
+  const fog = ctx.createRadialGradient(0, 0, 0, 0, 0, 1);
+  fog.addColorStop(0, 'rgba(52, 53, 63, 0.96)');
+  fog.addColorStop(0.42, 'rgba(47, 48, 58, 0.82)');
+  fog.addColorStop(0.72, 'rgba(42, 43, 53, 0.45)');
+  fog.addColorStop(1, 'rgba(38, 39, 48, 0)');
+  ctx.fillStyle = fog;
+  ctx.beginPath();
+  ctx.arc(0, 0, 1, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawNightWorldEdgeFog(ctx, cam, viewW, viewH) {
+  if (state.matchPhase !== 'nighttime' || !state.worldW || !state.worldH) return;
+
+  const fogTime = performance.now() / 1000;
+  const depth = Math.min(EDGE_FOG_DEPTH, state.worldW / 4, state.worldH / 4);
+  const left = -cam.x;
+  const right = state.worldW - cam.x;
+  const top = -cam.y;
+  const bottom = state.worldH - cam.y;
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(0, 0, viewW, viewH);
+  ctx.clip();
+  ctx.beginPath();
+  ctx.rect(left, top, depth, state.worldH);
+  ctx.rect(right - depth, top, depth, state.worldH);
+  ctx.rect(left, top, state.worldW, depth);
+  ctx.rect(left, bottom - depth, state.worldW, depth);
+  ctx.clip();
+
+  const edgeGradients = [
+    [left, top, depth, state.worldH, left, left + depth, true],
+    [right - depth, top, depth, state.worldH, right, right - depth, true],
+    [left, top, state.worldW, depth, top, top + depth, false],
+    [left, bottom - depth, state.worldW, depth, bottom, bottom - depth, false]
+  ];
+
+  for (const [x, y, w, h, start, end, horizontal] of edgeGradients) {
+    if (x >= viewW || y >= viewH || x + w <= 0 || y + h <= 0) continue;
+    const gradient = horizontal
+      ? ctx.createLinearGradient(start, 0, end, 0)
+      : ctx.createLinearGradient(0, start, 0, end);
+    gradient.addColorStop(0, 'rgba(37, 38, 47, 0.98)');
+    gradient.addColorStop(0.24, 'rgba(40, 41, 50, 0.9)');
+    gradient.addColorStop(0.62, 'rgba(42, 43, 53, 0.42)');
+    gradient.addColorStop(1, 'rgba(42, 42, 53, 0)');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(x, y, w, h);
+  }
+
+  for (let y = 0, i = 0; y <= state.worldH; y += EDGE_FOG_SPACING, i++) {
+    const phase = fogTime * 0.52 + i * 1.73;
+    const breathe = 1 + Math.sin(fogTime * 0.68 + i * 0.91) * 0.09;
+    const radiusY = (270 + (i % 4) * 22) * (2 - breathe);
+    const radiusX = (165 + (i % 3) * 16) * breathe;
+    const opacity = 0.88 + Math.sin(fogTime * 0.61 + i * 1.19) * 0.12;
+    const screenY = y - cam.y + Math.sin(phase) * 68;
+    if (screenY + radiusY < 0 || screenY - radiusY > viewH) continue;
+    if (left + radiusX >= 0 && left - radiusX <= viewW) {
+      drawFogPuff(ctx, left, screenY, radiusX, radiusY, opacity);
+    }
+    if (right + radiusX >= 0 && right - radiusX <= viewW) {
+      drawFogPuff(ctx, right, screenY, radiusX, radiusY, opacity);
+    }
+  }
+
+  for (let x = 0, i = 0; x <= state.worldW; x += EDGE_FOG_SPACING, i++) {
+    const phase = fogTime * 0.47 + i * 1.57;
+    const breathe = 1 + Math.sin(fogTime * 0.64 + i * 1.03) * 0.09;
+    const radiusX = (270 + (i % 4) * 22) * (2 - breathe);
+    const radiusY = (165 + (i % 3) * 16) * breathe;
+    const opacity = 0.88 + Math.sin(fogTime * 0.58 + i * 1.31) * 0.12;
+    const screenX = x - cam.x + Math.sin(phase) * 68;
+    if (screenX + radiusX < 0 || screenX - radiusX > viewW) continue;
+    if (top + radiusY >= 0 && top - radiusY <= viewH) {
+      drawFogPuff(ctx, screenX, top, radiusX, radiusY, opacity);
+    }
+    if (bottom + radiusY >= 0 && bottom - radiusY <= viewH) {
+      drawFogPuff(ctx, screenX, bottom, radiusX, radiusY, opacity);
+    }
+  }
+
+  ctx.restore();
+}
+
 function render() {
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.clearRect(0, 0, state.viewW, state.viewH);
@@ -259,6 +355,10 @@ function render() {
   }
 
   drawDmgNumbers(ctx, cam.x, cam.y);
+
+  // Keep world entities beneath the nighttime boundary clouds while all HUD
+  // elements remain crisp above them.
+  drawNightWorldEdgeFog(ctx, cam, eW, eH);
 
   if (me && me.alive && state.localAnim) {
     const mex = me.px + (me.x - me.px) * alpha;
