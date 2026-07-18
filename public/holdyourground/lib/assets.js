@@ -44,7 +44,7 @@ function preRenderMiniIcons() {
 }
 
 async function loadGameAssets() {
-  const _v = 'v=6';
+  const _v = 'v=8';
   const json = (url) => fetch(url + '?' + _v).then(r => r.json()).catch(() => null);
   const [sheet, meta, kSheet, kMeta, hSheet, hMeta, layout, mSheet, mMeta, cSheet, cMeta, kwSheet, kwMeta, rSheet, rMeta, nSheet, nMeta, iSheet, iMeta] = await Promise.all([
     loadImage('/images/spritesheet.png?' + _v),
