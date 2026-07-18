@@ -1,5 +1,5 @@
 import { state } from './state.js';
-import { KNIGHT_VISUALS, KNIGHT_ANIMATIONS, ANIMATIONS, ITEM_VISUALS, ZOMBIE_ANIMATIONS, ZOMBIE_VISUALS, BLADE_TIP_X, BLADE_TIP_Y, BLADE_HILT_X, BLADE_HILT_Y, KNIGHT_BLADE_TIP_X, KNIGHT_BLADE_TIP_Y, KNIGHT_BLADE_HILT_X, KNIGHT_BLADE_HILT_Y, MOB_TYPES } from './game-data.js';
+import { KNIGHT_VISUALS, KNIGHT_ANIMATIONS, ANIMATIONS, ITEM_VISUALS, ZOMBIE_ANIMATIONS, ZOMBIE_VISUALS, GOBLIN_ANIMATIONS, GOBLIN_VISUALS, BLADE_TIP_X, BLADE_TIP_Y, BLADE_HILT_X, BLADE_HILT_Y, KNIGHT_BLADE_TIP_X, KNIGHT_BLADE_TIP_Y, KNIGHT_BLADE_HILT_X, KNIGHT_BLADE_HILT_Y, MOB_TYPES } from './game-data.js';
 
 function shortAngleDelta(a, b) {
   let d = b - a;
@@ -366,10 +366,10 @@ function getRemoteVis(p) {
   return vis;
 }
 
-function getZombieAnimVis(handKey, animState) {
-  const anim = ZOMBIE_ANIMATIONS?.attack;
+function getZombieAnimVis(handKey, animState, animTable) {
+  const anim = (animTable || ZOMBIE_ANIMATIONS)?.attack;
   if (!anim) return null;
-  const handData = handKey === 'left_hand' ? anim.left_hand : anim.right_hand;
+  const handData = anim[handKey];
   if (!handData || handData.keyframes.length < 2) return null;
   const total = anim.segments.reduce((a, b) => a + b, 0);
   if (total === 0) return null;

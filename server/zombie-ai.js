@@ -70,7 +70,8 @@ function moveAll(zombies, players) {
       const tp = players[z.targetPlayerId];
       if (tp && tp.alive) {
         const dx = tp.x - z.x, dy = tp.y - z.y;
-        if (dx * dx + dy * dy < (z.radius + tp.radius + ZOMBIE_ATTACK_RANGE) ** 2) continue;
+        const range = z.attackRange || ZOMBIE_ATTACK_RANGE;
+        if (dx * dx + dy * dy < (z.radius + tp.radius + range) ** 2) continue;
       }
     }
     let spd = z.speed;
@@ -146,22 +147,42 @@ function processZombieAttacks(zombies, players, grid, roomId) {
       }
       z.attackTimer++;
       if (z.attackTimer === ZOMBIE_ATTACK_STRIKE) {
-        const nearby = grid.getNearbyPlayers(z.x, z.y);
-        let closestP = null, closestPD2 = Infinity;
-        for (const p of nearby) {
-          if (!p.alive || p.godMode || p.isSpectator) continue;
-          const dx = p.x - z.x, dy = p.y - z.y;
-          const d2 = dx * dx + dy * dy;
-          if (d2 < closestPD2) { closestPD2 = d2; closestP = p; }
-        }
-        if (closestP) {
-          const dist = Math.sqrt(closestPD2);
-          if (dist < z.radius + closestP.radius + ZOMBIE_ATTACK_RANGE) {
-            closestP.health -= ZOMBIE_DAMAGE;
-            events.push({ type: 'gotHit', to: closestP.id, attackerId: z.id, dmg: ZOMBIE_DAMAGE, health: closestP.health });
-            if (closestP.health <= 0 && closestP.alive) {
-              closestP.alive = false;
-              events.push({ type: 'eliminated', to: closestP.id, kills: closestP.kills });
+        const dmg = z.attackDamage || ZOMBIE_DAMAGE;
+        if (z.attackRange) {
+          // Sword-wielding mobs (goblin, via attackRange set in mob-config):
+          // the trigger check above already confirmed the locked target was
+          // in stab range when the swing started. Once the animation is
+          // committed, it lands on that same target — no re-check against
+          // its CURRENT position/distance, and no re-pick of "whoever's
+          // nearest now". Prevents the swing from whiffing just because the
+          // target juked during the ~167ms wind-up to the strike frame.
+          const p = z.targetPlayerId && players[z.targetPlayerId];
+          if (p && p.alive && !p.godMode && !p.isSpectator) {
+            p.health -= dmg;
+            events.push({ type: 'gotHit', to: p.id, attackerId: z.id, dmg, health: p.health });
+            if (p.health <= 0 && p.alive) {
+              p.alive = false;
+              events.push({ type: 'eliminated', to: p.id, kills: p.kills });
+            }
+          }
+        } else {
+          const nearby = grid.getNearbyPlayers(z.x, z.y);
+          let closestP = null, closestPD2 = Infinity;
+          for (const p of nearby) {
+            if (!p.alive || p.godMode || p.isSpectator) continue;
+            const dx = p.x - z.x, dy = p.y - z.y;
+            const d2 = dx * dx + dy * dy;
+            if (d2 < closestPD2) { closestPD2 = d2; closestP = p; }
+          }
+          if (closestP) {
+            const dist = Math.sqrt(closestPD2);
+            if (dist < z.radius + closestP.radius + ZOMBIE_ATTACK_RANGE) {
+              closestP.health -= dmg;
+              events.push({ type: 'gotHit', to: closestP.id, attackerId: z.id, dmg, health: closestP.health });
+              if (closestP.health <= 0 && closestP.alive) {
+                closestP.alive = false;
+                events.push({ type: 'eliminated', to: closestP.id, kills: closestP.kills });
+              }
             }
           }
         }
@@ -184,7 +205,8 @@ function processZombieAttacks(zombies, players, grid, roomId) {
       if (p.alive) {
         const dx = p.x - z.x, dy = p.y - z.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
-        if (dist < z.radius + p.radius + ZOMBIE_ATTACK_RANGE) {
+        const range = z.attackRange || ZOMBIE_ATTACK_RANGE;
+        if (dist < z.radius + p.radius + range) {
           z.attacking = true;
           z.attackTimer = 0;
           events.push({ type: 'zombieAttackStart', to: 'room:' + roomId, zombieId: z.id, mobType: z.mobType });

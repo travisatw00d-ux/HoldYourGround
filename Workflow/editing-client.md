@@ -11,6 +11,7 @@ All client files live in `public/holdyourground/lib/`. Entry: `game.js` (importe
 | Attack animation | `lib/anims.js` (startAttackAnim, playReturnAnim) | animation-system.md, combat-system.md |
 | Attack style toggle | `lib/input.js` (Space key), `lib/anims.js` (startIdleTransition) | combat-system.md |
 | Player/zombie drawing | `lib/render-entity.js` (drawPlayer, drawZombie) | rendering-system.md |
+| Nighttime world-edge fog | `lib/render.js` (`drawNightWorldEdgeFog`, `drawFogPuff`, `EDGE_FOG_*`) | rendering-system.md |
 | Game data constants | `lib/game-data.js` (BLADE_*, STATS, MOB_TYPES, ANIMATIONS) | combat-system.md, wave-system.md |
 | Screen management | `lib/ui.js` (showScreen, leaveToMenu) | match-lifecycle.md |
 | NW popup | `lib/next-wave-popup.js` | wave-system.md |

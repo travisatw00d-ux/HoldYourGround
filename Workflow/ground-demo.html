@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>HYG — Green Landscape</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    background:#14181a; color:#ccc;
+    font-family:'Segoe UI',system-ui,sans-serif;
+    display:flex; flex-direction:column; align-items:center;
+    min-height:100vh; padding:20px;
+  }
+  h1 { margin-bottom:2px; letter-spacing:1px; font-size:20px; }
+  .sub { color:#777; margin-bottom:10px; font-size:12px; }
+
+  .controls { display:flex; gap:8px; margin-bottom:10px; flex-wrap:wrap; justify-content:center; }
+  .controls button {
+    background:#2a2a35; color:#ccc; border:1px solid #444; padding:5px 14px;
+    border-radius:4px; cursor:pointer; font-size:12px;
+  }
+  .controls button.active { background:#3a6a4a; border-color:#5a8a6a; }
+  .controls button:hover { background:#3a3a48; }
+  .controls button.active:hover { background:#4a7a5a; }
+
+  .viewport {
+    width:960px; height:540px;
+    position:relative; overflow:hidden;
+    border:3px solid rgba(80,60,30,0.5);
+    border-radius:6px;
+    box-shadow:0 0 40px rgba(0,0,0,0.5);
+    cursor:grab; user-select:none;
+  }
+  .viewport:active { cursor:grabbing; }
+
+  .world {
+    position:absolute; inset:0;
+    transform-origin:0 0;
+    will-change:transform;
+    --grid-px: 26px;
+    --base-green: #30452f;
+    --vignette-a: rgba(12, 22, 15, 0.15);
+    --vignette-b: rgba(7, 15, 10, 0.42);
+    --grid-line: rgba(200, 220, 190, 0.025);
+    background:
+      linear-gradient(var(--vignette-a), var(--vignette-b)),
+      repeating-linear-gradient(0deg,   transparent 0 calc(var(--grid-px) - 1px),  var(--grid-line) var(--grid-px)),
+      repeating-linear-gradient(90deg,  transparent 0 calc(var(--grid-px) - 1px),  var(--grid-line) var(--grid-px)),
+      var(--base-green);
+  }
+
+  .world.night {
+    --base-green:#1b2a1c;
+    --vignette-a: rgba(10, 12, 18, 0.45);
+    --vignette-b: rgba(4, 6, 12, 0.72);
+    --grid-line: rgba(220, 230, 210, 0.018);
+  }
+
+  #zoomLabel {
+    position:absolute; bottom:8px; left:10px; z-index:10;
+    color:rgba(200,200,200,0.6); font-size:11px; pointer-events:none;
+    text-shadow:0 0 4px rgba(0,0,0,0.9); font-family:monospace;
+  }
+
+  .info { display:flex; gap:20px; margin-top:10px; font-size:11px; color:#555; }
+  .info span { color:#888; }
+  .info kbd { background:#2a2a35; border:1px solid #444; padding:1px 5px; border-radius:3px; font-size:10px; }
+</style>
+</head>
+<body>
+  <h1>Hold Your Ground &mdash; Green Landscape</h1>
+  <p class="sub">Clean green base, vignette &amp; 80px grid &mdash; scroll to zoom, drag to pan</p>
+
+  <div class="controls">
+    <button id="btnDay" class="active">Daytime</button>
+    <button id="btnNight">Nighttime</button>
+    <button id="btnReset">Reset View</button>
+  </div>
+
+  <div class="viewport" id="viewport">
+    <div class="world" id="world"></div>
+    <div id="zoomLabel">zoom 1.0x</div>
+  </div>
+
+  <p class="info">
+    <span>Zoom: <kbd>Scroll wheel</kbd></span> &bull;
+    <span>Pan: <kbd>Drag</kbd></span> &bull;
+    <span>80px grid = 26px cells</span>
+  </p>
+
+<script>
+  const W = 960, H = 540;
+  const world = document.getElementById('world');
+  const viewport = document.getElementById('viewport');
+  const zoomLabel = document.getElementById('zoomLabel');
+
+  let zoom = 1, panX = 0, panY = 0;
+  const MIN_ZOOM = 1, MAX_ZOOM = 8;
+  let _drag = false, _dsx, _dsy, _dpx, _dpy;
+
+  function updateTransform() {
+    const z = zoom;
+    const maxPX = W * z - W, maxPY = H * z - H;
+    panX = Math.min(0, Math.max(-maxPX, panX));
+    panY = Math.min(0, Math.max(-maxPY, panY));
+    world.style.transform = `translate(${panX}px, ${panY}px) scale(${z})`;
+    zoomLabel.textContent = 'zoom ' + zoom.toFixed(1) + 'x';
+  }
+
+  viewport.addEventListener('wheel', e => {
+    e.preventDefault();
+    const rect = viewport.getBoundingClientRect();
+    const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+    const wcx = (mx - panX) / zoom;
+    const wcy = (my - panY) / zoom;
+    const factor = e.deltaY > 0 ? 0.88 : 1/0.88;
+    zoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom * factor));
+    panX = mx - wcx * zoom;
+    panY = my - wcy * zoom;
+    updateTransform();
+  }, { passive:false });
+
+  viewport.addEventListener('mousedown', e => {
+    if (e.button !== 0) return;
+    _drag = true; _dsx = e.clientX; _dsy = e.clientY; _dpx = panX; _dpy = panY;
+  });
+  window.addEventListener('mousemove', e => {
+    if (!_drag) return;
+    panX = _dpx + (e.clientX - _dsx);
+    panY = _dpy + (e.clientY - _dsy);
+    updateTransform();
+  });
+  window.addEventListener('mouseup', () => { _drag = false; });
+
+  document.getElementById('btnDay').onclick = () => {
+    world.classList.remove('night');
+    document.getElementById('btnDay').classList.add('active');
+    document.getElementById('btnNight').classList.remove('active');
+  };
+  document.getElementById('btnNight').onclick = () => {
+    world.classList.add('night');
+    document.getElementById('btnNight').classList.add('active');
+    document.getElementById('btnDay').classList.remove('active');
+  };
+  document.getElementById('btnReset').onclick = () => { zoom = 1; panX = 0; panY = 0; updateTransform(); };
+
+  updateTransform();
+</script>
+</body>
+</html>

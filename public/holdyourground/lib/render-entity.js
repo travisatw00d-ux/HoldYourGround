@@ -1,5 +1,5 @@
 import { state } from './state.js';
-import { MOB_TYPES, BLADE_W, ZOMBIE_VISUALS, KNIGHT_VISUALS } from './game-data.js';
+import { MOB_TYPES, BLADE_W, ZOMBIE_VISUALS, ZOMBIE_ANIMATIONS, GOBLIN_VISUALS, GOBLIN_ANIMATIONS, KNIGHT_VISUALS } from './game-data.js';
 import {
   updateLean, getMovementBob, getBreathScale,
   getKnightIdleVis, getKnightInterpolatedVis, getKnightRemoteVis,
@@ -156,24 +156,63 @@ function drawKnightHand(ctx, p, sx, sy) {
 function getMobSpritePrefix(z) {
   const mt = MOB_TYPES[z.mobType];
   if (mt && mt.id === 'troll') return 'troll';
+  if (mt && mt.id === 'goblin') return 'goblin';
   return 'zombie';
 }
 
 function drawZombieHand(ctx, z, szx, szy, angle, handKey) {
   const prefix = getMobSpritePrefix(z);
+  if (prefix === 'goblin') {
+    // Goblin only has a left hand sprite — no right_hand art exists.
+    if (handKey !== 'left_hand') return;
+    const frame = state.spriteFrames?.['GoblinLeftHand.png']?.frame;
+    if (!frame) return;
+    let vis = GOBLIN_VISUALS?.left_hand;
+    const animState = state.zombieAnims?.[z.id];
+    if (animState) { const animVis = getZombieAnimVis('left_hand', animState, GOBLIN_ANIMATIONS); if (animVis) vis = animVis; }
+    if (!vis) return;
+    const cos = Math.cos(angle), sin = Math.sin(angle);
+    const rx = vis.offsetX * cos - vis.offsetY * sin;
+    const ry = vis.offsetX * sin + vis.offsetY * cos;
+    const sw = frame.w * vis.scale, sh = frame.h * vis.scale;
+    ctx.save();
+    ctx.translate(szx + rx, szy + ry);
+    ctx.rotate(angle + (vis.rotation || 0));
+    ctx.drawImage(getSpriteFromSheet(state.spriteSheet, sw, sh, frame), -sw / 2, -sh / 2, sw, sh);
+    ctx.restore();
+    return;
+  }
   const isTroll = prefix === 'troll';
   const fname = handKey === 'left_hand' ? (isTroll ? 'trolllefthand.png' : 'zombielefthand.png') : (isTroll ? 'trollrighthand.png' : 'zombierighthand.png');
   const frame = state.spriteFrames?.[fname]?.frame;
   if (!frame) return;
   let vis = ZOMBIE_VISUALS?.[handKey];
   const animState = state.zombieAnims?.[z.id];
-  if (animState) { const animVis = getZombieAnimVis(handKey, animState); if (animVis) vis = animVis; }
+  if (animState) { const animVis = getZombieAnimVis(handKey, animState, ZOMBIE_ANIMATIONS); if (animVis) vis = animVis; }
   if (!vis) return;
   const cos = Math.cos(angle), sin = Math.sin(angle);
   const rx = vis.offsetX * cos - vis.offsetY * sin;
   const ry = vis.offsetX * sin + vis.offsetY * cos;
   const handScale = isTroll ? 1.1 : 1.0;
   const sw = frame.w * vis.scale * handScale, sh = frame.h * vis.scale * handScale;
+  ctx.save();
+  ctx.translate(szx + rx, szy + ry);
+  ctx.rotate(angle + (vis.rotation || 0));
+  ctx.drawImage(getSpriteFromSheet(state.spriteSheet, sw, sh, frame), -sw / 2, -sh / 2, sw, sh);
+  ctx.restore();
+}
+
+function drawGoblinSword(ctx, z, szx, szy, angle) {
+  const frame = state.spriteFrames?.['GoblinSword.png']?.frame;
+  if (!frame) return;
+  let vis = GOBLIN_VISUALS?.sword;
+  const animState = state.zombieAnims?.[z.id];
+  if (animState) { const animVis = getZombieAnimVis('sword', animState, GOBLIN_ANIMATIONS); if (animVis) vis = animVis; }
+  if (!vis) return;
+  const cos = Math.cos(angle), sin = Math.sin(angle);
+  const rx = vis.offsetX * cos - vis.offsetY * sin;
+  const ry = vis.offsetX * sin + vis.offsetY * cos;
+  const sw = frame.w * vis.scale, sh = frame.h * vis.scale;
   ctx.save();
   ctx.translate(szx + rx, szy + ry);
   ctx.rotate(angle + (vis.rotation || 0));
@@ -286,7 +325,7 @@ export function drawPlayer(ctx, p, sx, sy, alpha, topKills) {
 
 export function drawZombie(ctx, z, szx, szy, zombieAngle) {
   const prefix = getMobSpritePrefix(z);
-  const headKey = prefix === 'troll' ? 'trollhead.png' : 'zombiehead.png';
+  const headKey = prefix === 'troll' ? 'trollhead.png' : prefix === 'goblin' ? 'GoblinHead.png' : 'zombiehead.png';
   const headFrame = state.spriteFrames?.[headKey]?.frame;
   if (headFrame) {
     const headScale = prefix === 'troll' ? 1.1 : 1.0;
@@ -297,8 +336,13 @@ export function drawZombie(ctx, z, szx, szy, zombieAngle) {
     ctx.drawImage(getSpriteFromSheet(state.spriteSheet, headFrame.w * sz, headFrame.h * sz, headFrame), -(headFrame.w * sz) / 2, -(headFrame.h * sz) / 2, headFrame.w * sz, headFrame.h * sz);
     ctx.restore();
   }
-  drawZombieHand(ctx, z, szx, szy, zombieAngle, 'left_hand');
-  drawZombieHand(ctx, z, szx, szy, zombieAngle, 'right_hand');
+  if (prefix === 'goblin') {
+    drawZombieHand(ctx, z, szx, szy, zombieAngle, 'left_hand');
+    drawGoblinSword(ctx, z, szx, szy, zombieAngle);
+  } else {
+    drawZombieHand(ctx, z, szx, szy, zombieAngle, 'left_hand');
+    drawZombieHand(ctx, z, szx, szy, zombieAngle, 'right_hand');
+  }
   ctx.fillStyle = '#ff6666';
   ctx.fillText(z.label || 'zombie', szx, szy - 30);
   drawHealthBar(ctx, szx, szy - 24, 30, 3, z.health, z.maxHealth);

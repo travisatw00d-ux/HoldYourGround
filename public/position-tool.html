@@ -52,6 +52,7 @@ button:active { background: #3ca39c; }
     <div class="slot-row">
       <button class="slot-btn active" data-mode="hands">Zombie Hands</button>
       <button class="slot-btn" data-mode="knight">Knight Items</button>
+      <button class="slot-btn" data-mode="goblin">Goblin Items</button>
       <button class="slot-btn" data-mode="screen">Server Level</button>
     </div>
     <h2 id="modeTitle">Zombie Hand Positioner</h2>
@@ -70,6 +71,13 @@ button:active { background: #3ca39c; }
         <button class="slot-btn active" data-slot="knight_sword">Sword</button>
         <button class="slot-btn" data-slot="knight_hand">Left Hand</button>
         <button class="slot-btn" data-slot="knight_right_hand">Right Hand</button>
+      </div>
+    </div>
+
+    <div id="goblinUI" style="display:none">
+      <div class="slot-row">
+        <button class="slot-btn active" data-slot="goblin_left_hand">Left Hand</button>
+        <button class="slot-btn" data-slot="goblin_sword">Sword</button>
       </div>
     </div>
 
@@ -129,6 +137,21 @@ const KNIGHT_FRAME_MAP = {
   knight_right_hand: 'T1KnightRightHand.png'
 };
 
+// Seeded from the live GOBLIN_VISUALS values in lib/game-data.js /
+// shared/data.js as of 2026-07-17. Re-sync if the live values drift — same
+// hand-copied-snapshot caveat as knightItems above.
+const goblinItems = {
+  goblin_left_hand: { offsetX: 12, offsetY: -6, scale: 0.24, rotation: -1.3 },
+  goblin_sword: { offsetX: 26, offsetY: -4, scale: 0.35, rotation: 0.15 }
+};
+let activeGoblinItem = 'goblin_left_hand';
+
+// Maps a goblinItems key to its sprite frame name in spritesheet.json.
+const GOBLIN_FRAME_MAP = {
+  goblin_left_hand: 'GoblinLeftHand.png',
+  goblin_sword: 'GoblinSword.png'
+};
+
 const screenUI = { x: 53, y: 56, scale: 0.4, ty: 0 };
 
 let dragging = false;
@@ -143,6 +166,13 @@ const knightSheet = new Image();
 let knightFrames = null;
 knightSheet.src = '/images/KnightSheet.png';
 fetch('/images/KnightSheet.json').then(r => r.json()).then(data => { knightFrames = data.frames; if (knightSheet.complete) draw(); });
+
+// Goblin parts live in the main packed atlas (images/spritesheet.png), not a
+// dedicated sheet — GoblinHead.png/GoblinLeftHand.png/GoblinSword.png frames.
+const goblinSheet = new Image();
+let goblinFrames = null;
+goblinSheet.src = '/images/spritesheet.png';
+fetch('/images/spritesheet.json').then(r => r.json()).then(data => { goblinFrames = data.frames; if (goblinSheet.complete) draw(); });
 
 const _spriteCache = new Map();
 function getSpriteFromSheet(sheet, drawW, drawH, frame) {
@@ -163,7 +193,7 @@ function getSpriteFromSheet(sheet, drawW, drawH, frame) {
 
 let imagesLoaded = 0;
 let totalImages = 0;
-const allImages = [headImg, leftImg, rightImg, serverLevelImg, knightSheet];
+const allImages = [headImg, leftImg, rightImg, serverLevelImg, knightSheet, goblinSheet];
 allImages.forEach(img => { totalImages++; img.onload = () => { imagesLoaded++; if (imagesLoaded >= totalImages) draw(); }; img.onerror = () => { imagesLoaded++; if (imagesLoaded >= totalImages) draw(); }; });
 setTimeout(draw, 1000);
 
@@ -180,6 +210,7 @@ const modeTitle = document.getElementById('modeTitle');
 const modeNote = document.getElementById('modeNote');
 const handsUI = document.getElementById('handsUI');
 const knightUI = document.getElementById('knightUI');
+const goblinUI = document.getElementById('goblinUI');
 
 document.getElementById('symBtn').addEventListener('click', () => {
   const otherKey = activeHand === 'left_hand' ? 'right_hand' : 'left_hand';
@@ -204,6 +235,11 @@ document.querySelectorAll('[data-slot]').forEach(btn => {
       const nh = hands[activeHand];
       scaleSlider.value = nh.scale;
       rotSlider.value = nh.rotation;
+    } else if (slot === 'goblin_left_hand' || slot === 'goblin_sword') {
+      activeGoblinItem = slot;
+      const item = goblinItems[activeGoblinItem];
+      scaleSlider.value = item.scale;
+      rotSlider.value = item.rotation;
     } else {
       activeKnightItem = slot;
       const item = knightItems[activeKnightItem];
@@ -227,6 +263,7 @@ document.querySelectorAll('[data-mode]').forEach(btn => {
       modeNote.textContent = 'Drag the icon. Use X/Y sliders to position the text relative to the icon center.';
       handsUI.style.display = 'none';
       knightUI.style.display = 'none';
+      goblinUI.style.display = 'none';
       document.getElementById('rotGroup').style.display = 'none';
       textOffsetGroup.style.display = '';
       scaleSlider.min = '0.1'; scaleSlider.max = '3'; scaleSlider.step = '0.1';
@@ -239,10 +276,25 @@ document.querySelectorAll('[data-mode]').forEach(btn => {
       modeNote.textContent = 'The player faces right (→). Drag the sword and hand to position them around the player body.';
       handsUI.style.display = 'none';
       knightUI.style.display = '';
+      goblinUI.style.display = 'none';
       document.getElementById('rotGroup').style.display = '';
       textOffsetGroup.style.display = 'none';
       scaleSlider.min = '0.005'; scaleSlider.max = '1.0'; scaleSlider.step = '0.001';
       const item = knightItems[activeKnightItem];
+      scaleSlider.value = item.scale;
+      rotSlider.value = item.rotation;
+    } else if (mode === 'goblin') {
+      W = 400; H = 400; CX = W / 2; CY = H / 2;
+      canvas.width = W; canvas.height = H;
+      modeTitle.textContent = 'Goblin Item Positioner';
+      modeNote.textContent = 'The goblin faces right (→). Drag the sword and hand to position them around the goblin body. This is the idle/jab-start pose — the attack animation thrusts forward from here.';
+      handsUI.style.display = 'none';
+      knightUI.style.display = 'none';
+      goblinUI.style.display = '';
+      document.getElementById('rotGroup').style.display = '';
+      textOffsetGroup.style.display = 'none';
+      scaleSlider.min = '0.005'; scaleSlider.max = '1.0'; scaleSlider.step = '0.001';
+      const item = goblinItems[activeGoblinItem];
       scaleSlider.value = item.scale;
       rotSlider.value = item.rotation;
     } else {
@@ -252,6 +304,7 @@ document.querySelectorAll('[data-mode]').forEach(btn => {
       modeNote.textContent = 'The zombie faces right (→). Drag each hand to position it around the zombie body.';
       handsUI.style.display = '';
       knightUI.style.display = 'none';
+      goblinUI.style.display = 'none';
       document.getElementById('rotGroup').style.display = '';
       textOffsetGroup.style.display = 'none';
       scaleSlider.min = '0.005'; scaleSlider.max = '0.3'; scaleSlider.step = '0.001';
@@ -270,6 +323,8 @@ function draw() {
     drawHandsMode();
   } else if (mode === 'knight') {
     drawKnightMode();
+  } else if (mode === 'goblin') {
+    drawGoblinMode();
   } else {
     drawScreenMode();
   }
@@ -382,6 +437,79 @@ function drawKnightMode() {
     `knight_sword: {\n  offsetX: ${knightItems.knight_sword.offsetX},\n  offsetY: ${knightItems.knight_sword.offsetY},\n  scale: ${knightItems.knight_sword.scale.toFixed(3)},\n  rotation: ${knightItems.knight_sword.rotation.toFixed(2)}\n},\n` +
     `knight_hand: {\n  offsetX: ${knightItems.knight_hand.offsetX},\n  offsetY: ${knightItems.knight_hand.offsetY},\n  scale: ${knightItems.knight_hand.scale.toFixed(3)},\n  rotation: ${knightItems.knight_hand.rotation.toFixed(2)}\n},\n` +
     `knight_right_hand: {\n  offsetX: ${knightItems.knight_right_hand.offsetX},\n  offsetY: ${knightItems.knight_right_hand.offsetY},\n  scale: ${knightItems.knight_right_hand.scale.toFixed(3)},\n  rotation: ${knightItems.knight_right_hand.rotation.toFixed(2)}\n}`;
+}
+
+function drawGoblinMode() {
+  const CX = W / 2, CY = H / 2;
+
+  drawGrid(CX, CY, 40, W, H);
+
+  // goblin body (circle)
+  ctx.beginPath(); ctx.arc(CX, CY, 20, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(120, 200, 90, 0.15)'; ctx.fill();
+  ctx.strokeStyle = 'rgba(120, 200, 90, 0.35)'; ctx.lineWidth = 1.5; ctx.stroke();
+
+  // Goblin head — same 40px-box formula as drawZombie() in render-entity.js
+  // for the zombie/troll heads (goblin uses the same headScale=1.0 path).
+  const headFrame = goblinFrames ? goblinFrames['GoblinHead.png'] : null;
+  if (headFrame) {
+    const hsz = 40 / Math.max(headFrame.frame.w, headFrame.frame.h);
+    const hw = headFrame.frame.w * hsz;
+    const hh = headFrame.frame.h * hsz;
+    ctx.save();
+    ctx.translate(CX, CY);
+    ctx.rotate(-Math.PI / 2);
+    ctx.drawImage(getSpriteFromSheet(goblinSheet, hw, hh, headFrame.frame), -hw / 2, -hh / 2, hw, hh);
+    ctx.restore();
+  }
+
+  // Goblin sword
+  const gs = goblinItems.goblin_sword;
+  const isSwordActive = activeGoblinItem === 'goblin_sword';
+  const swordFrame = goblinFrames ? goblinFrames['GoblinSword.png'] : null;
+  if (swordFrame) {
+    const sw = swordFrame.frame.w * gs.scale;
+    const sh = swordFrame.frame.h * gs.scale;
+    ctx.save();
+    ctx.globalAlpha = isSwordActive ? 1 : 0.25;
+    ctx.translate(CX + gs.offsetX, CY + gs.offsetY);
+    ctx.rotate(gs.rotation);
+    ctx.drawImage(getSpriteFromSheet(goblinSheet, sw, sh, swordFrame.frame), -sw / 2, -sh / 2, sw, sh);
+    ctx.restore();
+  }
+  ctx.fillStyle = isSwordActive ? 'rgba(78,205,196,0.8)' : 'rgba(255,255,255,0.2)';
+  ctx.font = '10px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('sword', CX + gs.offsetX, CY + gs.offsetY + 30);
+
+  // Goblin left hand
+  const gh = goblinItems.goblin_left_hand;
+  const isHandActive = activeGoblinItem === 'goblin_left_hand';
+  const handFrame = goblinFrames ? goblinFrames['GoblinLeftHand.png'] : null;
+  if (handFrame) {
+    const sw = handFrame.frame.w * gh.scale;
+    const sh = handFrame.frame.h * gh.scale;
+    ctx.save();
+    ctx.globalAlpha = isHandActive ? 1 : 0.25;
+    ctx.translate(CX + gh.offsetX, CY + gh.offsetY);
+    ctx.rotate(gh.rotation);
+    ctx.drawImage(getSpriteFromSheet(goblinSheet, sw, sh, handFrame.frame), -sw / 2, -sh / 2, sw, sh);
+    ctx.restore();
+  }
+  ctx.fillStyle = isHandActive ? 'rgba(78,205,196,0.8)' : 'rgba(255,255,255,0.2)';
+  ctx.font = '10px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('hand', CX + gh.offsetX, CY + gh.offsetY + 30);
+
+  const item = goblinItems[activeGoblinItem];
+  scaleVal.textContent = item.scale.toFixed(3);
+  rotVal.textContent = item.rotation.toFixed(2);
+
+  output.textContent =
+    `// Paste into game-data.js/shared/data.js → GOBLIN_VISUALS (and as\n` +
+    `// keyframe[0] of GOBLIN_ANIMATIONS.attack.left_hand / .sword)\n` +
+    `left_hand: {\n  offsetX: ${goblinItems.goblin_left_hand.offsetX},\n  offsetY: ${goblinItems.goblin_left_hand.offsetY},\n  scale: ${goblinItems.goblin_left_hand.scale.toFixed(3)},\n  rotation: ${goblinItems.goblin_left_hand.rotation.toFixed(2)}\n},\n` +
+    `sword: {\n  offsetX: ${goblinItems.goblin_sword.offsetX},\n  offsetY: ${goblinItems.goblin_sword.offsetY},\n  scale: ${goblinItems.goblin_sword.scale.toFixed(3)},\n  rotation: ${goblinItems.goblin_sword.rotation.toFixed(2)}\n}`;
 }
 
 function drawHandsMode() {
@@ -524,6 +652,19 @@ canvas.addEventListener('mousedown', (e) => {
       dragOffY = dy;
       canvas.style.cursor = 'grabbing';
     }
+  } else if (mode === 'goblin') {
+    const item = goblinItems[activeGoblinItem];
+    const frameKey = GOBLIN_FRAME_MAP[activeGoblinItem];
+    const frame = goblinFrames ? goblinFrames[frameKey] : null;
+    const sz = frame ? Math.max(frame.frame.w, frame.frame.h) * item.scale : 30;
+    const dx = p.x - (CX + item.offsetX);
+    const dy = p.y - (CY + item.offsetY);
+    if (Math.sqrt(dx * dx + dy * dy) < sz / 2 + 20) {
+      dragging = true;
+      dragOffX = dx;
+      dragOffY = dy;
+      canvas.style.cursor = 'grabbing';
+    }
   } else {
     const h = hands[activeHand];
     const img = activeHand === 'left_hand' ? leftImg : rightImg;
@@ -549,6 +690,10 @@ canvas.addEventListener('mousemove', (e) => {
       const item = knightItems[activeKnightItem];
       item.offsetX = Math.round(p.x - W / 2 - dragOffX);
       item.offsetY = Math.round(p.y - H / 2 - dragOffY);
+    } else if (mode === 'goblin') {
+      const item = goblinItems[activeGoblinItem];
+      item.offsetX = Math.round(p.x - W / 2 - dragOffX);
+      item.offsetY = Math.round(p.y - H / 2 - dragOffY);
     } else {
       const h = hands[activeHand];
       h.offsetX = Math.round(p.x - W / 2 - dragOffX);
@@ -566,6 +711,14 @@ canvas.addEventListener('mousemove', (e) => {
       const item = knightItems[activeKnightItem];
       const frameKey = KNIGHT_FRAME_MAP[activeKnightItem];
       const frame = knightFrames ? knightFrames[frameKey] : null;
+      const sz = frame ? Math.max(frame.frame.w, frame.frame.h) * item.scale : 30;
+      const dx = p.x - (W / 2 + item.offsetX);
+      const dy = p.y - (H / 2 + item.offsetY);
+      canvas.style.cursor = Math.sqrt(dx * dx + dy * dy) < sz / 2 + 20 ? 'grab' : 'default';
+    } else if (mode === 'goblin') {
+      const item = goblinItems[activeGoblinItem];
+      const frameKey = GOBLIN_FRAME_MAP[activeGoblinItem];
+      const frame = goblinFrames ? goblinFrames[frameKey] : null;
       const sz = frame ? Math.max(frame.frame.w, frame.frame.h) * item.scale : 30;
       const dx = p.x - (W / 2 + item.offsetX);
       const dy = p.y - (H / 2 + item.offsetY);
@@ -589,6 +742,8 @@ scaleSlider.addEventListener('input', () => {
     screenUI.scale = parseFloat(scaleSlider.value);
   } else if (mode === 'knight') {
     knightItems[activeKnightItem].scale = parseFloat(scaleSlider.value);
+  } else if (mode === 'goblin') {
+    goblinItems[activeGoblinItem].scale = parseFloat(scaleSlider.value);
   } else {
     hands[activeHand].scale = parseFloat(scaleSlider.value);
   }
@@ -597,6 +752,8 @@ scaleSlider.addEventListener('input', () => {
 rotSlider.addEventListener('input', () => {
   if (mode === 'knight') {
     knightItems[activeKnightItem].rotation = parseFloat(rotSlider.value);
+  } else if (mode === 'goblin') {
+    goblinItems[activeGoblinItem].rotation = parseFloat(rotSlider.value);
   } else if (mode !== 'screen') {
     hands[activeHand].rotation = parseFloat(rotSlider.value);
   }
@@ -613,6 +770,8 @@ copyBtn.addEventListener('click', () => {
     text = `// SCREEN_UI\nserverLevel: {\n  x: ${screenUI.x},\n  y: ${screenUI.y},\n  scale: ${screenUI.scale.toFixed(1)},\n  ty: ${screenUI.ty}\n}`;
   } else if (mode === 'knight') {
     text = `// KNIGHT_VISUALS\nknight_sword: {\n  offsetX: ${knightItems.knight_sword.offsetX},\n  offsetY: ${knightItems.knight_sword.offsetY},\n  scale: ${knightItems.knight_sword.scale.toFixed(3)},\n  rotation: ${knightItems.knight_sword.rotation.toFixed(2)}\n},\nknight_hand: {\n  offsetX: ${knightItems.knight_hand.offsetX},\n  offsetY: ${knightItems.knight_hand.offsetY},\n  scale: ${knightItems.knight_hand.scale.toFixed(3)},\n  rotation: ${knightItems.knight_hand.rotation.toFixed(2)}\n},\nknight_right_hand: {\n  offsetX: ${knightItems.knight_right_hand.offsetX},\n  offsetY: ${knightItems.knight_right_hand.offsetY},\n  scale: ${knightItems.knight_right_hand.scale.toFixed(3)},\n  rotation: ${knightItems.knight_right_hand.rotation.toFixed(2)}\n}`;
+  } else if (mode === 'goblin') {
+    text = `// GOBLIN_VISUALS (also use as keyframe[0] of GOBLIN_ANIMATIONS.attack)\nleft_hand: {\n  offsetX: ${goblinItems.goblin_left_hand.offsetX},\n  offsetY: ${goblinItems.goblin_left_hand.offsetY},\n  scale: ${goblinItems.goblin_left_hand.scale.toFixed(3)},\n  rotation: ${goblinItems.goblin_left_hand.rotation.toFixed(2)}\n},\nsword: {\n  offsetX: ${goblinItems.goblin_sword.offsetX},\n  offsetY: ${goblinItems.goblin_sword.offsetY},\n  scale: ${goblinItems.goblin_sword.scale.toFixed(3)},\n  rotation: ${goblinItems.goblin_sword.rotation.toFixed(2)}\n}`;
   } else {
     text = `// ZOMBIE_VISUALS\nleft_hand: {\n  offsetX: ${hands.left_hand.offsetX},\n  offsetY: ${hands.left_hand.offsetY},\n  scale: ${hands.left_hand.scale.toFixed(3)},\n  rotation: ${hands.left_hand.rotation.toFixed(2)}\n},\nright_hand: {\n  offsetX: ${hands.right_hand.offsetX},\n  offsetY: ${hands.right_hand.offsetY},\n  scale: ${hands.right_hand.scale.toFixed(3)},\n  rotation: ${hands.right_hand.rotation.toFixed(2)}\n}`;
   }

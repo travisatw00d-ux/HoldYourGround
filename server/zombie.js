@@ -55,7 +55,13 @@ function createEnemy(mobType, level, players, x, y, edgeSpawn, overrides) {
     lvl: level,
     attacking: false,
     attackTimer: 0,
-    attackCooldown: 0
+    attackCooldown: 0,
+    // Sword-bearing mobs (goblin) reach further than bare-handed contact —
+    // falls back to the shared ZOMBIE_ATTACK_RANGE (see zombie-ai.js) when unset.
+    attackRange: mobType.attackRange || null,
+    // Per-mob damage override (goblin hits harder than the flat ZOMBIE_DAMAGE
+    // — see zombie-ai.js's processZombieAttacks fallback) when unset.
+    attackDamage: mobType.damage || null
   };
   z.speed = +(z.speed * (0.8 + Math.random() * 0.4)).toFixed(2);
   if (edgeSpawn) z._edgeSpawnTimer = 150;

@@ -1,63 +1,83 @@
 {
   "frames": {
-    "zombiehead.png": {
+    "GoblinHead.png": {
       "frame": {
-        "x": 155,
-        "y": 0,
+        "x": 130,
+        "y": 140,
         "w": 128,
-        "h": 138
+        "h": 114
       },
       "rotated": false,
-      "trimmed": false,
+      "trimmed": true,
       "spriteSourceSize": {
         "x": 0,
-        "y": 0,
+        "y": 6,
         "w": 128,
-        "h": 138
+        "h": 114
       },
       "sourceSize": {
         "w": 128,
-        "h": 138
+        "h": 128
       }
     },
-    "zombielefthand.png": {
+    "GoblinLeftHand.png": {
       "frame": {
         "x": 0,
         "y": 248,
-        "w": 64,
-        "h": 78
+        "w": 69,
+        "h": 100
       },
       "rotated": false,
-      "trimmed": false,
+      "trimmed": true,
       "spriteSourceSize": {
-        "x": 0,
-        "y": 0,
-        "w": 64,
-        "h": 78
+        "x": 23,
+        "y": 5,
+        "w": 69,
+        "h": 100
       },
       "sourceSize": {
-        "w": 64,
-        "h": 78
+        "w": 112,
+        "h": 112
       }
     },
-    "zombierighthand.png": {
+    "GoblinSword.png": {
       "frame": {
-        "x": 217,
-        "y": 140,
-        "w": 64,
-        "h": 78
-      },
-      "rotated": false,
-      "trimmed": false,
-      "spriteSourceSize": {
-        "x": 0,
+        "x": 285,
         "y": 0,
         "w": 64,
-        "h": 78
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": true,
+      "spriteSourceSize": {
+        "x": 56,
+        "y": 5,
+        "w": 64,
+        "h": 160
       },
       "sourceSize": {
-        "w": 64,
-        "h": 78
+        "w": 176,
+        "h": 176
+      }
+    },
+    "loot.png": {
+      "frame": {
+        "x": 260,
+        "y": 162,
+        "w": 85,
+        "h": 100
+      },
+      "rotated": false,
+      "trimmed": true,
+      "spriteSourceSize": {
+        "x": 22,
+        "y": 11,
+        "w": 85,
+        "h": 100
+      },
+      "sourceSize": {
+        "w": 128,
+        "h": 128
       }
     },
     "MastreChest_resized.png": {
@@ -78,26 +98,6 @@
       "sourceSize": {
         "w": 200,
         "h": 200
-      }
-    },
-    "loot.png": {
-      "frame": {
-        "x": 130,
-        "y": 140,
-        "w": 85,
-        "h": 100
-      },
-      "rotated": false,
-      "trimmed": true,
-      "spriteSourceSize": {
-        "x": 22,
-        "y": 11,
-        "w": 85,
-        "h": 100
-      },
-      "sourceSize": {
-        "w": 128,
-        "h": 128
       }
     },
     "trollhead.png": {
@@ -122,8 +122,8 @@
     },
     "trolllefthand.png": {
       "frame": {
-        "x": 130,
-        "y": 242,
+        "x": 71,
+        "y": 256,
         "w": 64,
         "h": 80
       },
@@ -142,8 +142,8 @@
     },
     "trollrighthand.png": {
       "frame": {
-        "x": 196,
-        "y": 242,
+        "x": 137,
+        "y": 256,
         "w": 64,
         "h": 80
       },
@@ -159,6 +159,66 @@
         "w": 64,
         "h": 80
       }
+    },
+    "zombiehead.png": {
+      "frame": {
+        "x": 155,
+        "y": 0,
+        "w": 128,
+        "h": 138
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 128,
+        "h": 138
+      },
+      "sourceSize": {
+        "w": 128,
+        "h": 138
+      }
+    },
+    "zombielefthand.png": {
+      "frame": {
+        "x": 203,
+        "y": 264,
+        "w": 64,
+        "h": 78
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 64,
+        "h": 78
+      },
+      "sourceSize": {
+        "w": 64,
+        "h": 78
+      }
+    },
+    "zombierighthand.png": {
+      "frame": {
+        "x": 269,
+        "y": 264,
+        "w": 64,
+        "h": 78
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 64,
+        "h": 78
+      },
+      "sourceSize": {
+        "w": 64,
+        "h": 78
+      }
     }
   },
   "meta": {
@@ -167,8 +227,8 @@
     "image": "spritesheet.png",
     "format": "RGBA8888",
     "size": {
-      "w": 283,
-      "h": 326
+      "w": 349,
+      "h": 348
     },
     "scale": "1"
   }

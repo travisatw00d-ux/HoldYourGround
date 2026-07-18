@@ -16,7 +16,7 @@ Multiplayer zombie survival IO game. 100 zombies, 10 active players, 3200×2400 
 |---|---|
 | [server-architecture.md](./server-architecture.md) | 17 server files, tick loop, join/queue, binary broadcast |
 | [client-architecture.md](./client-architecture.md) | 17 client modules (`lib/`), render loop, import chain |
-| [rendering-system.md](./rendering-system.md) | Canvas sizing, HUD layout, sprite cache, background, camera |
+| [rendering-system.md](./rendering-system.md) | Canvas sizing, HUD layout, sprite cache, background, camera, nighttime world-edge fog |
 | [animation-system.md](./animation-system.md) | Keyframe interpolation, polar blending, remote sync, knight visuals |
 | [combat-system.md](./combat-system.md) | Jab/swing attacks, combo chain, blade hitbox, damage/energy/recovery |
 | [wave-system.md](./wave-system.md) | Mob types, level scaling, wave composition, zombie merge/revive |

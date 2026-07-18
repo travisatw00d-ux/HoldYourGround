@@ -31,7 +31,7 @@ index.html → game.js
 | `state.js` | 76 | All shared state |
 | `net.js` | 18 | Socket connect + build checker |
 | `net-events.js` | 467 | Socket event handlers + binary parser |
-| `render.js` | 229 | Main render loop (rAF) |
+| `render.js` | 460 | Main render loop (rAF), nighttime world-edge fog |
 | `render-entity.js`| 257 | Entity drawing |
 | `anims.js` | 510 | Animation engine |
 | `render-ui.js` | 275 | UI draws + leaderboard |

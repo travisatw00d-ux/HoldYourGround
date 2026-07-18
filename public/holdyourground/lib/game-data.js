@@ -384,6 +384,40 @@ export const ZOMBIE_VISUALS = {
   }
 };
 
+// Goblin: single left hand gripping a sword (no right_hand sprite exists
+// for goblin — see GoblinLeftHand.png/GoblinSword.png in spritesheet.json).
+// Idle pose = keyframe[0] of the matching GOBLIN_ANIMATIONS.attack track.
+export const GOBLIN_ANIMATIONS = {
+  attack: {
+    segments: [12, 12, 12, 12, 12],
+    left_hand: {
+      keyframes: [
+        { offsetX: 18, offsetY: -18, scale: 0.212, rotation: -1.30 },
+        { offsetX: 30, offsetY: -20, scale: 0.212, rotation: -0.90 },
+        { offsetX: 40, offsetY: -18, scale: 0.212, rotation: -0.60 },
+        { offsetX: 22, offsetY: -18, scale: 0.212, rotation: -1.10 },
+        { offsetX: 18, offsetY: -18, scale: 0.212, rotation: -1.30 },
+        { offsetX: 18, offsetY: -18, scale: 0.212, rotation: -1.30 },
+      ]
+    },
+    sword: {
+      keyframes: [
+        { offsetX: 25, offsetY: 24, scale: 0.250, rotation: 1.68 },
+        { offsetX: 45, offsetY: 22, scale: 0.250, rotation: 1.58 },
+        { offsetX: 63, offsetY: 24, scale: 0.250, rotation: 1.48 },
+        { offsetX: 33, offsetY: 24, scale: 0.250, rotation: 1.63 },
+        { offsetX: 25, offsetY: 24, scale: 0.250, rotation: 1.68 },
+        { offsetX: 25, offsetY: 24, scale: 0.250, rotation: 1.68 },
+      ]
+    }
+  }
+};
+
+export const GOBLIN_VISUALS = {
+  left_hand: { offsetX: 18, offsetY: -18, scale: 0.212, rotation: -1.30 },
+  sword: { offsetX: 25, offsetY: 24, scale: 0.250, rotation: 1.68 }
+};
+
 export const SCREEN_UI = {
   serverLevel: { x: 53, y: 56, scale: 0.4, ty: -6 }
 };
@@ -391,7 +425,12 @@ export const SCREEN_UI = {
 export const MOB_TYPES = [
   { id: 'zombie',  name: 'Zombie',  emoji: '🧟', miniFrame: 'zombieminibig.png', unlockLevel: 1,  minCount: 90,  maxCount: 110, countGrowth: 2, baseHealth: 5, healthGrowth: 1.5, baseSpeed: 1.5, speedDecay: 0 },
   { id: 'troll',   name: 'Troll',   emoji: '👹', unlockLevel: 5,  minCount: 5,   maxCount: 15,  countGrowth: 1, baseHealth: 15, healthGrowth: 2,   baseSpeed: 1.3, speedDecay: 0 },
-  { id: 'goblin',  name: 'Goblin',  emoji: '👺', unlockLevel: 10, minCount: 3,   maxCount: 10,  countGrowth: 1, baseHealth: 8,  healthGrowth: 1.8, baseSpeed: 1.6, speedDecay: 0.01 },
+  // attackRange: goblin swings a real blade, so its stab reaches further
+  // than the bare-handed zombie/troll contact range (see ZOMBIE_ATTACK_RANGE
+  // in server/config.js, used as the fallback for mobs without this field).
+  // damage: 2x the flat ZOMBIE_DAMAGE (10) — per Travis, doubled at goblin's
+  // level-1 baseline (see zombie-ai.js's processZombieAttacks fallback).
+  { id: 'goblin',  name: 'Goblin',  emoji: '👺', unlockLevel: 10, minCount: 3,   maxCount: 10,  countGrowth: 1, baseHealth: 8,  healthGrowth: 1.8, baseSpeed: 1.6, speedDecay: 0.01, attackRange: 40, damage: 20 },
 ];
 
 export const KNIGHT_BLADE_TIP_X = -5;
