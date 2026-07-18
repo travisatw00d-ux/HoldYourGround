@@ -68,32 +68,32 @@ async function loadGameAssets() {
     json('/images/ItemSheet.json')
   ]);
   state.spriteSheet = sheet;
-  state.spriteFrames = meta.frames;
+  state.spriteFrames = meta?.frames ?? null;
   state.knightSheet = kSheet;
-  state.knightFrames = kMeta.frames;
+  state.knightFrames = kMeta?.frames ?? null;
   state.hudSheet = hSheet;
-  state.hudFrames = hMeta.frames;
+  state.hudFrames = hMeta?.frames ?? null;
   state.hudLayout = layout;
   state.miniSheet = mSheet;
-  state.miniFrames = mMeta.frames;
+  state.miniFrames = mMeta?.frames ?? null;
   state.cardSheet = cSheet;
-  state.cardFrames = cMeta.frames;
+  state.cardFrames = cMeta?.frames ?? null;
   // Flat item icons (inventory/equipment slots) — separate from knightSheet, which
   // holds in-hand combat animation frames. See ITEM_ICONS in game-data.js for the
   // itemId -> frame name mapping.
   state.knightWeaponsSheet = kwSheet;
-  state.knightWeaponsFrames = kwMeta.frames;
+  state.knightWeaponsFrames = kwMeta?.frames ?? null;
   state.ringSheet = rSheet;
-  state.ringFrames = rMeta.frames;
+  state.ringFrames = rMeta?.frames ?? null;
   state.necklaceSheet = nSheet;
-  state.necklaceFrames = nMeta.frames;
+  state.necklaceFrames = nMeta?.frames ?? null;
   // Misc world/currency item icons (goldcoin.png, T1HealthPotion.png, ...) —
   // 2026-07-13, added for the gold-coin drop mechanic. Same "flat icon
   // sheet" convention as ringSheet/necklaceSheet above, referenced directly
   // by frame name in render.js/ui.js (gold isn't a bag item, so it doesn't
   // go through ITEM_ICONS/game-data.js like equipment icons do).
   state.itemSheet = iSheet;
-  state.itemFrames = iMeta.frames;
+  state.itemFrames = iMeta?.frames ?? null;
 
   const gearFrame = state.hudFrames?.['settingsgear.png']?.frame;
   if (gearFrame) {
