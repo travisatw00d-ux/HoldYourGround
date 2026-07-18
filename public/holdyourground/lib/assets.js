@@ -44,26 +44,28 @@ function preRenderMiniIcons() {
 }
 
 async function loadGameAssets() {
+  const _v = 'v=6';
+  const json = (url) => fetch(url + '?' + _v).then(r => r.json()).catch(() => null);
   const [sheet, meta, kSheet, kMeta, hSheet, hMeta, layout, mSheet, mMeta, cSheet, cMeta, kwSheet, kwMeta, rSheet, rMeta, nSheet, nMeta, iSheet, iMeta] = await Promise.all([
-    loadImage('/images/spritesheet.png'),
-    fetch('/images/spritesheet.json').then(r => r.json()),
-    loadImage('/images/KnightSheet.png'),
-    fetch('/images/KnightSheet.json').then(r => r.json()),
-    loadImage('/images/HUD.png'),
-    fetch('/images/HUD.json').then(r => r.json()),
-    fetch('/holdyourground/hud-layout.json').then(r => r.json()).catch(() => null),
-    loadImage('/images/Minis.png'),
-    fetch('/images/Minis.json').then(r => r.json()),
-    loadImage('/images/CardSheet.png'),
-    fetch('/images/CardSheet.json').then(r => r.json()),
-    loadImage('/images/KnightWeapons.png'),
-    fetch('/images/KnightWeapons.json').then(r => r.json()),
-    loadImage('/images/Ringsheet.png'),
-    fetch('/images/Ringsheet.json').then(r => r.json()),
-    loadImage('/images/Necklacesheet.png'),
-    fetch('/images/Necklacesheet.json').then(r => r.json()),
-    loadImage('/images/ItemSheet.png'),
-    fetch('/images/ItemSheet.json').then(r => r.json())
+    loadImage('/images/spritesheet.png?' + _v),
+    json('/images/spritesheet.json'),
+    loadImage('/images/KnightSheet.png?' + _v),
+    json('/images/KnightSheet.json'),
+    loadImage('/images/HUD.png?' + _v),
+    json('/images/HUD.json'),
+    json('/holdyourground/hud-layout.json'),
+    loadImage('/images/Minis.png?' + _v),
+    json('/images/Minis.json'),
+    loadImage('/images/CardSheet.png?' + _v),
+    json('/images/CardSheet.json'),
+    loadImage('/images/KnightWeapons.png?' + _v),
+    json('/images/KnightWeapons.json'),
+    loadImage('/images/Ringsheet.png?' + _v),
+    json('/images/Ringsheet.json'),
+    loadImage('/images/Necklacesheet.png?' + _v),
+    json('/images/Necklacesheet.json'),
+    loadImage('/images/ItemSheet.png?' + _v),
+    json('/images/ItemSheet.json')
   ]);
   state.spriteSheet = sheet;
   state.spriteFrames = meta.frames;
